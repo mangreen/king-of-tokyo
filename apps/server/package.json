@@ -1,0 +1,29 @@
+{
+  "name": "@kot/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "King of Tokyo 遊戲伺服器（Fastify + Socket.IO）",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsup",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kot/protocol": "workspace:*",
+    "@kot/rules": "workspace:*",
+    "fastify": "^5.12.8",
+    "socket.io": "^4.8.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "socket.io-client": "^4.8.4",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

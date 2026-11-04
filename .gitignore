@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# 環境與機密：只提交 .env.example
+.env
+.env.*
+!.env.example
+
+# 本機與編輯器
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+# Docker 本機覆寫
+docker-compose.override.yml
+
+# 使用者自備的卡牌組（官方卡表），不提交；見 docs/adr/0004
+card-sets/local/

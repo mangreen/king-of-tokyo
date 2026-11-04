@@ -1,0 +1,84 @@
+# 本機開發用 Compose。
+#
+# 相容性：Docker Desktop 4.12 / Compose v2.10.2。
+# 刻意只使用舊版就支援的語法：bind mount、healthcheck、
+# depends_on.condition: service_healthy。不使用 develop.watch、include、
+# 頂層 name 以外的新欄位。
+#
+# 使用方式：
+#   cp .env.example .env     （並修改 POSTGRES_PASSWORD）
+#   docker compose up --build
+#
+# 所有對外埠都只綁定 127.0.0.1，避免在咖啡廳等公共網路被他人連到。
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kot}
+      # 不提供預設密碼：未設定時 compose 會直接報錯，避免用弱密碼啟動
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?請先複製 .env.example 為 .env 並設定 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-kot}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      target: dev
+    command: ['pnpm', '--filter', '@kot/server', 'dev']
+    environment:
+      NODE_ENV: development
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: '3001'
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - '127.0.0.1:${SERVER_PORT:-3001}:3001'
+    # 只掛載原始碼；node_modules 留在映像內，不被主機目錄覆蓋
+    volumes:
+      - ./apps/server/src:/app/apps/server/src
+      - ./packages/rules/src:/app/packages/rules/src
+      - ./packages/protocol/src:/app/packages/protocol/src
+    healthcheck:
+      test:
+        - 'CMD'
+        - 'node'
+        - '-e'
+        - "fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # M0 的 server 尚未使用資料庫，所以先不依賴 postgres；M5 加入持久化時再加上
+    # depends_on: { postgres: { condition: service_healthy } }
+
+  web:
+    build:
+      context: .
+      target: dev
+    command: ['pnpm', '--filter', '@kot/web', 'dev']
+    environment:
+      # Docker Desktop for Mac 的 bind mount 可能收不到檔案變更事件，改用輪詢
+      CHOKIDAR_USEPOLLING: 'true'
+      # 這是「瀏覽器」連線用的位址，所以是主機上的 localhost，不是容器名稱
+      VITE_SERVER_URL: http://localhost:${SERVER_PORT:-3001}
+    ports:
+      - '127.0.0.1:${WEB_PORT:-5173}:5173'
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/index.html:/app/apps/web/index.html
+      - ./apps/web/vite.config.ts:/app/apps/web/vite.config.ts
+      - ./packages/protocol/src:/app/packages/protocol/src
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  pgdata:
