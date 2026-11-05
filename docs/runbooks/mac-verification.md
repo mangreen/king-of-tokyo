@@ -17,7 +17,24 @@ AI 的雲端沙盒沒有 Docker daemon、沒有 GPU，也無法操作你的 Mac�
 | `snyk test` / `snyk auth` / `snyk code test`（本機） | ❌ Snyk CLI 的 macOS 二進位檔需要 macOS 13；`snyk code` 需先在帳號啟用  |
 | `snyk container test kot-server`                     | ⚠️ 可執行。應用程式依賴與 Alpine 乾淨；高風險項目都在映像內的 pnpm／npm |
 
-### 發現的問題與修正（尚待你重新驗證）
+### M0 修正後重新驗證（2026-11-06，使用者實測）
+
+| 項目                                           | 結果                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`（Big Sur）    | ✅ esbuild 0.25.12 的 postinstall 成功                                      |
+| `pnpm run check`                               | ✅ 基準機檢查、格式、lint、typecheck、35 個測試、建置全部通過               |
+| `docker build --target server` 與 `docker run` | ✅ `/healthz` 回 ok；收到 SIGTERM 後優雅關閉                                |
+| 映像內是否還有 npm／pnpm／yarn／corepack       | ✅ 沒有                                                                     |
+| `snyk container test kot-server`               | ✅ 只剩 Alpine 系統套件專案，19 個套件無漏洞；先前的 `dist`、`lib` 專案消失 |
+| `snyk test --all-projects`                     | ✅ 5 個專案無漏洞（server 70 個依賴、web 14 個、protocol 1 個）             |
+| `pnpm audit --prod`                            | ✅ 無已知漏洞                                                               |
+
+說明：
+
+- 修正後的 runtime 映像裡沒有 lockfile，所以容器掃描不再列出應用程式的 npm 依賴；這部分由 `snyk test --all-projects` 與 `pnpm audit` 負責。
+- Snyk CLI 在 Big Sur 仍會印出 `dyld: Symbol not found` 與 degraded 警告，但掃描本身可以完成，這些訊息可以忽略。
+
+### 發現的問題與修正（已修正，已重新驗證）
 
 1. **esbuild 在 Big Sur 無法安裝。** esbuild 0.27 起的 macOS 二進位檔最低需要 macOS 12。已改為 tsx 4.20.6、tsup 8.5.0（它們相容 esbuild 0.25.12，最低 macOS 11），並加上 `pnpm run check:baseline` 防止日後回退。lockfile 裡其他三個 macOS 原生套件（rolldown、rollup、lightningcss）最低只要 macOS 10.12–10.13。
 2. **Snyk 容器掃描的高風險項目不是我們的程式碼。** 掃描結果中 33 個與 24 個問題的專案名稱是 `dist`（corepack 下載的 pnpm）與 `lib`（base image 的 npm）。我們自己的依賴（專案 `king-of-tokyo`）與 Alpine 系統套件都是乾淨的。已改成乾淨的 runtime 映像，不帶 pnpm、npm、yarn、corepack。
