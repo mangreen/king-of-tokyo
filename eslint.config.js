@@ -20,6 +20,12 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    // 維護用腳本：在終端機執行，輸出訊息用 console 是正常的
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+    rules: { 'no-console': 'off' },
+  },
+  {
     files: ['apps/web/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks },

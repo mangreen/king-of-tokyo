@@ -12,17 +12,17 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@kot/protocol": "workspace:*",
-    "@kot/rules": "workspace:*",
     "fastify": "^5.12.8",
     "socket.io": "^4.8.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@kot/protocol": "workspace:*",
+    "@kot/rules": "workspace:*",
     "@types/node": "^26.6.6",
     "socket.io-client": "^4.8.4",
-    "tsup": "^9.0.0",
-    "tsx": "^4.23.15",
+    "tsup": "8.5.0",
+    "tsx": "4.20.6",
     "typescript": "~6.0.3",
     "vitest": "^5.1.0"
   }

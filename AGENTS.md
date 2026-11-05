@@ -27,7 +27,8 @@ card-sets/          卡牌組資料（original 提交；local 不提交，見 AD
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run check        # format:check + lint + typecheck + test + build（提交前必跑）
+pnpm run check        # check:baseline + format:check + lint + typecheck + test + build（提交前必跑）
+pnpm run check:baseline  # lockfile 沒有基準機（Big Sur）跑不動的原生工具
 pnpm run test         # 全部測試
 pnpm run dev:server   # 本機直接跑 server（不用 Docker）
 pnpm run dev:web      # 本機直接跑 web
@@ -39,6 +40,9 @@ docker compose up --build   # 完整開發環境（需 cp .env.example .env）
 - **基準機：** 2014 MacBook Pro 13"（雙核 i7、Intel Iris、16GB、macOS 11.7 Big Sur）。建置與測試要輕量；3D 效能預算以它為準（見 ADR-0003）。
 - **Docker Desktop 4.12 / Engine 20.10 / Compose v2.10：** `docker-compose.yml` 與 `Dockerfile` 只使用舊版就支援的語法。**不要**使用 `develop.watch`、`include`、`RUN --mount`、heredoc、`# syntax=` 指令。
 - **不啟用 Kubernetes。** 專案不需要，也吃資源。
+- **esbuild 必須低於 0.27（目前 0.25.12）。** esbuild 0.27 起的 macOS 二進位檔需要 macOS 12，基準機（Big Sur 11）的 `pnpm install` 會因 `SecTrustCopyCertificateChain` 缺符號而失敗（2026-11-05 實測）。因此 **tsx 固定 4.20.6、tsup 固定 8.5.0**（兩者宣告相容 esbuild 0.25），**不要**用 `pnpm update --latest`。`pnpm run check:baseline` 會在 lockfile 出現不相容的 esbuild 時失敗。
+- **Node 22 在 Big Sur 上已實測可執行**（v22.23.2，nvm 安裝）。升級 Node 前需在基準機確認。
+- **Snyk CLI 在 Big Sur 無法完整執行**（其 macOS 二進位檔需要 macOS 13）：`snyk container test` 可用（降級模式），`snyk test` 需加 `--all-projects`。Snyk Code 需要先在 Snyk 設定中啟用。依賴掃描的替代方式：`pnpm audit --prod`（任何環境都可執行），或在 Snyk 網站匯入 GitHub repo。
 - **TypeScript 固定在 ~6.0。** typescript-eslint 目前宣告只支援 `<6.1.0`；升到 TS 7 前先確認 lint 工具支援。
 - **沙盒限制：** AI 的雲端環境沒有 Docker daemon、沒有 GPU，也無法操作使用者的 Mac。Compose 實際啟動、3D 效能、Big Sur 瀏覽器相容性都必須由使用者實測，回報時一律標示「未實測」。
 
@@ -50,11 +54,13 @@ docker compose up --build   # 完整開發環境（需 cp .env.example .env）
 - 所有來自網路的資料都用 zod 驗證；對外錯誤只回穩定的 `code` 與簡短訊息，不含 stack trace、路徑或憑證。
 - 不提交機密。`.env` 被忽略，只提交 `.env.example`。不在回覆、Log、記憶中重述機密值。
 - 素材使用原創設計；不放入 IELLO（King of Tokyo）或東寶（哥吉拉）的角色、卡圖。官方卡表只放 `card-sets/local/`（不提交）。
+- **repo 目前是公開的（之後會轉私人）。** 卡表 CSV、遊戲截圖、第三方素材一律不提交。轉私人之後規則不變：公開期間的 commit 歷史可能已被他人複製。
 
 ## Git 與授權
 
 - 工作流程：GitHub Flow。每個里程碑一個分支（`m0/skeleton`、`m1/rules-engine`…），透過 PR 合併至 `main`。
 - **使用者已授權（2026-11-05）：** 推送各里程碑分支到 `origin`。
+- **使用者已授權（2026-11-06）：** 建立 `main`。遠端原本沒有 `main`（使用者找不到），因此以初始 commit（只含 README）建立，作為 PR 的基準分支。**之後對 `main` 的推送與合併仍須先詢問。**
 - **未授權，須先詢問：** 推送或修改 `main`、合併 PR、建立 release/tag、部署、刪除分支或資料、變更權限與機密設定。
 - Commit 訊息使用 Conventional Commits，結尾附上 session 註記（Co-Authored-By 與 Claude-Session）。
 - 提交前確認 `git diff` 沒有無關修改、機密或建置產物。

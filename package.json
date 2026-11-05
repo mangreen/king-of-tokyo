@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r test",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "check:baseline": "node scripts/check-baseline.mjs",
+    "check": "pnpm run check:baseline && pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
     "dev:server": "pnpm --filter @kot/server dev",
     "dev:web": "pnpm --filter @kot/web dev"
   },

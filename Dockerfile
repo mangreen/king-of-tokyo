@@ -37,9 +37,21 @@ RUN pnpm -r build
 FROM manifests AS server-deps
 RUN pnpm install --frozen-lockfile --prod --filter @kot/server...
 
-FROM server-deps AS server
+# 乾淨的 runtime：從原始 node 映像重新開始，不帶 corepack 下載的 pnpm，
+# 並移除執行時用不到的套件管理器（npm、yarn、corepack）。
+# 原因：Snyk 容器掃描的高風險項目都在這些工具自帶的依賴，而不是應用程式本身；
+# 移除後攻擊面與掃描雜訊一起消失。伺服器只需要 node 與已打包的 dist。
+FROM node:22-alpine AS server
 ENV NODE_ENV=production
-COPY --from=build /app/apps/server/dist /app/apps/server/dist
+RUN rm -rf /usr/local/lib/node_modules \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
+WORKDIR /app
+COPY --from=server-deps /app/node_modules ./node_modules
+COPY --from=server-deps /app/apps/server/node_modules ./apps/server/node_modules
+# package.json 必須在：其中的 "type": "module" 決定 dist/main.js 以 ESM 載入
+COPY apps/server/package.json ./apps/server/package.json
+COPY --from=build /app/apps/server/dist ./apps/server/dist
 USER node
 WORKDIR /app/apps/server
 EXPOSE 3001
