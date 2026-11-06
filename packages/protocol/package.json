@@ -1,0 +1,20 @@
+{
+  "name": "@kot/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WebSocket 訊息型別與 zod 驗證、協定版本",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
+  }
+}

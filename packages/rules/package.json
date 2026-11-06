@@ -1,0 +1,17 @@
+{
+  "name": "@kot/rules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "King of Tokyo 規則引擎（純函式、可重現、前後端共用）",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
+  }
+}
