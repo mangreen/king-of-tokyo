@@ -21,7 +21,7 @@ export default tseslint.config(
   },
   {
     // 維護用腳本：在終端機執行，輸出訊息用 console 是正常的
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'packages/rules/cli/**/*.ts'],
     languageOptions: { globals: globals.node },
     rules: { 'no-console': 'off' },
   },

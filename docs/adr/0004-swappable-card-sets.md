@@ -19,13 +19,13 @@
 
 **卡牌組是資料，效果是程式碼，兩者以 `effectId` 連接。**
 
-```
-card-sets/
-├─ original/        原創卡組（隨 repo 提交）
-│  └─ set.json
-└─ local/           使用者自備的卡表（.gitignore，不提交）
-   ├─ KingOfTokyo_CardList - EN.csv   原始 CSV
-   └─ set.json                        由匯入腳本產生
+```mermaid
+flowchart LR
+  root["card-sets/"] --> original["original/<br/>原創卡組（隨 repo 提交）"]
+  root --> local["local/<br/>使用者自備的卡表（.gitignore，不提交）"]
+  original --> oset["set.json"]
+  local --> csv["KingOfTokyo_CardList - EN.csv<br/>原始 CSV"]
+  local --> lset["set.json<br/>由匯入腳本產生"]
 ```
 
 - `set.json`：`{ id, name, version, cards: [{ id, name, cost, kind: 'keep'|'discard', text, effectId, params }] }`，以 zod 驗證。

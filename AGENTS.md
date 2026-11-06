@@ -30,6 +30,7 @@ pnpm install --frozen-lockfile
 pnpm run check        # check:baseline + format:check + lint + typecheck + test + build（提交前必跑）
 pnpm run check:baseline  # lockfile 沒有基準機（Big Sur）跑不動的原生工具
 pnpm run test         # 全部測試
+pnpm --filter @kot/rules run play -- --players 4 --seed 7   # 規則引擎文字版（機器人對戰，加 --games 500 看統計）
 pnpm run dev:server   # 本機直接跑 server（不用 Docker）
 pnpm run dev:web      # 本機直接跑 web
 docker compose up --build   # 完整開發環境（需 cp .env.example .env）
