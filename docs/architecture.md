@@ -2,17 +2,22 @@
 
 ## 系統
 
-```
- 瀏覽器 (apps/web)                     伺服器 (apps/server)
-┌───────────────────────┐   WebSocket   ┌──────────────────────────────┐
-│ React DOM：HUD、卡牌   │ ───意圖────▶  │ Fastify + Socket.IO          │
-│ Three.js：場景、骰子   │ ◀──視角狀態── │  ├─ 驗證 (zod, @kot/protocol) │
-│ 事件回放：動畫、特效   │   + 事件列表  │  ├─ 房間／計時／重連          │
-└───────────────────────┘               │  └─ 規則引擎 (@kot/rules)    │
-                                        │       純函式 + seeded RNG    │
-                                        └──────────────┬───────────────┘
-                                                       │ M5：事件日誌
-                                                  PostgreSQL
+```mermaid
+flowchart LR
+  subgraph Browser["瀏覽器（apps/web）"]
+    UI["React DOM：HUD、卡牌"]
+    Scene["Three.js：場景、骰子"]
+    Replay["事件回放：動畫、特效"]
+  end
+  subgraph Server["伺服器（apps/server）：Fastify + Socket.IO"]
+    Validate["驗證（zod、@kot/protocol）"]
+    Room["房間／計時／重連"]
+    Rules["規則引擎（@kot/rules）<br/>純函式 + seeded RNG"]
+  end
+  DB[("PostgreSQL")]
+  Browser -- "意圖（WebSocket）" --> Server
+  Server -- "視角狀態 + 事件列表" --> Browser
+  Server -. "M5：事件日誌" .-> DB
 ```
 
 - **客戶端只送意圖**（保留哪些骰子、購買哪張卡），伺服器驗證並擲骰，再廣播每位玩家視角的狀態與事件列表。
@@ -23,23 +28,26 @@
 
 ## 套件依賴方向
 
-```
-apps/web ──▶ @kot/protocol ◀── apps/server ──▶ @kot/rules
+```mermaid
+flowchart LR
+  web["apps/web"] --> protocol["@kot/protocol"]
+  server["apps/server"] --> protocol
+  server --> rules["@kot/rules"]
 ```
 
 `@kot/rules` 與 `@kot/protocol` 不依賴任何 app，也不互相依賴（M1 起 protocol 會引用 rules 的型別，屆時再審視）。
 
 ## 里程碑與狀態
 
-| 里程碑 | 內容                                                                                 | 狀態                                                      |
-| ------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| M0     | 骨架、環境、文件、CI                                                                 | **完成**（沙盒與使用者實測通過；CI 尚未在 GitHub 上執行） |
-| M1     | 規則引擎（無卡牌）：擲骰、結算、東京市／灣、讓位、淘汰、勝負（含 R-END）、支援多勝者 | **進行中**（分支 m1/rules-engine）                        |
-| M2     | 連線與簡易 UI：大廳、房間、重連、計時                                                | 未開始                                                    |
-| M3     | 卡牌系統（可抽換卡組）：hook 框架、效果實作                                          | 未開始，需要使用者提供官方卡表                            |
-| M4     | 美術與 3D：風格化 UI、場景、破壞與打擊感、低畫質模式                                 | 未開始                                                    |
-| M5     | 品質與上線：事件日誌、負載測試（10,000 連線）、Snyk、部署                            | 未開始                                                    |
-| M6     | 選配：機器人、觀戰、Duel 模式、手機                                                  | 未開始                                                    |
+| 里程碑 | 內容                                                                                 | 狀態                                                                             |
+| ------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| M0     | 骨架、環境、文件、CI                                                                 | **完成**（沙盒與使用者實測通過；CI 尚未在 GitHub 上執行）                        |
+| M1     | 規則引擎（無卡牌）：擲骰、結算、東京市／灣、讓位、淘汰、勝負（含 R-END）、支援多勝者 | **完成**（分支 m1/rules-engine；沙盒與使用者 Mac 實測通過；PR 待 M0 合併後再開） |
+| M2     | 連線與簡易 UI：大廳、房間、重連、計時                                                | 未開始                                                                           |
+| M3     | 卡牌系統（可抽換卡組）：hook 框架、效果實作                                          | 未開始，需要使用者提供官方卡表                                                   |
+| M4     | 美術與 3D：風格化 UI、場景、破壞與打擊感、低畫質模式                                 | 未開始                                                                           |
+| M5     | 品質與上線：事件日誌、負載測試（10,000 連線）、Snyk、部署                            | 未開始                                                                           |
+| M6     | 選配：機器人、觀戰、Duel 模式、手機                                                  | 未開始                                                                           |
 
 ## M0 驗證狀態（2026-11-06）
 
@@ -52,6 +60,16 @@ apps/web ──▶ @kot/protocol ◀── apps/server ──▶ @kot/rules
 | WebGL2                         | **Tested（使用者）**                                    | 支援                                                                            |
 | 依賴漏洞                       | **Tested（使用者）**                                    | `snyk test --all-projects`、`snyk container test`、`pnpm audit --prod` 皆無漏洞 |
 | GitHub Actions CI              | **未實測**                                              | 需要在 GitHub 上首次執行才知道                                                  |
+
+## M1 驗證狀態（2026-11-06）
+
+| 項目                                            | 狀態                           | 說明                                                         |
+| ----------------------------------------------- | ------------------------------ | ------------------------------------------------------------ |
+| `pnpm run check`（含 148 個規則引擎測試）       | **Tested（沙盒＋使用者 Mac）** | 格式、lint、typecheck、全部測試、建置通過                    |
+| `snyk test --all-projects`、`pnpm audit --prod` | **Tested（使用者）**           | 5 個專案無漏洞；`@kot/rules` 新增的 fast-check 只是 dev 依賴 |
+| `snyk container test kot-server`                | **Tested（使用者）**           | 19 個 Alpine 套件無漏洞；映像內沒有套件管理器                |
+| 獨立審查                                        | **Reviewed（子代理，唯讀）**   | 沒有違反規則編號的缺陷；防禦性建議已修                       |
+| GitHub Actions CI                               | **未實測**                     | PR #1（M0→main）會是第一次執行                               |
 
 ## 容量目標
 
