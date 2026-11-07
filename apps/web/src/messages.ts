@@ -21,6 +21,10 @@ export const ACK_MESSAGES: Record<AckErrorCode, string> = {
   invalid_action: '動作不正確',
   no_rolls_left: '已經沒有重擲次數了',
   roll_first: '請先擲骰',
+  not_enough_energy: '能量不足',
+  card_unavailable: '這張牌現在買不到',
+  cannot_use: '現在不能使用這張卡',
+  unknown_card_set: '找不到這個卡牌組',
 };
 
 export function ackMessage(code: AckErrorCode): string {

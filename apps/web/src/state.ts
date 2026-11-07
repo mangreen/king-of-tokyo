@@ -1,7 +1,9 @@
-import { describeEvent } from '@kot/rules';
+import { describeEvent, type CardDef } from '@kot/rules';
 import {
   ServerErrorSchema,
   ServerHelloSchema,
+  type CardSetInfo,
+  type GameCardsMessage,
   type GameUpdateMessage,
   type RoomSnapshot,
   type RoomStateMessage,
@@ -19,6 +21,11 @@ export interface AppState {
   connection: Connection;
   room: RoomSnapshot | null;
   game: GameUpdateMessage | null;
+  /** 伺服器提供的卡牌組與預設值（握手時取得）。 */
+  cardSets: CardSetInfo[];
+  defaultCardSetId: string | null;
+  /** 這場對局的卡牌目錄（game:cards）；對局開始前為 null。 */
+  cards: CardDef[] | null;
   /** 收到最新 game:update 時，本機時間算出的決策截止時間（ms epoch）；沒有計時為 null。 */
   deadlineAt: number | null;
   /** 事件日誌（文字），最新的在最後。 */
@@ -34,6 +41,7 @@ export type AppAction =
   | { type: 'transport-error' }
   | { type: 'disconnected' }
   | { type: 'room-state'; payload: unknown }
+  | { type: 'game-cards'; payload: unknown }
   | { type: 'game-update'; payload: unknown; at: number }
   | { type: 'notice'; message: string | null }
   | { type: 'reset' };
@@ -44,6 +52,9 @@ export const initialAppState: AppState = {
   connection: { status: 'idle' },
   room: null,
   game: null,
+  cardSets: [],
+  defaultCardSetId: null,
+  cards: null,
   deadlineAt: null,
   log: [],
   notice: null,
@@ -59,6 +70,22 @@ function isRoomSnapshot(value: unknown): value is RoomSnapshot {
     typeof value['code'] === 'string' &&
     typeof value['hostId'] === 'string' &&
     Array.isArray(value['players'])
+  );
+}
+
+function isGameCards(value: unknown): value is GameCardsMessage {
+  return (
+    isRecord(value) &&
+    typeof value['cardSetId'] === 'string' &&
+    Array.isArray(value['cards']) &&
+    value['cards'].every(
+      (c) =>
+        isRecord(c) &&
+        typeof c['id'] === 'string' &&
+        typeof c['name'] === 'string' &&
+        typeof c['cost'] === 'number' &&
+        typeof c['text'] === 'string',
+    )
   );
 }
 
@@ -92,6 +119,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           playerId: parsed.data.playerId,
           nickname: parsed.data.nickname,
         },
+        cardSets: parsed.data.cardSets,
+        defaultCardSetId: parsed.data.defaultCardSetId,
       };
     }
 
@@ -129,10 +158,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const room = isRecord(payload) ? payload.room : undefined;
       if (room === null) {
         // 不在任何房間：清掉對局畫面
-        return { ...state, room: null, game: null, deadlineAt: null, log: [] };
+        return { ...state, room: null, game: null, cards: null, deadlineAt: null, log: [] };
       }
       return isRoomSnapshot(room) ? { ...state, room } : state;
     }
+
+    case 'game-cards':
+      return isGameCards(action.payload) ? { ...state, cards: action.payload.cards } : state;
 
     case 'game-update': {
       if (!isGameUpdate(action.payload)) return state;
@@ -142,7 +174,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // 事件文字以玩家暱稱顯示（開局時房間快照已有座位）
       const nameOf = (seat: number): string =>
         state.room?.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
-      const lines = update.events.map((e) => describeEvent(e, nameOf)).filter((l) => l !== '');
+      const cardName = (id: string): string => state.cards?.find((c) => c.id === id)?.name ?? id;
+      const lines = update.events
+        .map((e) => describeEvent(e, nameOf, cardName))
+        .filter((l) => l !== '');
       const log = [...state.log, ...lines].slice(-LOG_LIMIT);
       return {
         ...state,

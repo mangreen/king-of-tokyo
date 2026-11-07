@@ -847,7 +847,9 @@ function afterMarketChange(g: G): void {
 
 function opportunities(g: G, cards: readonly string[]): { seat: number; cardId: string }[] {
   const out: { seat: number; cardId: string }[] = [];
-  const seats = clockwiseFrom(g.s, g.s.turn.seat).filter((seat) => hasEffect(g, seat, CAP.opportunist));
+  const seats = clockwiseFrom(g.s, g.s.turn.seat).filter((seat) =>
+    hasEffect(g, seat, CAP.opportunist),
+  );
   for (const cardId of cards) {
     for (const seat of seats) {
       out.push({ seat, cardId });

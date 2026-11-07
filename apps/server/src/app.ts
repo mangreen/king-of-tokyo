@@ -1,6 +1,8 @@
 import { randomInt } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
+import type { CardSetInfo } from '@kot/protocol';
+import { defaultCardSetId, loadCardSets, type LoadedCardSet } from '@kot/cardsets';
 import type { ServerConfig } from './config.js';
 import {
   createPublisher,
@@ -27,6 +29,8 @@ export interface App {
   io: SocketServer<ClientToServerEvents, ServerToClientEvents>;
   rooms: RoomManager;
   sessions: SessionStore;
+  /** 已載入的卡牌組摘要（記錄用）。 */
+  cardSetInfos: CardSetInfo[];
 }
 
 export interface AppOptions {
@@ -35,6 +39,8 @@ export interface AppOptions {
   scheduler?: Scheduler;
   timings?: Timings;
   newSeed?: () => number;
+  /** 測試用：直接提供卡牌組，不讀檔。 */
+  cardSets?: ReadonlyMap<string, LoadedCardSet>;
 }
 
 export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
@@ -56,6 +62,14 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     },
   });
 
+  const cardSets = options.cardSets ?? loadCardSets(config.cardSetsDir);
+  const defaultSetId = defaultCardSetId(cardSets);
+  const cardSetInfos = [...cardSets.values()].map((loaded) => ({
+    id: loaded.set.id,
+    name: loaded.set.name,
+    cardCount: loaded.set.cards.length,
+  }));
+
   const sockets = new Map<string, GameSocket>();
   const rooms: RoomManager = new RoomManager({
     scheduler,
@@ -64,11 +78,21 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     timings: options.timings ?? DEFAULT_TIMINGS,
     randomInt: (max) => randomInt(max),
     maxRooms: config.maxRooms,
+    cardSets,
+    defaultCardSetId: defaultSetId,
   });
   const sessions = new SessionStore(scheduler, SESSION_TTL_MS, (id) => rooms.hasRoom(id));
 
   io.on('connection', (socket) => {
-    handleConnection(socket, { sessions, rooms, scheduler, helloTimeoutMs, sockets });
+    handleConnection(socket, {
+      sessions,
+      rooms,
+      scheduler,
+      helloTimeoutMs,
+      sockets,
+      cardSets: cardSetInfos,
+      defaultCardSetId: defaultSetId,
+    });
   });
 
   fastify.addHook('onClose', async () => {
@@ -76,5 +100,5 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     await io.close();
   });
 
-  return { fastify, io, rooms, sessions };
+  return { fastify, io, rooms, sessions, cardSetInfos };
 }

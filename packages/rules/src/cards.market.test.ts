@@ -83,11 +83,17 @@ describe('R-CARD-11/14/15 購買', () => {
   it('付費、立即結算 Discard 卡、從牌庫補牌', () => {
     const s = toBuyPhase();
     const r = must(s, { type: 'buy', seat: 0, cardId: 'c1' }, env);
-    expect(mon(r.state, 0)).toMatchObject({ energy: 7, vp: 3 }) // 進入東京 +1、卡牌 +2;
+    expect(mon(r.state, 0)).toMatchObject({ energy: 7, vp: 3 }); // 進入東京 +1、卡牌 +2;
     expect(r.state.market?.faceUp).toEqual(['c2', 'c3', 'c4']);
     expect(r.state.market?.deck).toEqual(['c5', 'c6', 'c7']);
     expect(r.state.market?.discard).toEqual(['c1']);
-    expect(r.events).toContainEqual({ type: 'card_bought', seat: 0, cardId: 'c1', cost: 3, from: null });
+    expect(r.events).toContainEqual({
+      type: 'card_bought',
+      seat: 0,
+      cardId: 'c1',
+      cost: 3,
+      from: null,
+    });
     expect(r.events).toContainEqual({ type: 'card_revealed', cardId: 'c4' });
     expect(checkInvariants(r.state)).toEqual([]);
   });
@@ -137,7 +143,11 @@ describe('R-CARD-12 掃牌', () => {
     expect(mon(r.state, 0).energy).toBe(8);
     expect(r.state.market?.faceUp).toEqual(['c4', 'c5', 'c6']);
     expect(r.state.market?.discard).toEqual(['c1', 'c2', 'c3']);
-    expect(r.events).toContainEqual({ type: 'market_swept', seat: 0, discarded: ['c1', 'c2', 'c3'] });
+    expect(r.events).toContainEqual({
+      type: 'market_swept',
+      seat: 0,
+      discarded: ['c1', 'c2', 'c3'],
+    });
     const r2 = must(r.state, { type: 'buy', seat: 0, cardId: 'c6' }, env);
     expect(mon(r2.state, 0).energy).toBe(7);
   });

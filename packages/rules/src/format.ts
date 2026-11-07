@@ -81,7 +81,9 @@ export function describeEvent(
     case 'extra_turn_granted':
       return `  ${nameOf(e.seat)} 將再進行一個回合`;
     case 'deck_peeked':
-      return e.cardId ? `  ${nameOf(e.seat)} 偷看牌庫頂：${cardName(e.cardId)}` : `  ${nameOf(e.seat)} 偷看了牌庫頂`;
+      return e.cardId
+        ? `  ${nameOf(e.seat)} 偷看牌庫頂：${cardName(e.cardId)}`
+        : `  ${nameOf(e.seat)} 偷看了牌庫頂`;
     case 'dice_penalty':
       return `  全場少擲一顆骰子（${e.seats.length} 個效果）`;
     case 'yield_requested':

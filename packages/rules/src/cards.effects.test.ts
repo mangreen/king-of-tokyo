@@ -68,7 +68,14 @@ describe('R-CARD-15 Discard 卡的即時效果（instant）', () => {
     expect([0, 1, 2].map((s) => mon(others.state, s).hp)).toEqual([10, 8, 8]);
     const all = buy(ins(3, { op: 'damageAll', n: 3 }), 3, { 0: { energy: 5 } });
     expect([0, 1, 2].map((s) => mon(all.state, s).hp)).toEqual([7, 7, 7]);
-    expect(all.events).toContainEqual({ type: 'damage_taken', seat: 1, amount: 3, hp: 7, source: 0, cause: 'card' });
+    expect(all.events).toContainEqual({
+      type: 'damage_taken',
+      seat: 1,
+      amount: 3,
+      hp: 7,
+      source: 0,
+      cause: 'card',
+    });
   });
 
   it('卡牌傷害不是攻擊：東京內的怪獸不被詢問讓位，被淘汰也沒人接手東京', () => {
@@ -139,7 +146,10 @@ describe('R-CARD-21 骰子與擲骰次數', () => {
   });
 
   it('Shrink 指示物每個少擲一顆，最少 1 顆', () => {
-    const { env, state } = world([], 3, { 1: { tokens: { poison: 0, shrink: 2 } }, 2: { tokens: { poison: 0, shrink: 9 } } });
+    const { env, state } = world([], 3, {
+      1: { tokens: { poison: 0, shrink: 2 } },
+      2: { tokens: { poison: 0, shrink: 9 } },
+    });
     const r = must(buyPhase(state), { type: 'endTurn', seat: 0 }, env);
     expect(r.state.turn.diceCount).toBe(4);
     const r2 = must(buyPhase(r.state), { type: 'endTurn', seat: 1 }, env);
@@ -160,14 +170,24 @@ describe('R-CARD-21 骰子與擲骰次數', () => {
 
   it('沒有加擲卡時第 4 次擲被拒絕（M1 行為不變）', () => {
     const { env, state } = world([], 3, {});
-    const s = { ...state, turn: { ...state.turn, rollsUsed: 3, dice: [1, 2, 3, 1, 2, 3] as Face[] } };
-    expect(applyAction(s, { type: 'roll', seat: 0, keep: [0] }, env)).toEqual({ ok: false, error: 'no_rolls_left' });
+    const s = {
+      ...state,
+      turn: { ...state.turn, rollsUsed: 3, dice: [1, 2, 3, 1, 2, 3] as Face[] },
+    };
+    expect(applyAction(s, { type: 'roll', seat: 0, keep: [0] }, env)).toEqual({
+      ok: false,
+      error: 'no_rolls_left',
+    });
   });
 });
 
 describe('R-CARD-14 費用與其他修正', () => {
   it('費用減免，最低 0', () => {
-    const defs = [card('disc', 'cost_discount', { params: { n: 1 } }), card('c4', 'instant', { cost: 4, params: { ops: [] } }), card('c1', 'instant', { cost: 1, params: { ops: [] } })];
+    const defs = [
+      card('disc', 'cost_discount', { params: { n: 1 } }),
+      card('c4', 'instant', { cost: 4, params: { ops: [] } }),
+      card('c1', 'instant', { cost: 1, params: { ops: [] } }),
+    ];
     const { env, state } = world(defs, 3, { 0: { cards: ['disc'], energy: 3 } }, ['c4', 'c1']);
     let r = must(buyPhase(state), { type: 'buy', seat: 0, cardId: 'c4' }, env);
     expect(mon(r.state, 0).energy).toBe(0);
@@ -185,7 +205,9 @@ describe('R-CARD-14 費用與其他修正', () => {
     const { env, state } = world([card('rg', 'heal_bonus')], 3, { 0: { cards: ['rg'], hp: 4 } });
     const r = resolveWith(state, [H, H, 1, 2, 3, 3], env);
     expect(mon(r.state, 0).hp).toBe(7);
-    const inTokyo = world([card('rg', 'heal_bonus')], 3, { 0: { cards: ['rg'], hp: 4, location: 'city' } });
+    const inTokyo = world([card('rg', 'heal_bonus')], 3, {
+      0: { cards: ['rg'], hp: 4, location: 'city' },
+    });
     const r2 = resolveWith(inTokyo.state, [H, H, 1, 2, 3, 3], inTokyo.env);
     expect(mon(r2.state, 0).hp).toBe(4);
   });
@@ -195,7 +217,18 @@ describe('R-CARD-14 費用與其他修正', () => {
     const { env, state } = world(defs, 3, { 0: { energy: 10 } }, ['eb']);
     let s = must(buyPhase(state), { type: 'buy', seat: 0, cardId: 'eb' }, env).state;
     expect(mon(s, 0)).toMatchObject({ maxHp: 12, hp: 12 });
-    s = { ...s, monsters: s.monsters.map((m) => (m.seat === 0 ? { ...m, cards: [...m.cards, 'mm'], cardData: { ...m.cardData, mm: { n: 0, ref: null } } } : m)) };
+    s = {
+      ...s,
+      monsters: s.monsters.map((m) =>
+        m.seat === 0
+          ? {
+              ...m,
+              cards: [...m.cards, 'mm'],
+              cardData: { ...m.cardData, mm: { n: 0, ref: null } },
+            }
+          : m,
+      ),
+    };
     s = must(s, { type: 'useCard', seat: 0, cardId: 'mm', args: { cards: ['eb'] } }, env).state;
     expect(mon(s, 0)).toMatchObject({ maxHp: 10, hp: 10 });
     check(s);
@@ -213,7 +246,9 @@ const hpOf = (s: GameState, seat: number): number => mon(s, seat).hp;
 
 describe('R-CARD-31 加傷', () => {
   it('每次攻擊 +n：只在有攻擊時生效', () => {
-    const { env, state } = duel([card('st', 'attack_bonus', { params: { n: 1 } })], { 0: { cards: ['st'] } });
+    const { env, state } = duel([card('st', 'attack_bonus', { params: { n: 1 } })], {
+      0: { cards: ['st'] },
+    });
     expect(hpOf(resolveWith(state, [A, 1, 2, 3, H, H], env).state, 1)).toBe(8);
     const none = resolveWith(state, [1, 2, 3, H, H, H], env);
     expect(hpOf(none.state, 1)).toBe(10);
@@ -221,7 +256,10 @@ describe('R-CARD-31 加傷', () => {
   });
 
   it('「每回合固定加傷」沒有攻擊面也構成攻擊，可以讓位（OQ-C6）', () => {
-    const { env, state } = duel([card('acid', 'attack_bonus', { params: { n: 1, always: true } })], { 0: { cards: ['acid'] } });
+    const { env, state } = duel(
+      [card('acid', 'attack_bonus', { params: { n: 1, always: true } })],
+      { 0: { cards: ['acid'] } },
+    );
     const r = resolveWith(state, [1, 2, 3, H, H, H], env);
     expect(hpOf(r.state, 1)).toBe(9);
     expect(yieldQueue(r.state)).toEqual([1]);
@@ -244,7 +282,14 @@ describe('R-CARD-31 加傷', () => {
     const r = resolveWith(state, [A, 1, 2, 3, H, H], env);
     expect(hpOf(r.state, 1)).toBe(8);
     const y = must(r.state, { type: 'yieldDecision', seat: 1, leave: true }, env);
-    expect(y.events).toContainEqual({ type: 'damage_taken', seat: 0, amount: 1, hp: 9, source: 1, cause: 'yield' });
+    expect(y.events).toContainEqual({
+      type: 'damage_taken',
+      seat: 0,
+      amount: 1,
+      hp: 9,
+      source: 1,
+      cause: 'yield',
+    });
   });
 
   it('在東京內攻擊的加成（Urbavore 類）：回合開始 +VP、攻擊 +傷害', () => {
@@ -252,19 +297,30 @@ describe('R-CARD-31 加傷', () => {
     const { env, state } = world([u], 3, { 0: { cards: ['ub'], location: 'city' } });
     const r = resolveWith(state, [A, 1, 2, 3, H, H], env);
     expect(hpOf(r.state, 1)).toBe(8);
-    const start = must(buyPhase({ ...state, turn: { ...state.turn, seat: 2 } }), { type: 'endTurn', seat: 2 }, env);
+    const start = must(
+      buyPhase({ ...state, turn: { ...state.turn, seat: 2 } }),
+      { type: 'endTurn', seat: 2 },
+      env,
+    );
     expect(start.state.turn.seat).toBe(0);
     expect(mon(start.state, 0).vp).toBe(3); // 在東京 +2，卡牌 +1
   });
 
-  it('鄰座額外傷害（Fire Breathing 類）：目標加傷，非目標的鄰座也受傷，且不是攻擊', () => {
+  it('鄰座額外傷害（鄰座加傷類）：目標加傷，非目標的鄰座也受傷，且不是攻擊', () => {
     const f = card('fb', 'neighbor_damage');
     const { env, state } = duel([f], { 0: { cards: ['fb'] } }, 4);
     const r = resolveWith(state, [A, 1, 2, 3, H, H], env);
     expect(hpOf(r.state, 1)).toBe(8); // 目標且是鄰座：1 + 1
     expect(hpOf(r.state, 3)).toBe(9); // 非目標的鄰座
     expect(hpOf(r.state, 2)).toBe(10);
-    expect(r.events).toContainEqual({ type: 'damage_taken', seat: 3, amount: 1, hp: 9, source: 0, cause: 'extra' });
+    expect(r.events).toContainEqual({
+      type: 'damage_taken',
+      seat: 3,
+      amount: 1,
+      hp: 9,
+      source: 0,
+      cause: 'extra',
+    });
   });
 
   it('Nova 類：傷害所有其他怪獸', () => {
@@ -274,10 +330,14 @@ describe('R-CARD-31 加傷', () => {
   });
 
   it('攻擊時得 VP（Alpha 類）：有目標才算', () => {
-    const { env, state } = duel([card('al', 'attack_vp', { params: { vp: 1 } })], { 0: { cards: ['al'] } });
+    const { env, state } = duel([card('al', 'attack_vp', { params: { vp: 1 } })], {
+      0: { cards: ['al'] },
+    });
     const r = resolveWith(state, [A, 1, 2, 3, H, H], env);
     expect(mon(r.state, 0).vp).toBe(1);
-    const nobody = world([card('al', 'attack_vp', { params: { vp: 1 } })], 3, { 0: { cards: ['al'] } });
+    const nobody = world([card('al', 'attack_vp', { params: { vp: 1 } })], 3, {
+      0: { cards: ['al'] },
+    });
     const r2 = resolveWith(nobody.state, [A, 1, 2, 3, H, H], nobody.env);
     expect(mon(r2.state, 0).vp).toBe(1); // 沒有目標：只有進入東京的 1 VP
   });
@@ -291,7 +351,11 @@ describe('R-CARD-31 加傷', () => {
   });
 
   it('加害後：吸血與指示物', () => {
-    const defs = [card('ca', 'lifesteal'), card('ps', 'counter_attack', { params: { counter: 'poison' } }), card('sr', 'counter_attack', { params: { counter: 'shrink' } })];
+    const defs = [
+      card('ca', 'lifesteal'),
+      card('ps', 'counter_attack', { params: { counter: 'poison' } }),
+      card('sr', 'counter_attack', { params: { counter: 'shrink' } }),
+    ];
     const { env, state } = duel(defs, { 0: { cards: ['ca', 'ps', 'sr'], hp: 5 } });
     const r = resolveWith(state, [A, 1, 2, 3, E, E], env);
     expect(hpOf(r.state, 0)).toBe(6);
@@ -304,7 +368,14 @@ describe('R-CARD-31 加傷', () => {
     const r = resolveWith(state, [A, 1, 2, 3, E, E], env);
     expect(hpOf(r.state, 0)).toBe(9);
     expect(r.events.filter((e) => e.type === 'damage_taken')).toHaveLength(2);
-    expect(r.events).toContainEqual({ type: 'damage_taken', seat: 0, amount: 1, hp: 9, source: 1, cause: 'reflect' });
+    expect(r.events).toContainEqual({
+      type: 'damage_taken',
+      seat: 0,
+      amount: 1,
+      hp: 9,
+      source: 1,
+      cause: 'reflect',
+    });
   });
 });
 
@@ -313,18 +384,27 @@ describe('R-CARD-33 減傷', () => {
     const { env, state } = duel([card('ar', 'armor')], { 1: { cards: ['ar'], location: 'city' } });
     const one = resolveWith(state, [A, 1, 2, 3, E, E], env);
     expect(hpOf(one.state, 1)).toBe(10);
-    expect(one.events).toContainEqual({ type: 'damage_prevented', seat: 1, amount: 1, cardId: 'ar' });
+    expect(one.events).toContainEqual({
+      type: 'damage_prevented',
+      seat: 1,
+      amount: 1,
+      cardId: 'ar',
+    });
     expect(hpOf(resolveWith(state, [A, A, 1, 2, E, E], env).state, 1)).toBe(8);
   });
 
   it('迷彩：每點傷害擲一顆骰子，出現治療面免除；總和一定守恆', () => {
-    const { env, state } = duel([card('cm', 'camouflage')], { 1: { cards: ['cm'], location: 'city' } });
+    const { env, state } = duel([card('cm', 'camouflage')], {
+      1: { cards: ['cm'], location: 'city' },
+    });
     let prevented = 0;
     for (let seed = 1; seed <= 60; seed += 1) {
       const s = { ...state, rng: seed };
       const r = resolveWith(s, [A, A, A, A, 1, 2], env);
       const taken = 10 - hpOf(r.state, 1);
-      const saved = r.events.filter((e) => e.type === 'damage_prevented').reduce((n, e) => n + (e.type === 'damage_prevented' ? e.amount : 0), 0);
+      const saved = r.events
+        .filter((e) => e.type === 'damage_prevented')
+        .reduce((n, e) => n + (e.type === 'damage_prevented' ? e.amount : 0), 0);
       expect(taken + saved).toBe(4);
       prevented += saved;
     }
@@ -334,10 +414,17 @@ describe('R-CARD-33 減傷', () => {
   it('受傷 ≥ 門檻得能量；HP 歸零觸發吃屍者', () => {
     const w = card('wm', 'lose_hp_energy', { params: { min: 2, energy: 1 } });
     const d = card('ed', 'death_vp', { params: { vp: 3 } });
-    const { env, state } = duel([w, d], { 1: { cards: ['wm'], location: 'city', hp: 5 }, 2: { cards: ['ed'], hp: 1 } });
+    const { env, state } = duel([w, d], {
+      1: { cards: ['wm'], location: 'city', hp: 5 },
+      2: { cards: ['ed'], hp: 1 },
+    });
     const r = resolveWith(state, [A, A, 1, 2, E, E], env);
     expect(mon(r.state, 1).energy).toBe(1);
-    const killed = resolveWith({ ...state, monsters: state.monsters.map((m) => (m.seat === 1 ? { ...m, hp: 2 } : m)) }, [A, A, 1, 2, E, E], env);
+    const killed = resolveWith(
+      { ...state, monsters: state.monsters.map((m) => (m.seat === 1 ? { ...m, hp: 2 } : m)) },
+      [A, A, 1, 2, E, E],
+      env,
+    );
     expect(mon(killed.state, 1).alive).toBe(false);
     expect(mon(killed.state, 2).vp).toBe(3);
   });
@@ -354,28 +441,63 @@ describe('R-CARD-20 回合結束效果', () => {
   };
 
   it('能量囤積：每 6 能量 +1 VP；太陽能：沒能量時 +1', () => {
-    const r = endOf([card('eh', 'end_energy_vp', { params: { per: 6, vp: 1 } })], { 0: { cards: ['eh'], energy: 13 } });
+    const r = endOf([card('eh', 'end_energy_vp', { params: { per: 6, vp: 1 } })], {
+      0: { cards: ['eh'], energy: 13 },
+    });
     expect(mon(r.state, 0).vp).toBe(2);
-    const sp = endOf([card('sp', 'end_empty_energy', { params: { n: 1 } })], { 0: { cards: ['sp'] } });
+    const sp = endOf([card('sp', 'end_empty_energy', { params: { n: 1 } })], {
+      0: { cards: ['sp'] },
+    });
     expect(mon(sp.state, 0).energy).toBe(1);
-    const has = endOf([card('sp', 'end_empty_energy', { params: { n: 1 } })], { 0: { cards: ['sp'], energy: 2 } });
+    const has = endOf([card('sp', 'end_empty_energy', { params: { n: 1 } })], {
+      0: { cards: ['sp'], energy: 2 },
+    });
     expect(mon(has.state, 0).energy).toBe(2);
   });
 
   it('扶弱：VP 最少者回合結束得 1 VP（任何人的回合結束都算，OQ-C 並列算最少）', () => {
-    const r = endOf([card('ud', 'end_underdog', { params: { vp: 1 } })], { 0: { vp: 5 }, 1: { cards: ['ud'], vp: 2 }, 2: { vp: 4 } });
+    const r = endOf([card('ud', 'end_underdog', { params: { vp: 1 } })], {
+      0: { vp: 5 },
+      1: { cards: ['ud'], vp: 2 },
+      2: { vp: 4 },
+    });
     expect(mon(r.state, 1).vp).toBe(3);
-    const notLowest = endOf([card('ud', 'end_underdog', { params: { vp: 1 } })], { 0: { vp: 5 }, 1: { cards: ['ud'], vp: 4 }, 2: { vp: 2 } });
+    const notLowest = endOf([card('ud', 'end_underdog', { params: { vp: 1 } })], {
+      0: { vp: 5 },
+      1: { cards: ['ud'], vp: 4 },
+      2: { vp: 2 },
+    });
     expect(mon(notLowest.state, 1).vp).toBe(4);
   });
 
   it('草食：沒傷害任何人才得 VP；重擊：本回合總傷害達門檻得 VP', () => {
     const h = card('hb', 'end_peaceful_vp', { params: { vp: 1 } });
     expect(mon(endOf([h], { 0: { cards: ['hb'] } }).state, 0).vp).toBe(1);
-    expect(mon(endOf([h], { 0: { cards: ['hb'] } }, (s) => { s.turn.damagedAnyone = true; }).state, 0).vp).toBe(0);
+    expect(
+      mon(
+        endOf([h], { 0: { cards: ['hb'] } }, (s) => {
+          s.turn.damagedAnyone = true;
+        }).state,
+        0,
+      ).vp,
+    ).toBe(0);
     const t = card('tt', 'big_hit_vp', { params: { min: 3, vp: 2 } });
-    expect(mon(endOf([t], { 0: { cards: ['tt'] } }, (s) => { s.turn.dealt = 3; }).state, 0).vp).toBe(2);
-    expect(mon(endOf([t], { 0: { cards: ['tt'] } }, (s) => { s.turn.dealt = 2; }).state, 0).vp).toBe(0);
+    expect(
+      mon(
+        endOf([t], { 0: { cards: ['tt'] } }, (s) => {
+          s.turn.dealt = 3;
+        }).state,
+        0,
+      ).vp,
+    ).toBe(2);
+    expect(
+      mon(
+        endOf([t], { 0: { cards: ['tt'] } }, (s) => {
+          s.turn.dealt = 2;
+        }).state,
+        0,
+      ).vp,
+    ).toBe(0);
   });
 
   it('買牌得 VP', () => {
@@ -405,7 +527,14 @@ describe('R-CARD-20 回合結束效果', () => {
     const { env, state } = world([], 3, { 0: { tokens: { poison: 2, shrink: 0 } } });
     const r = must(buyPhase(state), { type: 'endTurn', seat: 0 }, env);
     expect(mon(r.state, 0).hp).toBe(8);
-    expect(r.events).toContainEqual({ type: 'damage_taken', seat: 0, amount: 2, hp: 8, source: null, cause: 'poison' });
+    expect(r.events).toContainEqual({
+      type: 'damage_taken',
+      seat: 0,
+      amount: 2,
+      hp: 8,
+      source: null,
+      cause: 'poison',
+    });
     const dead = world([], 3, { 0: { tokens: { poison: 3, shrink: 0 }, hp: 3 } });
     const r2 = must(buyPhase(dead.state), { type: 'endTurn', seat: 0 }, dead.env);
     expect(mon(r2.state, 0).alive).toBe(false);
@@ -415,7 +544,9 @@ describe('R-CARD-20 回合結束效果', () => {
   });
 
   it('R-END-02 回合結束效果造成的 VP 也計入 20 VP 判定', () => {
-    const r = endOf([card('eh', 'end_energy_vp', { params: { per: 6, vp: 1 } })], { 0: { cards: ['eh'], energy: 12, vp: 18 } });
+    const r = endOf([card('eh', 'end_energy_vp', { params: { per: 6, vp: 1 } })], {
+      0: { cards: ['eh'], energy: 12, vp: 18 },
+    });
     expect(r.state.phase).toBe('over');
     expect(r.state.outcome?.winners).toEqual([0]);
   });

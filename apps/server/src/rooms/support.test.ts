@@ -5,7 +5,7 @@ import { TokenBucket } from './rateLimit.js';
 import { DEFAULT_TIMINGS } from './room.js';
 import { generateRoomCode } from './roomCode.js';
 import { SessionStore } from './sessions.js';
-import { FakeScheduler, RecordingPublisher } from './testing.js';
+import { FakeScheduler, RecordingPublisher, testCardSets } from './testing.js';
 
 describe('generateRoomCode', () => {
   it('產生 5 碼、字元都在字元集內，且通過協定的房號驗證', () => {
@@ -124,11 +124,28 @@ describe('RoomManager', () => {
         return Math.floor(next / 5) % ROOM_CODE_ALPHABET.length;
       },
       maxRooms,
+      cardSets: testCardSets(),
+      defaultCardSetId: 'original',
     });
     return { manager, publisher, scheduler };
   }
   const alice = { id: 'a', nickname: 'Alice' };
   const bob = { id: 'b', nickname: 'Bob' };
+
+  it('建立房間可指定卡牌組；省略用預設，未知的卡牌組被拒絕', () => {
+    const { manager } = setup();
+    const created = manager.createRoom(alice, 'original');
+    expect(created.ok).toBe(true);
+    if (created.ok) {
+      expect(manager.roomOf(alice.id)?.snapshot().cardSet.id).toBe('original');
+    }
+    expect(manager.createRoom(bob, 'no-such-set')).toEqual({
+      ok: false,
+      code: 'unknown_card_set',
+    });
+    expect(manager.hasRoom(bob.id)).toBe(false);
+    expect(manager.createRoom(bob).ok).toBe(true);
+  });
 
   it('建立、加入、離開；一位玩家同時只能在一個房間', () => {
     const { manager, publisher } = setup();

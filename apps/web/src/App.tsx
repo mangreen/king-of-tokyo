@@ -35,6 +35,7 @@ export function App() {
         game={game}
         deadlineAt={state.deadlineAt}
         selfId={connection.playerId}
+        cards={state.cards}
         log={state.log}
         onAct={client.act}
         onLeave={client.leaveRoom}
@@ -54,6 +55,8 @@ export function App() {
     body = (
       <Lobby
         nickname={connection.nickname}
+        cardSets={state.cardSets}
+        defaultCardSetId={state.defaultCardSetId}
         onCreate={client.createRoom}
         onJoin={client.joinRoom}
         onLogout={client.logout}

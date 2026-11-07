@@ -98,7 +98,12 @@ export function findOwned(g: G, seat: number, effectId: string): Owned | undefin
 
 export type EnergySource = 'dice' | 'card' | 'transfer' | 'refund' | 'reserve';
 
-export function gainVp(g: G, seat: number, amount: number, reason: 'dice' | 'card' | 'tokyo_start' | 'enter_tokyo'): void {
+export function gainVp(
+  g: G,
+  seat: number,
+  amount: number,
+  reason: 'dice' | 'card' | 'tokyo_start' | 'enter_tokyo',
+): void {
   if (amount <= 0) {
     return;
   }
@@ -439,7 +444,11 @@ export function checkLastStanding(g: G): void {
   }
   const alive = aliveMonsters(g.s);
   if (alive.length <= 1) {
-    endGame(g, alive.map((m) => m.seat), alive.length === 0 ? 'allEliminated' : 'lastStanding');
+    endGame(
+      g,
+      alive.map((m) => m.seat),
+      alive.length === 0 ? 'allEliminated' : 'lastStanding',
+    );
   }
 }
 

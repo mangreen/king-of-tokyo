@@ -1,7 +1,24 @@
 /** 測試用工具：假時鐘與記錄推送的 Publisher。 */
-import type { GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
+import { fileURLToPath } from 'node:url';
+import { loadCardSets, type LoadedCardSet } from '@kot/cardsets';
+import type { GameCardsMessage, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
 import type { Publisher } from './room.js';
 import type { Scheduler } from './scheduler.js';
+
+/** 載入 repo 內提交的原創卡組（測試不依賴使用者自備的 local 卡組）。 */
+export function testCardSets(): Map<string, LoadedCardSet> {
+  const root = fileURLToPath(new URL('../../../../card-sets/', import.meta.url));
+  const all = loadCardSets(root);
+  const original = all.get('original');
+  if (!original) throw new Error('找不到原創卡組');
+  return new Map([['original', original]]);
+}
+
+export function testCardSet(): LoadedCardSet {
+  const set = testCardSets().get('original');
+  if (!set) throw new Error('找不到原創卡組');
+  return set;
+}
 
 export class FakeScheduler implements Scheduler {
   private time = 0;
@@ -52,6 +69,13 @@ export class FakeScheduler implements Scheduler {
 export class RecordingPublisher implements Publisher {
   readonly rooms = new Map<string, (RoomSnapshot | null)[]>();
   readonly games = new Map<string, GameUpdateMessage[]>();
+  readonly cards = new Map<string, GameCardsMessage[]>();
+
+  gameCards(playerId: string, message: GameCardsMessage): void {
+    const list = this.cards.get(playerId) ?? [];
+    list.push(message);
+    this.cards.set(playerId, list);
+  }
 
   roomState(playerId: string, room: RoomSnapshot | null): void {
     const list = this.rooms.get(playerId) ?? [];

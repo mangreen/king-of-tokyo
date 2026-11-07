@@ -5,8 +5,9 @@ import { z } from 'zod';
  * 伺服器在握手時比對版本，不符則回傳 error 並中斷連線。
  *
  * v2（M2）：握手加入重連用的 sessionToken；新增房間與對局訊息。
+ * v3（M3）：卡牌——完整動作集、建房可選卡牌組、握手回傳可用卡牌組、game:cards 推送。
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Socket.IO 事件名稱（client → server 與 server → client）。 */
 export const EVENTS = {
@@ -21,6 +22,7 @@ export const EVENTS = {
   roomState: 'room:state',
   gameAction: 'game:action',
   gameUpdate: 'game:update',
+  gameCards: 'game:cards',
 } as const;
 
 /** 暱稱：去除前後空白後 1~20 字，只允許字母、數字、空白、底線、連字號。 */
@@ -51,6 +53,11 @@ export const ServerHelloSchema = z.object({
   /** 這次握手是否接回先前的身分。 */
   resumed: z.boolean(),
   nickname: NicknameSchema,
+  /** 可選的卡牌組與伺服器預設值。 */
+  cardSets: z.array(
+    z.object({ id: z.string().min(1), name: z.string().min(1), cardCount: z.number().int() }),
+  ),
+  defaultCardSetId: z.string().min(1),
 });
 export type ServerHello = z.infer<typeof ServerHelloSchema>;
 

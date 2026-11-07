@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { replay, defaultConfig } from '@kot/rules';
+import { replay, defaultConfig, redactState, type RulesEnv } from '@kot/rules';
 import { DEFAULT_TIMINGS, Room, type Timings } from './room.js';
-import { FakeScheduler, RecordingPublisher } from './testing.js';
+import { FakeScheduler, RecordingPublisher, testCardSet } from './testing.js';
 
 const TIMINGS: Timings = {
   decisionMs: 1000,
@@ -13,27 +13,27 @@ const TIMINGS: Timings = {
   overRoomMs: 30_000,
 };
 
+function testEnv(): RulesEnv {
+  return { cards: Object.fromEntries(testCardSet().set.cards.map((c) => [c.id, c])) };
+}
+
 function setup(timings: Timings = TIMINGS) {
   const scheduler = new FakeScheduler();
   const publisher = new RecordingPublisher();
   let closed = 0;
   const removed: string[] = [];
-  const room = new Room(
-    'ABCDE',
-    { id: 'host', nickname: '房主' },
-    {
-      scheduler,
-      publisher,
-      newSeed: () => 12345,
-      timings,
-      onClose: () => {
-        closed += 1;
-      },
-      onMemberRemoved: (id) => {
-        removed.push(id);
-      },
+  const room = new Room('ABCDE', { id: 'host', nickname: '房主' }, testCardSet(), {
+    scheduler,
+    publisher,
+    newSeed: () => 12345,
+    timings,
+    onClose: () => {
+      closed += 1;
     },
-  );
+    onMemberRemoved: (id) => {
+      removed.push(id);
+    },
+  });
   return { room, scheduler, publisher, closedCount: () => closed, removed };
 }
 
@@ -125,7 +125,13 @@ describe('對局', () => {
     for (const id of ['host', 'p2']) {
       const update = ctx.publisher.lastGame(id);
       expect(update?.state.config.playerCount).toBe(2);
-      expect(update?.events.map((e) => e.type)).toEqual(['first_player_decided', 'turn_started']);
+      expect(update?.events.map((e) => e.type)).toEqual([
+        'first_player_decided',
+        'card_revealed',
+        'card_revealed',
+        'card_revealed',
+        'turn_started',
+      ]);
       expect(update?.remainingMs).toBe(TIMINGS.decisionMs);
     }
   });
@@ -272,9 +278,13 @@ describe('完整對局與重放', () => {
     expect(final?.actorSeat).toBeNull();
     expect(final?.remainingMs).toBeNull();
 
-    const { seed, actions } = ctx.room.replayInfo();
-    const again = replay(defaultConfig(2), seed, actions);
-    expect(again.state).toEqual(final?.state);
+    const info = ctx.room.replayInfo();
+    const again = replay(defaultConfig(2), info.seed, info.actions, testEnv());
+    // 玩家收到的是遮蔽過的狀態（亂數狀態與牌庫內容被抹去），所以用同樣的視角比對
+    expect(redactState(again.state, 0)).toEqual(final?.state);
+    expect(info.cardSetId).toBe('original');
+    expect(info.cardSetHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(info.config).toEqual(defaultConfig(2));
   });
 
   it('遊戲結束後 phase 變 over，並廣播房間狀態；離開後房間才會空', () => {

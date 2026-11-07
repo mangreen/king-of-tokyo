@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { Face, Monster } from '@kot/rules';
+import type { Action, CardDef, Face, Monster } from '@kot/rules';
 import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
+import { envOf, groupActions, labelAction, myActions, toIntent } from '../actions.js';
 import { Countdown } from './Countdown.js';
 
 const FACE_TEXT: Record<string, string> = { energy: '⚡', attack: '💥', heal: '❤️' };
@@ -20,19 +21,30 @@ interface Props {
   game: GameUpdateMessage;
   deadlineAt: number | null;
   selfId: string;
+  cards: CardDef[] | null;
   log: string[];
   onAct: (action: GameActionInput) => void;
   onLeave: () => void;
 }
 
-export function GameView({ room, game, deadlineAt, selfId, log, onAct, onLeave }: Props) {
+export function GameView({ room, game, deadlineAt, selfId, cards, log, onAct, onLeave }: Props) {
   const { state } = game;
   const mySeat = room.players.find((p) => p.id === selfId)?.seat ?? null;
   const nameOf = (seat: number): string =>
     room.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
   const infoOf = (seat: number) => room.players.find((p) => p.seat === seat);
 
+  const env = envOf(cards);
+  const cardName = (id: string): string => env.cards[id]?.name ?? id;
+  const labelCtx = { cardName, nameOf };
   const myTurn = mySeat !== null && game.actorSeat === mySeat;
+  const actions = myActions(state, env, mySeat);
+  // 商店牌的購買按鈕直接掛在牌上；其他動作（牌庫頂、向別人買、使用能力、提示回應…）列在動作區
+  const isMarketBuy = (a: Action): a is Extract<Action, { type: 'buy' }> =>
+    a.type === 'buy' && a.from === undefined;
+  const marketBuys = actions.filter(isMarketBuy);
+  const otherActions = actions.filter((a) => !isMarketBuy(a));
+  const groups = groupActions(otherActions, labelCtx);
   // 保留的骰子只對「同一個狀態版本」有效：有新的擲骰結果（版本改變）就自動視為沒有保留
   const [keptState, setKeptState] = useState<{ version: number; indexes: Set<number> }>({
     version: state.version,
@@ -103,6 +115,7 @@ export function GameView({ room, game, deadlineAt, selfId, log, onAct, onLeave }
             <th>VP</th>
             <th>能量</th>
             <th>位置</th>
+            <th>卡牌</th>
           </tr>
         </thead>
         <tbody>
@@ -128,11 +141,54 @@ export function GameView({ room, game, deadlineAt, selfId, log, onAct, onLeave }
                 <td>{m.vp}</td>
                 <td>{m.energy}</td>
                 <td>{m.location === 'city' ? '東京市' : m.location === 'bay' ? '東京灣' : '—'}</td>
+                <td className="owned">
+                  {m.cards.length === 0 && m.tokens.poison + m.tokens.shrink === 0 && '—'}
+                  {m.cards.map((id) => (
+                    <span key={id} className="tag" title={env.cards[id]?.text ?? ''}>
+                      {cardName(id)}
+                    </span>
+                  ))}
+                  {m.tokens.poison > 0 && <span className="tag warn">毒 ×{m.tokens.poison}</span>}
+                  {m.tokens.shrink > 0 && <span className="tag warn">縮小 ×{m.tokens.shrink}</span>}
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+
+      {state.market && (
+        <section className="card market" aria-label="商店">
+          <h3>
+            商店 <span className="muted">（牌庫 {state.market.deck.length} 張）</span>
+          </h3>
+          <div className="market-cards">
+            {state.market.faceUp.map((id) => {
+              const def = env.cards[id];
+              const buys = marketBuys.filter((a) => a.cardId === id);
+              return (
+                <div key={id} className="market-card">
+                  <strong>{def?.name ?? id}</strong>
+                  <span className="cost">⚡{def?.cost ?? '?'}</span>
+                  <span className="muted">{def?.kind === 'discard' ? '一次性' : '持續'}</span>
+                  <p>{def?.text ?? ''}</p>
+                  {buys.map((a) => (
+                    <button
+                      key={labelAction(a, labelCtx)}
+                      className="primary"
+                      onClick={() => {
+                        onAct(toIntent(a));
+                      }}
+                    >
+                      {labelAction(a, labelCtx)}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {state.phase !== 'over' && (
         <section className="card">
@@ -140,9 +196,7 @@ export function GameView({ room, game, deadlineAt, selfId, log, onAct, onLeave }
             {game.actorSeat === null
               ? ''
               : myTurn
-                ? state.phase === 'yield'
-                  ? '你被攻擊了，要讓出東京嗎？'
-                  : '輪到你了'
+                ? promptText(state)
                 : `等待 ${nameOf(game.actorSeat)}…`}
           </p>
           <div className="dice" aria-label="骰子">
@@ -191,26 +245,44 @@ export function GameView({ room, game, deadlineAt, selfId, log, onAct, onLeave }
                 </button>
               </>
             )}
-            {state.phase === 'yield' && myTurnYield(game, mySeat) && (
-              <>
-                <button
-                  className="primary"
-                  onClick={() => {
-                    onAct({ type: 'yieldDecision', leave: true });
-                  }}
-                >
-                  讓位
-                </button>
-                <button
-                  onClick={() => {
-                    onAct({ type: 'yieldDecision', leave: false });
-                  }}
-                >
-                  留下
-                </button>
-              </>
-            )}
           </div>
+          {groups.length > 0 && (
+            <div className="actions">
+              {groups.map((g) =>
+                g.title === null ? (
+                  g.actions.map((a) => (
+                    <button
+                      key={g.key}
+                      className={
+                        a.type === 'endTurn' || a.type === 'yieldDecision' ? 'primary' : undefined
+                      }
+                      onClick={() => {
+                        onAct(toIntent(a));
+                      }}
+                    >
+                      {labelAction(a, labelCtx)}
+                    </button>
+                  ))
+                ) : (
+                  <details key={g.key} className="use-group">
+                    <summary>使用 {g.title}</summary>
+                    <div className="row">
+                      {g.actions.map((a) => (
+                        <button
+                          key={labelAction(a, labelCtx)}
+                          onClick={() => {
+                            onAct(toIntent(a));
+                          }}
+                        >
+                          {labelAction(a, labelCtx).replace(/^使用 [^：]+：?/, '') || '使用'}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                ),
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -230,7 +302,24 @@ export function GameView({ room, game, deadlineAt, selfId, log, onAct, onLeave }
   );
 }
 
-/** 讓位階段由 actorSeat（佇列第一位）決定。 */
-function myTurnYield(game: GameUpdateMessage, mySeat: number | null): boolean {
-  return mySeat !== null && game.actorSeat === mySeat;
+/** 輪到我時的提示文字。 */
+function promptText(state: GameUpdateMessage['state']): string {
+  if (state.phase === 'prompt') {
+    switch (state.pending?.kind) {
+      case 'yield':
+        return '你被攻擊了，要讓出東京嗎？';
+      case 'react':
+        return '你被攻擊了，要使用防禦能力嗎？';
+      case 'hearts':
+        return `你擲出 ${String(state.pending.hearts)} 個治療，要怎麼分配？`;
+      case 'probe':
+        return '要重擲別人的一顆骰子嗎？';
+      case 'opportunity':
+        return '剛翻開的牌可以立即購買。';
+      case undefined:
+        return '輪到你了';
+    }
+  }
+  if (state.phase === 'buy') return '買牌階段：可以買牌、清掉商店，或結束回合。';
+  return '輪到你了';
 }

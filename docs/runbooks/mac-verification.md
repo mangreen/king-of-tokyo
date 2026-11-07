@@ -146,3 +146,38 @@ pnpm audit --prod
 2. 第 2、3 步的結果
 3. 第 4 步 `snyk container test kot-server` 的專案清單與高風險數量
 4. 第 4 步 b) 的結果，或你選了 c)／d)
+
+## M3 驗證清單（卡牌；尚未實測）
+
+在 `m3/cards` 分支上：
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run check                      # 預期全部通過（規則 240、卡牌組 19、協定 29、網頁 26、伺服器 74 個測試）
+```
+
+Docker 開發環境（compose 會把 `card-sets/` 以唯讀方式掛進 server）：
+
+```bash
+docker compose up --build
+curl http://localhost:3001/healthz  # 預期 {"status":"ok"}
+```
+
+瀏覽器開 http://localhost:5173，用兩個視窗（其一無痕）各登入、建房（可選卡牌組）、加入、準備、開始，然後確認：
+
+1. 商店有 3 張牌，顯示名稱、費用、卡面文字；買不起的牌沒有「買」按鈕。
+2. 擲骰結算後進入「買牌階段」，可以買牌、花 2 能量清掉商店、結束回合。
+3. 買到 Keep 卡後，出現在玩家表格的「卡牌」欄，滑鼠移上去看得到文字；有主動能力的卡出現「使用…」群組。
+4. 被攻擊時，會依狀況出現讓位、防禦反應、治療分配等提示。
+5. 事件日誌顯示卡牌名稱（不是 id）。
+6. 重新整理頁面可接回同一座位，商店與持有卡牌仍在。
+7. 若你有自備卡表：把 CSV 放進 `card-sets/local/`、執行 `pnpm --filter @kot/cardsets run import`、重啟 server，建房時會多一個選項。
+
+正式映像只含原創卡組，請確認：
+
+```bash
+docker build --target server -t kot-server .
+docker run --rm kot-server ls /app/card-sets      # 預期只有 original
+```
+
+請回報：第 1–7 項哪些通過、哪些不符（附畫面描述；截圖只貼給我，不要提交到 repo）。

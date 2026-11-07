@@ -9,6 +9,7 @@ describe('loadConfig', () => {
       port: 3001,
       allowedOrigins: ['http://localhost:5173'],
       maxRooms: 2000,
+      cardSetsDir: 'card-sets',
     });
   });
 

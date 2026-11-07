@@ -24,13 +24,7 @@ import {
 import type { G, Owned } from '../ops.js';
 import { aliveMonsters, getMonster } from '../state.js';
 import { FACES } from '../types.js';
-import type {
-  DamageCause,
-  ErrorCode,
-  Face,
-  PlanItem,
-  UseArgs,
-} from '../types.js';
+import type { DamageCause, ErrorCode, Face, PlanItem, UseArgs } from '../types.js';
 import type { CardDef, CardKind, InstantOp } from './types.js';
 
 /** 攻擊結算期間由「攻擊者的卡」逐步修改的內容。 */
@@ -100,7 +94,11 @@ export interface Effect {
   mitigatePre?: (g: G, o: Owned, amount: number) => number;
   mitigatePost?: (g: G, o: Owned, amount: number) => number;
   onDamaged?: (g: G, o: Owned, info: DamagedInfo) => void;
-  onDealt?: (g: G, o: Owned, info: { victim: number; amount: number; cause: DamageCause | undefined }) => void;
+  onDealt?: (
+    g: G,
+    o: Owned,
+    info: { victim: number; amount: number; cause: DamageCause | undefined },
+  ) => void;
   onAnyZero?: (g: G, o: Owned, victim: number) => void;
   onYield?: (g: G, o: Owned, info: { taker: number }) => void;
 
@@ -273,7 +271,11 @@ export const EFFECTS: Record<string, Effect> = {
       available(g, o) {
         const cost = num(o.def, 'cost', 0);
         const once = o.def.params['once'] === true;
-        return getMonster(g.s, o.seat).energy >= cost && !(once && used(g, o)) && g.s.turn.dice.length > 0;
+        return (
+          getMonster(g.s, o.seat).energy >= cost &&
+          !(once && used(g, o)) &&
+          g.s.turn.dice.length > 0
+        );
       },
       check(g, o, args) {
         const i = args.die;
@@ -446,7 +448,12 @@ export const EFFECTS: Record<string, Effect> = {
   reflect: {
     kind: 'keep',
     onDamaged(g, o, info) {
-      if (info.source !== null && info.source !== o.seat && info.cause !== 'reflect' && !info.noReflect) {
+      if (
+        info.source !== null &&
+        info.source !== o.seat &&
+        info.cause !== 'reflect' &&
+        !info.noReflect
+      ) {
         inflict(g, info.source, num(o.def, 'n', 1), o.seat, 'reflect', { noReflect: true });
       }
     },
@@ -483,7 +490,12 @@ export const EFFECTS: Record<string, Effect> = {
         spendEnergy(g, o.seat, num(o.def, 'cost', 1));
         markUsed(g, o);
         item.amount = Math.max(0, item.amount - num(o.def, 'n', 1));
-        g.ev.push({ type: 'damage_prevented', seat: o.seat, amount: num(o.def, 'n', 1), cardId: o.cardId });
+        g.ev.push({
+          type: 'damage_prevented',
+          seat: o.seat,
+          amount: num(o.def, 'n', 1),
+          cardId: o.cardId,
+        });
         return undefined;
       },
     },
@@ -546,7 +558,12 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onTurnEnd(g, o) {
       const per = Math.max(1, num(o.def, 'per', 6));
-      gainVp(g, o.seat, Math.floor(getMonster(g.s, o.seat).energy / per) * num(o.def, 'vp', 1), 'card');
+      gainVp(
+        g,
+        o.seat,
+        Math.floor(getMonster(g.s, o.seat).energy / per) * num(o.def, 'vp', 1),
+        'card',
+      );
     },
   },
   end_empty_energy: {
@@ -641,9 +658,12 @@ export const EFFECTS: Record<string, Effect> = {
     active: {
       when: 'start',
       available: (g, o) =>
-        getMonster(g.s, o.seat).energy >= num(o.base, 'switchCost', 1) && mimicTargets(g).length > 0,
+        getMonster(g.s, o.seat).energy >= num(o.base, 'switchCost', 1) &&
+        mimicTargets(g).length > 0,
       check: (g, _o, args) =>
-        args.target !== undefined && mimicTargets(g).includes(args.target) ? null : 'invalid_action',
+        args.target !== undefined && mimicTargets(g).includes(args.target)
+          ? null
+          : 'invalid_action',
       use(g, o, args) {
         const data = getMonster(g.s, o.seat).cardData[o.cardId];
         if (!data) return;
@@ -659,7 +679,9 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     active: {
       when: 'buy',
-      available: (g) => (g.s.market?.deck.length ?? 0) + (g.s.market?.discard.length ?? 0) > 0 && g.s.turn.peek === null,
+      available: (g) =>
+        (g.s.market?.deck.length ?? 0) + (g.s.market?.discard.length ?? 0) > 0 &&
+        g.s.turn.peek === null,
       use(g, o) {
         const market = g.s.market;
         if (!market) return;

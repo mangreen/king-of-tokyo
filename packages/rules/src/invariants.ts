@@ -34,7 +34,8 @@ export function checkInvariants(state: GameState): string[] {
       problems.push(`${seatLabel(m.seat)}：指示物數量為負`);
     }
     for (const id of Object.keys(m.cardData)) {
-      if (!m.cards.includes(id)) problems.push(`${seatLabel(m.seat)}：卡牌資料 ${id} 沒有對應的持有卡`);
+      if (!m.cards.includes(id))
+        problems.push(`${seatLabel(m.seat)}：卡牌資料 ${id} 沒有對應的持有卡`);
     }
     if (new Set(m.cards).size !== m.cards.length) {
       problems.push(`${seatLabel(m.seat)}：持有重複的卡牌`);

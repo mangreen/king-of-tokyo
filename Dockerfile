@@ -20,6 +20,7 @@ FROM base AS manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/rules/package.json packages/rules/
 COPY packages/protocol/package.json packages/protocol/
+COPY packages/cardsets/package.json packages/cardsets/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 
@@ -52,6 +53,10 @@ COPY --from=server-deps /app/apps/server/node_modules ./apps/server/node_modules
 # package.json 必須在：其中的 "type": "module" 決定 dist/main.js 以 ESM 載入
 COPY apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/server/dist ./apps/server/dist
+# 只帶原創卡組；使用者自備的 card-sets/local 絕不進映像（見 .dockerignore）。
+# 需要自備卡組時，以唯讀 volume 掛到 /app/card-sets/local。
+COPY card-sets/original ./card-sets/original
+ENV CARD_SETS_DIR=/app/card-sets
 USER node
 WORKDIR /app/apps/server
 EXPOSE 3001

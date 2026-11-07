@@ -40,6 +40,7 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: '3001'
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      CARD_SETS_DIR: /app/card-sets
     ports:
       - '127.0.0.1:${SERVER_PORT:-3001}:3001'
     # 只掛載原始碼；node_modules 留在映像內，不被主機目錄覆蓋
@@ -47,6 +48,9 @@ services:
       - ./apps/server/src:/app/apps/server/src
       - ./packages/rules/src:/app/packages/rules/src
       - ./packages/protocol/src:/app/packages/protocol/src
+      - ./packages/cardsets/src:/app/packages/cardsets/src
+      # 卡牌組：original 一定有；card-sets/local（使用者自備，不進映像與 git）若存在就會被載入
+      - ./card-sets:/app/card-sets:ro
     healthcheck:
       test:
         - 'CMD'

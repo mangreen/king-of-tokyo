@@ -6,7 +6,7 @@
 
 King of Tokyo 桌遊的網頁多人連線 3D 版，私人與朋友遊玩。伺服器權威、回合制、目標容量 10,000 人在線。
 
-- 規則：[docs/rules-spec.md](docs/rules-spec.md)（唯一規則來源，規則編號對應測試）
+- 規則：[docs/rules-spec.md](docs/rules-spec.md) 與 [docs/rules-spec-cards.md](docs/rules-spec-cards.md)（唯一規則來源，規則編號對應測試）
 - 架構：[docs/architecture.md](docs/architecture.md)
 - 決策：[docs/adr/](docs/adr/)
 - 目前進度與待確認事項：見 `docs/architecture.md` 的里程碑表與 `docs/rules-spec.md` 的 Open Questions
@@ -16,6 +16,7 @@ King of Tokyo 桌遊的網頁多人連線 3D 版，私人與朋友遊玩。伺�
 ```
 packages/rules      純規則引擎（無 I/O、可重現、前後端共用）
 packages/protocol   WebSocket 訊息型別與 zod 驗證、協定版本
+packages/cardsets   卡牌組 schema 驗證、載入、內容雜湊、官方 CSV 匯入
 apps/server         Fastify + Socket.IO，房間與計時，呼叫 rules
 apps/web            Vite + React，之後加入 Three.js 場景
 card-sets/          卡牌組資料（original 提交；local 不提交，見 ADR-0004）
@@ -49,12 +50,13 @@ docker compose up --build   # 完整開發環境（需 cp .env.example .env）
 
 ## 開發約定
 
-- 規則變更先改 `docs/rules-spec.md`，再改程式與測試；測試名稱或描述包含規則編號（如 `R-TOKYO-03`）。
+- 規則變更先改 `docs/rules-spec.md`（卡牌規則改 `rules-spec-cards.md`），再改程式與測試；測試名稱或描述包含規則編號（如 `R-TOKYO-03`）。
 - 規則引擎必須是純函式：不得使用 `Math.random`、`Date.now`、I/O。亂數一律經 `@kot/rules` 的 RNG，狀態可序列化。
 - 規則引擎輸出**結構化事件**（供 3D 演出回放，見 ADR-0003），不只輸出最終狀態。
 - 所有來自網路的資料都用 zod 驗證；對外錯誤只回穩定的 `code` 與簡短訊息，不含 stack trace、路徑或憑證。
 - 不提交機密。`.env` 被忽略，只提交 `.env.example`。不在回覆、Log、記憶中重述機密值。
-- 素材使用原創設計；不放入 IELLO（King of Tokyo）或東寶（哥吉拉）的角色、卡圖。官方卡表只放 `card-sets/local/`（不提交）。
+- 卡牌是資料、效果是參數化的通用程式（ADR-0004、ADR-0006）：新卡優先組合既有 `effectId`；需要新機制就加通用 hook，不為單張卡寫分支。引擎新增動作時，協定（`GameActionSchema`）要跟上，`protocol.coverage.test.ts` 會把關。
+- 素材使用原創設計；不放入 IELLO（King of Tokyo）或東寶（哥吉拉）的角色、卡圖。官方卡表只放 `card-sets/local/`（不提交、不進 Docker 映像）。`effect-map.json` 以卡名雜湊為 key，官方卡名不要寫進程式碼、文件或測試（`rules-spec*.md` 既有的少數引用除外，新增請用通用說法）。
 - **repo 目前是公開的（之後會轉私人）。** 卡表 CSV、遊戲截圖、第三方素材一律不提交。轉私人之後規則不變：公開期間的 commit 歷史可能已被他人複製。
 
 ## Git 與授權

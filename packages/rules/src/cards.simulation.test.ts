@@ -102,13 +102,17 @@ function play(
     const action = pick(state, step);
     const r = applyAction(state, action, env);
     if (!r.ok) {
-      throw new Error(`seed ${String(seed)} step ${String(step)}：${JSON.stringify(action)} 被拒絕（${r.error}）`);
+      throw new Error(
+        `seed ${String(seed)} step ${String(step)}：${JSON.stringify(action)} 被拒絕（${r.error}）`,
+      );
     }
     state = r.state;
     actions.push(action);
     const problems = checkInvariants(state);
     if (problems.length > 0) {
-      throw new Error(`seed ${String(seed)} step ${String(step)} ${JSON.stringify(action)}：${problems.join('；')}`);
+      throw new Error(
+        `seed ${String(seed)} step ${String(step)} ${JSON.stringify(action)}：${problems.join('；')}`,
+      );
     }
     onStep?.(state, action, r.events);
   }
@@ -147,9 +151,15 @@ describe('M3 模擬：所有卡牌效果混在一起', () => {
   it('貪心機器人：買牌並完成遊戲，且至少有一場靠卡牌效果得分', () => {
     let bought = 0;
     for (let seed = 1; seed <= 25; seed += 1) {
-      const { state } = play(seed, 2 + (seed % 5), env, (s) => greedyBot(s, env), (_s, a) => {
-        if (a.type === 'buy') bought += 1;
-      });
+      const { state } = play(
+        seed,
+        2 + (seed % 5),
+        env,
+        (s) => greedyBot(s, env),
+        (_s, a) => {
+          if (a.type === 'buy') bought += 1;
+        },
+      );
       expect(state.phase).toBe('over');
     }
     expect(bought).toBeGreaterThan(25);
@@ -167,13 +177,19 @@ describe('M3 模擬：所有卡牌效果混在一起', () => {
   });
 
   it('送給玩家的視角不含牌庫內容、亂數狀態與別人窺看的牌', () => {
-    const { state } = play(3, 4, env, (s) => greedyBot(s, env), (s) => {
-      const view = redactState(s, 1);
-      expect(view.rng).toBe(0);
-      expect(view.market?.deck.every((id) => id === '')).toBe(true);
-      expect(view.market?.faceUp).toEqual(s.market?.faceUp);
-      expect(checkInvariants(view)).toEqual([]);
-    });
+    const { state } = play(
+      3,
+      4,
+      env,
+      (s) => greedyBot(s, env),
+      (s) => {
+        const view = redactState(s, 1);
+        expect(view.rng).toBe(0);
+        expect(view.market?.deck.every((id) => id === '')).toBe(true);
+        expect(view.market?.faceUp).toEqual(s.market?.faceUp);
+        expect(checkInvariants(view)).toEqual([]);
+      },
+    );
     expect(currentActor(state)).toBeNull();
   });
 });

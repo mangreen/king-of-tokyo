@@ -2,13 +2,7 @@ import { CAP, mimicTargets } from './cards/effects.js';
 import { NO_CARDS } from './cards/types.js';
 import type { RulesEnv } from './cards/types.js';
 import { pendingSeat, SWEEP_COST } from './engine.js';
-import {
-  costFor,
-  effectOf,
-  hasEffect,
-  makeG,
-  ownedOf,
-} from './ops.js';
+import { costFor, effectOf, hasEffect, makeG, ownedOf } from './ops.js';
 import type { G, Owned } from './ops.js';
 import { aliveMonsters, getMonster } from './state.js';
 import { FACES } from './types.js';
