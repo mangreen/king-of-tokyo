@@ -1,7 +1,17 @@
+import { NO_CARDS } from './cards/types.js';
+import type { RulesEnv } from './cards/types.js';
 import { rollDie } from './dice.js';
-import { seedToState } from './rng.js';
+import { nextInt, seedToState } from './rng.js';
 import type { RngState } from './rng.js';
-import type { GameEvent, GameState, Monster, RulesConfig } from './types.js';
+import type {
+  GameEvent,
+  GameState,
+  Market,
+  Monster,
+  Pending,
+  RulesConfig,
+  TurnState,
+} from './types.js';
 
 /** 東京灣可用所需的最少存活怪獸數。R-TOKYO-09 */
 export const BAY_MIN_ALIVE = 5;
@@ -26,6 +36,67 @@ export function validateConfig(config: RulesConfig): void {
   }
 }
 
+/** 一個新回合的初始狀態。 */
+export function newTurn(seat: number, diceCount: number, dicePenalty = 0): TurnState {
+  return {
+    seat,
+    rollsUsed: 0,
+    dice: [],
+    diceCount,
+    bonusRolls: 0,
+    used: [],
+    shielded: [],
+    vpGained: 0,
+    dealt: 0,
+    damagedAnyone: false,
+    peek: null,
+    extraTurn: null,
+    dicePenalty,
+    tripleOnes: false,
+    attackTargets: [],
+    hit: [],
+  };
+}
+
+export function newMonster(seat: number, hp: number): Monster {
+  return {
+    seat,
+    hp,
+    maxHp: hp,
+    vp: 0,
+    energy: 0,
+    alive: true,
+    location: null,
+    cards: [],
+    tokens: { poison: 0, shrink: 0 },
+    cardData: {},
+    sidekickOf: null,
+    sidekickUsed: false,
+  };
+}
+
+function clonePending(p: Pending | null): Pending | null {
+  if (!p) {
+    return null;
+  }
+  switch (p.kind) {
+    case 'yield':
+      return { kind: 'yield', attacker: p.attacker, queue: [...p.queue] };
+    case 'react':
+      return { ...p, plan: p.plan.map((i) => ({ ...i })) };
+    case 'hearts':
+      return { ...p };
+    case 'probe':
+      return { kind: 'probe', queue: [...p.queue] };
+    case 'opportunity':
+      return { kind: 'opportunity', queue: p.queue.map((q) => ({ ...q })) };
+  }
+}
+
+function cloneMarket(m: Market | null): Market | null {
+  return m ? { deck: [...m.deck], faceUp: [...m.faceUp], discard: [...m.discard] } : null;
+}
+
 /** 深拷貝。狀態是純資料，所以手動複製即可（不依賴 structuredClone）。 */
 export function cloneState(state: GameState): GameState {
   return {
@@ -35,11 +106,24 @@ export function cloneState(state: GameState): GameState {
     phase: state.phase,
     firstSeat: state.firstSeat,
     round: state.round,
-    monsters: state.monsters.map((m) => ({ ...m, cards: [...m.cards] })),
-    turn: { ...state.turn, dice: [...state.turn.dice] },
-    pending: state.pending
-      ? { attacker: state.pending.attacker, queue: [...state.pending.queue] }
-      : null,
+    monsters: state.monsters.map((m) => ({
+      ...m,
+      cards: [...m.cards],
+      tokens: { ...m.tokens },
+      cardData: Object.fromEntries(Object.entries(m.cardData).map(([k, v]) => [k, { ...v }])),
+    })),
+    turn: {
+      ...state.turn,
+      dice: [...state.turn.dice],
+      used: [...state.turn.used],
+      shielded: [...state.turn.shielded],
+      extraTurn: state.turn.extraTurn ? { ...state.turn.extraTurn } : null,
+      attackTargets: [...state.turn.attackTargets],
+      hit: [...state.turn.hit],
+    },
+    pending: clonePending(state.pending),
+    market: cloneMarket(state.market),
+    stomp: [...state.stomp],
     outcome: state.outcome
       ? { winners: [...state.outcome.winners], reason: state.outcome.reason }
       : null,
@@ -88,11 +172,12 @@ export function occupantOf(state: GameState, location: 'city' | 'bay'): Monster 
 
 /**
  * 建立新遊戲：決定先手並開始第一位玩家的回合。R-SETUP-01 ~ 05
- * 同一個 config + seed 一定產生相同的結果。
+ * 同一個 config + seed（與卡牌目錄）一定產生相同的結果。
  */
 export function createGame(
   config: RulesConfig,
   seed: number,
+  env: RulesEnv = NO_CARDS,
 ): { state: GameState; events: GameEvent[] } {
   validateConfig(config);
   let rng: RngState = seedToState(seed);
@@ -120,16 +205,30 @@ export function createGame(
   // 上限內仍平手（預設設定下機率可忽略）時取最小座位，確保結果確定
   const firstSeat = Math.min(...candidates);
 
-  const monsters: Monster[] = Array.from({ length: config.playerCount }, (_, seat) => ({
-    seat,
-    hp: config.startingHp,
-    maxHp: config.startingHp,
-    vp: 0,
-    energy: 0,
-    alive: true,
-    location: null,
-    cards: [],
-  }));
+  const monsters: Monster[] = Array.from({ length: config.playerCount }, (_, seat) =>
+    newMonster(seat, config.startingHp),
+  );
+
+  // R-CARD-10：洗牌（Fisher–Yates，用遊戲 RNG）並翻開 3 張
+  let market: Market | null = null;
+  const events: GameEvent[] = [{ type: 'first_player_decided', rounds, firstSeat }];
+  const ids = Object.keys(env.cards);
+  if (ids.length > 0) {
+    const deck = [...ids];
+    for (let i = deck.length - 1; i > 0; i -= 1) {
+      const [j, next] = nextInt(rng, i + 1);
+      rng = next;
+      const tmp = deck[i] as string;
+      deck[i] = deck[j] as string;
+      deck[j] = tmp;
+    }
+    const faceUp = deck.splice(0, Math.min(3, deck.length));
+    market = { deck, faceUp, discard: [] };
+    for (const cardId of faceUp) {
+      events.push({ type: 'card_revealed', cardId });
+    }
+  }
+  events.push({ type: 'turn_started', seat: firstSeat, round: 1 });
 
   const state: GameState = {
     config: { ...config },
@@ -139,16 +238,12 @@ export function createGame(
     firstSeat,
     round: 1,
     monsters,
-    turn: { seat: firstSeat, rollsUsed: 0, dice: [] },
+    turn: newTurn(firstSeat, config.diceCount),
     pending: null,
+    market,
+    stomp: [],
     outcome: null,
   };
 
-  return {
-    state,
-    events: [
-      { type: 'first_player_decided', rounds, firstSeat },
-      { type: 'turn_started', seat: firstSeat, round: 1 },
-    ],
-  };
+  return { state, events };
 }

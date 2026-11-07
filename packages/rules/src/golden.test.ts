@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { checkInvariants } from './invariants.js';
-import { makeState, mon, must, resolveWith } from './test-utils.js';
+import { makeState, mon, must, resolveWith, yieldQueue } from './test-utils.js';
 import type { Face } from './types.js';
 
 const A: Face = 'attack';
@@ -43,7 +43,7 @@ describe('G-03 KOT2 五人局範例', () => {
     let r = resolveWith(state, [A, A, A, A, 1, 2]);
     expect(mon(r.state, 1).hp).toBe(4);
     expect(mon(r.state, 2).hp).toBe(6);
-    expect(r.state.pending?.queue).toEqual([1, 2]); // 從攻擊者下一位順時針
+    expect(yieldQueue(r.state)).toEqual([1, 2]); // 從攻擊者下一位順時針
     r = must(r.state, { type: 'yieldDecision', seat: 1, leave: true });
     r = must(r.state, { type: 'yieldDecision', seat: 2, leave: true });
     state = r.state;
@@ -55,7 +55,7 @@ describe('G-03 KOT2 五人局範例', () => {
     // ② Gigazaur 的回合：回合開始不在東京（沒有 +2）。擲出 1 個攻擊：只有東京市的 MekaDragon 失去 1 HP，選擇留下；
     //    Gigazaur 必須進入東京灣並得 1 VP
     r = resolveWith(state, [A, 1, 1, 2, 2, 3]);
-    expect(r.state.pending?.queue).toEqual([0]);
+    expect(yieldQueue(r.state)).toEqual([0]);
     r = must(r.state, { type: 'yieldDecision', seat: 0, leave: false });
     state = r.state;
     expect(mon(state, 0)).toMatchObject({ hp: 9, location: 'city' });
@@ -64,7 +64,7 @@ describe('G-03 KOT2 五人局範例', () => {
     // ③ Space Penguin 擲出 1 個攻擊：Gigazaur 與 MekaDragon 各失去 1 HP；Gigazaur 讓出東京灣，MekaDragon 留在東京市；
     //    Space Penguin 進入東京灣
     r = resolveWith(state, [A, 1, 1, 2, 2, 3]);
-    expect(r.state.pending?.queue).toEqual([0, 1]);
+    expect(yieldQueue(r.state)).toEqual([0, 1]);
     r = must(r.state, { type: 'yieldDecision', seat: 0, leave: false });
     r = must(r.state, { type: 'yieldDecision', seat: 1, leave: true });
     state = r.state;

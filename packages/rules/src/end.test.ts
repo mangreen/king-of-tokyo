@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { newMonster } from './state.js';
 import { applyAction } from './engine.js';
 import { checkInvariants } from './invariants.js';
 import { pickWinners } from './outcome.js';
@@ -192,10 +193,8 @@ describe('R-END-03/04 整輪結算', () => {
   });
 
   it('pickWinners：多位候選者的排序鍵為 VP → HP → 能量 → 卡數', () => {
-    const base = { maxHp: 10, alive: true, location: null } as const;
     const mk = (seat: number, vp: number, hp: number, energy: number, cards: number) => ({
-      ...base,
-      seat,
+      ...newMonster(seat, 10),
       vp,
       hp,
       energy,
