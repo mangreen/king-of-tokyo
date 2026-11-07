@@ -34,6 +34,16 @@ AI 的雲端沙盒沒有 Docker daemon、沒有 GPU，也無法操作你的 Mac�
 - 修正後的 runtime 映像裡沒有 lockfile，所以容器掃描不再列出應用程式的 npm 依賴；這部分由 `snyk test --all-projects` 與 `pnpm audit` 負責。
 - Snyk CLI 在 Big Sur 仍會印出 `dyld: Symbol not found` 與 degraded 警告，但掃描本身可以完成，這些訊息可以忽略。
 
+### M2（2026-11-07，使用者實測）
+
+| 項目                                             | 結果                                                 |
+| ------------------------------------------------ | ---------------------------------------------------- |
+| `pnpm run check`（分支 m2/lobby-and-connection） | ✅ 全部通過（規則 151、協定 26、網頁 18、伺服器 64） |
+| 對局（建房、加入、準備、開始、擲骰、結算）       | ✅                                                   |
+| 重連（對局中重新整理）                           | ✅                                                   |
+| 逾時代打                                         | ✅                                                   |
+| 斷線（關閉分頁）                                 | ✅                                                   |
+
 ### 發現的問題與修正（已修正，已重新驗證）
 
 1. **esbuild 在 Big Sur 無法安裝。** esbuild 0.27 起的 macOS 二進位檔最低需要 macOS 12。已改為 tsx 4.20.6、tsup 8.5.0（它們相容 esbuild 0.25.12，最低 macOS 11），並加上 `pnpm run check:baseline` 防止日後回退。lockfile 裡其他三個 macOS 原生套件（rolldown、rollup、lightningcss）最低只要 macOS 10.12–10.13。

@@ -66,6 +66,10 @@ docker compose up --build   # 完整開發環境（需 cp .env.example .env）
 - Commit 訊息使用 Conventional Commits，結尾附上 session 註記（Co-Authored-By 與 Claude-Session）。
 - 提交前確認 `git diff` 沒有無關修改、機密或建置產物。
 
+## 工作階段收尾
+
+每次工作階段結束前（或交付一個里程碑時）更新 `README.md`：目前狀態與可用功能、快速開始與指令、結構、文件連結。**移除過期資訊**（舊的里程碑狀態、已不存在的檔案或指令），並確認 README 裡的指令實際可執行。README 只放「現在是什麼」，歷史與細節留在 `docs/`。
+
 ## 回報規則
 
 交付時區分狀態：**Implemented**（已寫）、**Tested**（已實際跑過測試並說明結果）、**Reviewed**、**Merged**、**Deployed**、**Verified in Production**。只有實際執行且取得結果的檢查才能寫成通過；無法執行的要標示原因（例如沙盒沒有 Docker）。
