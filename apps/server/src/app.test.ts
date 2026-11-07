@@ -17,6 +17,7 @@ const config: ServerConfig = {
   host: '127.0.0.1',
   port: 0,
   allowedOrigins: [ALLOWED_ORIGIN],
+  maxRooms: 50,
 };
 
 let app: App;
@@ -61,23 +62,71 @@ describe('GET /healthz', () => {
 });
 
 describe('Socket.IO 握手', () => {
-  it('合法握手後收到 server:hello 與不可猜測的 connectionId', async () => {
+  it('合法握手後收到 server:hello：不可猜測的 token、公開的 playerId', async () => {
     const socket = client({ Origin: ALLOWED_ORIGIN });
     const reply = once<unknown>(socket, EVENTS.serverHello);
     socket.emit(EVENTS.clientHello, { protocolVersion: PROTOCOL_VERSION, nickname: 'Mang' });
     const hello = ServerHelloSchema.parse(await reply);
-    expect(hello.connectionId).toMatch(/^[0-9a-f]{32}$/);
+    expect(hello.sessionToken).toMatch(/^[0-9a-f]{64}$/);
+    expect(hello.playerId).toMatch(/^[0-9a-f]{16}$/);
+    expect(hello.playerId).not.toBe(hello.sessionToken.slice(0, 16));
+    expect(hello).toMatchObject({ resumed: false, nickname: 'Mang' });
   });
 
-  it('不同連線拿到不同的 connectionId', async () => {
-    const ids: string[] = [];
+  it('不同連線拿到不同的 playerId 與 token', async () => {
+    const hellos: { playerId: string; sessionToken: string }[] = [];
     for (let i = 0; i < 2; i += 1) {
       const socket = client({ Origin: ALLOWED_ORIGIN });
       const reply = once<unknown>(socket, EVENTS.serverHello);
       socket.emit(EVENTS.clientHello, { protocolVersion: PROTOCOL_VERSION, nickname: 'Mang' });
-      ids.push(ServerHelloSchema.parse(await reply).connectionId);
+      hellos.push(ServerHelloSchema.parse(await reply));
     }
-    expect(new Set(ids).size).toBe(2);
+    expect(new Set(hellos.map((h) => h.playerId)).size).toBe(2);
+    expect(new Set(hellos.map((h) => h.sessionToken)).size).toBe(2);
+  });
+
+  it('握手後收到 room:state（目前不在任何房間）', async () => {
+    const socket = client({ Origin: ALLOWED_ORIGIN });
+    const state = once<unknown>(socket, EVENTS.roomState);
+    socket.emit(EVENTS.clientHello, { protocolVersion: PROTOCOL_VERSION, nickname: 'Mang' });
+    expect(await state).toEqual({ room: null });
+  });
+
+  it('帶著有效 token 重新握手會接回原身分（沿用原暱稱），舊連線被取代', async () => {
+    const first = client({ Origin: ALLOWED_ORIGIN });
+    const helloA = once<unknown>(first, EVENTS.serverHello);
+    first.emit(EVENTS.clientHello, { protocolVersion: PROTOCOL_VERSION, nickname: 'Mang' });
+    const original = ServerHelloSchema.parse(await helloA);
+
+    const replaced = once<ServerError>(first, EVENTS.serverError);
+    const second = client({ Origin: ALLOWED_ORIGIN });
+    const helloB = once<unknown>(second, EVENTS.serverHello);
+    second.emit(EVENTS.clientHello, {
+      protocolVersion: PROTOCOL_VERSION,
+      nickname: 'Other',
+      sessionToken: original.sessionToken,
+    });
+    const resumed = ServerHelloSchema.parse(await helloB);
+    expect(resumed).toMatchObject({
+      resumed: true,
+      playerId: original.playerId,
+      sessionToken: original.sessionToken,
+      nickname: 'Mang',
+    });
+    expect((await replaced).code).toBe('session_replaced');
+  });
+
+  it('未知的 token 視為新玩家，不報錯也不洩漏 token 是否存在', async () => {
+    const socket = client({ Origin: ALLOWED_ORIGIN });
+    const reply = once<unknown>(socket, EVENTS.serverHello);
+    socket.emit(EVENTS.clientHello, {
+      protocolVersion: PROTOCOL_VERSION,
+      nickname: 'Mang',
+      sessionToken: 'cd'.repeat(32),
+    });
+    const hello = ServerHelloSchema.parse(await reply);
+    expect(hello.resumed).toBe(false);
+    expect(hello.sessionToken).not.toBe('cd'.repeat(32));
   });
 
   it('協定版本不符：回傳 protocol_mismatch 並中斷', async () => {

@@ -7,5 +7,29 @@ export {
   PROTOCOL_VERSION,
   ServerErrorSchema,
   ServerHelloSchema,
+  SessionTokenSchema,
 } from './messages.js';
 export type { ClientHello, ErrorCode, ServerError, ServerHello } from './messages.js';
+
+export {
+  ACK_ERROR_CODES,
+  EmptyPayloadSchema,
+  GameActionSchema,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  ROOM_CODE_ALPHABET,
+  ROOM_CODE_LENGTH,
+  RoomCodeSchema,
+  RoomJoinSchema,
+  RoomReadySchema,
+} from './lobby.js';
+export type {
+  Ack,
+  AckErrorCode,
+  GameActionInput,
+  GameUpdateMessage,
+  PlayerInfo,
+  RoomPhase,
+  RoomSnapshot,
+  RoomStateMessage,
+} from './lobby.js';

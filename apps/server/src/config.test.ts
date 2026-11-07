@@ -8,12 +8,19 @@ describe('loadConfig', () => {
       host: '0.0.0.0',
       port: 3001,
       allowedOrigins: ['http://localhost:5173'],
+      maxRooms: 2000,
     });
   });
 
   it('解析逗號分隔的來源並去除空白', () => {
     const config = loadConfig({ ALLOWED_ORIGINS: ' http://a.test , https://b.test ,' });
     expect(config.allowedOrigins).toEqual(['http://a.test', 'https://b.test']);
+  });
+
+  it('MAX_ROOMS 可設定，且必須是正整數', () => {
+    expect(loadConfig({ MAX_ROOMS: '50' }).maxRooms).toBe(50);
+    expect(() => loadConfig({ MAX_ROOMS: '0' })).toThrow(/環境變數設定錯誤/);
+    expect(() => loadConfig({ MAX_ROOMS: 'many' })).toThrow(/環境變數設定錯誤/);
   });
 
   it('拒絕萬用字元來源', () => {
