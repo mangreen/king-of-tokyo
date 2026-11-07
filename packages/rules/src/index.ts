@@ -20,6 +20,7 @@ export type {
   WinReason,
 } from './types.js';
 
+export { describeEvent } from './format.js';
 export { countFaces, numberVp, rollDie } from './dice.js';
 export { applyAction } from './engine.js';
 export { greedyBot, randomBot } from './bot.js';

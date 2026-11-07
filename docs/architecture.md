@@ -24,18 +24,20 @@ flowchart LR
 - **規則引擎**是 `reduce(state, action) → { state, events }` 的純函式；RNG 狀態在 state 內，因此「初始 seed + action log」可完整重放。
 - **3D 演出是事件的回放**：動畫不影響遊戲狀態，可跳過、加速或在低畫質下簡化。
 
-詳見 [ADR-0002](adr/0002-server-authoritative-socketio.md)、[ADR-0003](adr/0003-3d-scope-and-art-direction.md)。
+詳見 [ADR-0002](adr/0002-server-authoritative-socketio.md)、[ADR-0003](adr/0003-3d-scope-and-art-direction.md)、[ADR-0005](adr/0005-lobby-sessions-and-timers.md)（M2：身分、房間、計時）。
 
 ## 套件依賴方向
 
 ```mermaid
 flowchart LR
   web["apps/web"] --> protocol["@kot/protocol"]
+  web --> rules["@kot/rules"]
   server["apps/server"] --> protocol
-  server --> rules["@kot/rules"]
+  server --> rules
+  protocol -. "僅型別" .-> rules
 ```
 
-`@kot/rules` 與 `@kot/protocol` 不依賴任何 app，也不互相依賴（M1 起 protocol 會引用 rules 的型別，屆時再審視）。
+`@kot/rules` 與 `@kot/protocol` 不依賴任何 app。`@kot/protocol` 只以型別引用 `@kot/rules`（`GameState`、`GameEvent`），沒有執行期依賴。
 
 ## 里程碑與狀態
 
@@ -43,7 +45,7 @@ flowchart LR
 | ------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
 | M0     | 骨架、環境、文件、CI                                                                 | **完成**（沙盒與使用者實測通過；CI 尚未在 GitHub 上執行）                        |
 | M1     | 規則引擎（無卡牌）：擲骰、結算、東京市／灣、讓位、淘汰、勝負（含 R-END）、支援多勝者 | **完成**（分支 m1/rules-engine；沙盒與使用者 Mac 實測通過；PR 待 M0 合併後再開） |
-| M2     | 連線與簡易 UI：大廳、房間、重連、計時                                                | 未開始                                                                           |
+| M2     | 連線與簡易 UI：大廳、房間、重連、計時                                                | **完成**（分支 m2/lobby-and-connection；沙盒與使用者 Mac 實測通過；PR 待合併）   |
 | M3     | 卡牌系統（可抽換卡組）：hook 框架、效果實作                                          | 未開始，需要使用者提供官方卡表                                                   |
 | M4     | 美術與 3D：風格化 UI、場景、破壞與打擊感、低畫質模式                                 | 未開始                                                                           |
 | M5     | 品質與上線：事件日誌、負載測試（10,000 連線）、Snyk、部署                            | 未開始                                                                           |
@@ -70,6 +72,17 @@ flowchart LR
 | `snyk container test kot-server`                | **Tested（使用者）**           | 19 個 Alpine 套件無漏洞；映像內沒有套件管理器                |
 | 獨立審查                                        | **Reviewed（子代理，唯讀）**   | 沒有違反規則編號的缺陷；防禦性建議已修                       |
 | GitHub Actions CI                               | **未實測**                     | PR #1（M0→main）會是第一次執行                               |
+
+## M2 驗證狀態（2026-11-07）
+
+| 項目                                                             | 狀態                             | 說明                                     |
+| ---------------------------------------------------------------- | -------------------------------- | ---------------------------------------- |
+| `pnpm run check`（規則 151、協定 26、網頁 18、伺服器 64 個測試） | **Tested（沙盒＋使用者 Mac）**   | 全部通過                                 |
+| 雙瀏覽器對局、重新整理接回                                       | **Tested（沙盒 Playwright）**    | 建房、加入、準備、開始、打完一局         |
+| 對局、重連、逾時代打、斷線                                       | **Tested（使用者，真實瀏覽器）** | 皆符合預期                               |
+| 獨立審查                                                         | **Reviewed（子代理，唯讀）**     | 計時可被重連拖延、大廳離線佔位等問題已修 |
+| 握手限流、每 IP 限制                                             | **未做（M5）**                   | 見 ADR-0005 的已知缺口                   |
+| Docker 內的 M2 對局、GitHub Actions CI                           | **未實測**                       | CI 會在 M2 的 PR 第一次對 `main` 執行    |
 
 ## 容量目標
 

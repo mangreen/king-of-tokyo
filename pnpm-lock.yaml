@@ -75,6 +75,9 @@ importers:
       '@kot/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@kot/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -106,6 +109,9 @@ importers:
 
   packages/protocol:
     dependencies:
+      '@kot/rules':
+        specifier: workspace:*
+        version: link:../rules
       zod:
         specifier: ^4.6.7
         version: 4.6.7

@@ -15,6 +15,7 @@ const EnvSchema = z.object({
     )
     .refine((origins) => origins.length > 0, 'ALLOWED_ORIGINS 至少需要一個來源')
     .refine((origins) => !origins.includes('*'), 'ALLOWED_ORIGINS 不可使用萬用字元 *'),
+  MAX_ROOMS: z.coerce.number().int().min(1).max(100_000).default(2_000),
 });
 
 export interface ServerConfig {
@@ -22,6 +23,8 @@ export interface ServerConfig {
   host: string;
   port: number;
   allowedOrigins: string[];
+  /** 同時存在的房間上限，擋掉建立大量房間耗盡記憶體的行為。 */
+  maxRooms: number;
 }
 
 /** 從環境變數解析設定；格式錯誤時丟出可讀的錯誤（不回顯變數值，避免洩漏機密）。 */
@@ -39,5 +42,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     host: parsed.SERVER_HOST,
     port: parsed.SERVER_PORT,
     allowedOrigins: parsed.ALLOWED_ORIGINS,
+    maxRooms: parsed.MAX_ROOMS,
   };
 }

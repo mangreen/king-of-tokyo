@@ -34,10 +34,41 @@ AI 的雲端沙盒沒有 Docker daemon、沒有 GPU，也無法操作你的 Mac�
 - 修正後的 runtime 映像裡沒有 lockfile，所以容器掃描不再列出應用程式的 npm 依賴；這部分由 `snyk test --all-projects` 與 `pnpm audit` 負責。
 - Snyk CLI 在 Big Sur 仍會印出 `dyld: Symbol not found` 與 degraded 警告，但掃描本身可以完成，這些訊息可以忽略。
 
+### M2（2026-11-07，使用者實測）
+
+| 項目                                             | 結果                                                 |
+| ------------------------------------------------ | ---------------------------------------------------- |
+| `pnpm run check`（分支 m2/lobby-and-connection） | ✅ 全部通過（規則 151、協定 26、網頁 18、伺服器 64） |
+| 對局（建房、加入、準備、開始、擲骰、結算）       | ✅                                                   |
+| 重連（對局中重新整理）                           | ✅                                                   |
+| 逾時代打                                         | ✅                                                   |
+| 斷線（關閉分頁）                                 | ✅                                                   |
+
 ### 發現的問題與修正（已修正，已重新驗證）
 
 1. **esbuild 在 Big Sur 無法安裝。** esbuild 0.27 起的 macOS 二進位檔最低需要 macOS 12。已改為 tsx 4.20.6、tsup 8.5.0（它們相容 esbuild 0.25.12，最低 macOS 11），並加上 `pnpm run check:baseline` 防止日後回退。lockfile 裡其他三個 macOS 原生套件（rolldown、rollup、lightningcss）最低只要 macOS 10.12–10.13。
 2. **Snyk 容器掃描的高風險項目不是我們的程式碼。** 掃描結果中 33 個與 24 個問題的專案名稱是 `dist`（corepack 下載的 pnpm）與 `lib`（base image 的 npm）。我們自己的依賴（專案 `king-of-tokyo`）與 Alpine 系統套件都是乾淨的。已改成乾淨的 runtime 映像，不帶 pnpm、npm、yarn、corepack。
+
+## M2 實測清單（分支 `m2/lobby-and-connection`）
+
+沙盒已用 Playwright 開兩個瀏覽器跑過：建房 → 加入 → 準備 → 開始 → 打完一局 → 重新整理頁面接回。以下需要在你的 Mac 與真實瀏覽器上確認。
+
+```bash
+git fetch origin && git checkout m2/lobby-and-connection && git pull
+pnpm install --frozen-lockfile
+pnpm run check
+docker compose up --build        # 或：pnpm run dev:server 與 pnpm run dev:web 各開一個終端機
+```
+
+1. 開兩個瀏覽器視窗（其中一個用無痕視窗，因為身分存在 sessionStorage，同一分頁的不同視窗不會共用，但無痕更保險）到 http://localhost:5173。
+2. 視窗 A 輸入暱稱 → 建立房間，記下 5 碼房號；視窗 B 輸入另一個暱稱 → 用房號加入 → 按「準備」。
+3. A 按「開始遊戲」。預期：兩邊都看到玩家表、東京市、倒數計時；輪到的人可以「擲骰／重擲／結算」，點骰子可保留。
+4. **重連：** 對局中在 B 按重新整理。預期：回到同一座位的對局畫面（事件日誌會是空的，這是預期行為）。
+5. **逾時代打：** 輪到某位玩家時什麼都不做，等 45 秒。預期：標示「代打中」，系統代打；之後那位玩家再按任何合法動作就會取回控制。
+6. **斷線：** 對局中關掉 B 的分頁。預期：A 看到 B「離線」，輪到 B 時約 1.5 秒就被代打。
+7. 手機同一個 Wi-Fi：把 `.env` 的 `ALLOWED_ORIGINS` 加上 `http://<你的 Mac 區網 IP>:5173`，並把 `VITE_SERVER_URL` 改成 `http://<IP>:3001`，用手機瀏覽器開（選配）。
+
+請回報：`pnpm run check` 是否通過、第 3–6 步是否符合預期（失敗請貼瀏覽器 Console 的錯誤，**不要貼含 sessionToken 的內容**）。
 
 ## 1. 更新並重新安裝
 

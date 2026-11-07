@@ -32,8 +32,21 @@ describe('NicknameSchema', () => {
 
 describe('ClientHelloSchema', () => {
   it('接受合法握手', () => {
-    const parsed = ClientHelloSchema.parse({ protocolVersion: 1, nickname: 'Mang' });
-    expect(parsed).toEqual({ protocolVersion: 1, nickname: 'Mang' });
+    const parsed = ClientHelloSchema.parse({ protocolVersion: 2, nickname: 'Mang' });
+    expect(parsed).toEqual({ protocolVersion: 2, nickname: 'Mang' });
+  });
+
+  it('sessionToken 必須是 64 個十六進位字元', () => {
+    const ok = 'ab'.repeat(32);
+    expect(
+      ClientHelloSchema.safeParse({ protocolVersion: 2, nickname: 'a', sessionToken: ok }).success,
+    ).toBe(true);
+    for (const bad of ['', 'abc', 'zz'.repeat(32), 'AB'.repeat(32), `${ok}0`]) {
+      expect(
+        ClientHelloSchema.safeParse({ protocolVersion: 2, nickname: 'a', sessionToken: bad })
+          .success,
+      ).toBe(false);
+    }
   });
 
   it('拒絕缺欄位、錯型別與負版本號', () => {
@@ -49,15 +62,24 @@ describe('ClientHelloSchema', () => {
 });
 
 describe('ServerHelloSchema', () => {
+  const base = {
+    protocolVersion: PROTOCOL_VERSION,
+    playerId: 'p1',
+    sessionToken: 'ab'.repeat(32),
+    resumed: false,
+    nickname: 'Mang',
+  };
+
   it('版本必須等於目前協定版本', () => {
+    expect(ServerHelloSchema.safeParse(base).success).toBe(true);
     expect(
-      ServerHelloSchema.safeParse({ protocolVersion: PROTOCOL_VERSION, connectionId: 'abc' })
-        .success,
-    ).toBe(true);
-    expect(
-      ServerHelloSchema.safeParse({ protocolVersion: PROTOCOL_VERSION + 1, connectionId: 'abc' })
-        .success,
+      ServerHelloSchema.safeParse({ ...base, protocolVersion: PROTOCOL_VERSION + 1 }).success,
     ).toBe(false);
+  });
+
+  it('缺少 token 或 playerId 就拒絕', () => {
+    expect(ServerHelloSchema.safeParse({ ...base, sessionToken: undefined }).success).toBe(false);
+    expect(ServerHelloSchema.safeParse({ ...base, playerId: '' }).success).toBe(false);
   });
 });
 

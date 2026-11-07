@@ -9,59 +9,9 @@
 import { greedyBot } from '../src/bot.js';
 import { applyAction } from '../src/engine.js';
 import { checkInvariants } from '../src/invariants.js';
+import { describeEvent } from '../src/format.js';
 import { createGame, defaultConfig } from '../src/state.js';
-import type { Face, GameEvent, GameState } from '../src/types.js';
-
-const FACE_TEXT: Record<string, string> = { energy: '⚡', attack: '💥', heal: '❤️' };
-
-function faces(dice: readonly Face[]): string {
-  return dice.map((f) => FACE_TEXT[String(f)] ?? String(f)).join(' ');
-}
-
-const LOCATION_TEXT = { city: '東京市', bay: '東京灣' } as const;
-
-function describe(e: GameEvent): string {
-  switch (e.type) {
-    case 'first_player_decided':
-      return `先手：座位 ${e.firstSeat}（擲骰 ${e.rounds.length} 輪）`;
-    case 'turn_started':
-      return `── 第 ${e.round} 輪，座位 ${e.seat} 的回合`;
-    case 'vp_gained':
-      return `  座位 ${e.seat} +${e.amount} VP（${e.reason}）`;
-    case 'dice_rolled':
-      return `  座位 ${e.seat} 第 ${e.rollNumber} 擲：${faces(e.dice)}`;
-    case 'rolling_ended':
-      return `  座位 ${e.seat} 停止擲骰：${faces(e.dice)}`;
-    case 'energy_gained':
-      return `  座位 ${e.seat} +${e.amount} 能量`;
-    case 'healed':
-      return `  座位 ${e.seat} 回復 ${e.amount} HP`;
-    case 'heal_ignored':
-      return `  座位 ${e.seat} 在東京內，${e.faces} 個治療面無效`;
-    case 'smash':
-      return `  座位 ${e.attacker} 攻擊 ${e.damage} → 目標 ${e.targets.join('、')}`;
-    case 'damage_taken':
-      return `    座位 ${e.seat} -${e.amount} HP（剩 ${e.hp}）`;
-    case 'eliminated':
-      return `    座位 ${e.seat} 被淘汰`;
-    case 'yield_requested':
-      return `  詢問座位 ${e.seat} 是否讓位`;
-    case 'yielded':
-      return `  座位 ${e.seat} 讓出${LOCATION_TEXT[e.location]}`;
-    case 'stayed':
-      return `  座位 ${e.seat} 留在東京`;
-    case 'entered_tokyo':
-      return `  座位 ${e.seat} 進入${LOCATION_TEXT[e.location]}`;
-    case 'bay_closed':
-      return `  東京灣關閉：座位 ${e.seat} ${e.movedTo ? '移到東京市' : '離開東京'}`;
-    case 'turn_ended':
-      return '';
-    case 'round_ended':
-      return `══ 第 ${e.round} 輪結束`;
-    case 'game_over':
-      return `★ 遊戲結束：勝者 ${e.winners.length ? e.winners.join('、') : '（無）'}（${e.reason}）`;
-  }
-}
+import type { GameEvent, GameState } from '../src/types.js';
 
 function parseArgs(argv: string[]): { players: number; seed: number; games: number } {
   const get = (name: string, fallback: number): number => {
@@ -86,7 +36,7 @@ function playOne(
   const print = (events: GameEvent[]): void => {
     if (!verbose) return;
     for (const e of events) {
-      const line = describe(e);
+      const line = describeEvent(e);
       if (line) console.log(line);
     }
   };

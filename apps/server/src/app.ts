@@ -1,73 +1,45 @@
-import { randomBytes } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { Server as SocketServer, type Socket } from 'socket.io';
-import {
-  ClientHelloSchema,
-  EVENTS,
-  PROTOCOL_VERSION,
-  type ServerError,
-  type ServerHello,
-} from '@kot/protocol';
+import { Server as SocketServer } from 'socket.io';
 import type { ServerConfig } from './config.js';
-
-interface ClientToServerEvents {
-  [EVENTS.clientHello]: (payload: unknown) => void;
-}
-
-interface ServerToClientEvents {
-  [EVENTS.serverHello]: (payload: ServerHello) => void;
-  [EVENTS.serverError]: (payload: ServerError) => void;
-}
-
-type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+import {
+  createPublisher,
+  handleConnection,
+  randomSeed,
+  type ClientToServerEvents,
+  type GameSocket,
+  type ServerToClientEvents,
+} from './connection.js';
+import { RoomManager } from './rooms/manager.js';
+import { DEFAULT_TIMINGS, type Timings } from './rooms/room.js';
+import { realScheduler, type Scheduler } from './rooms/scheduler.js';
+import { SessionStore } from './rooms/sessions.js';
 
 /** 握手逾時：連線後必須在此時間內送出 client:hello。 */
 export const HELLO_TIMEOUT_MS = 5_000;
 /** 單則訊息大小上限（bytes），遠大於合法訊息，用來擋掉濫用。 */
 const MAX_MESSAGE_BYTES = 10_000;
+/** 斷線且不在房間的身分保留時間。 */
+const SESSION_TTL_MS = 10 * 60_000;
 
 export interface App {
   fastify: FastifyInstance;
   io: SocketServer<ClientToServerEvents, ServerToClientEvents>;
+  rooms: RoomManager;
+  sessions: SessionStore;
 }
 
-function rejectWith(socket: GameSocket, error: ServerError): void {
-  socket.emit(EVENTS.serverError, error);
-  socket.disconnect(true);
+export interface AppOptions {
+  helloTimeoutMs?: number;
+  /** 測試用：注入假時鐘與固定 seed、縮短計時。 */
+  scheduler?: Scheduler;
+  timings?: Timings;
+  newSeed?: () => number;
 }
 
-function handleConnection(socket: GameSocket, helloTimeoutMs: number): void {
-  const timer = setTimeout(() => {
-    rejectWith(socket, { code: 'invalid_message', message: '握手逾時' });
-  }, helloTimeoutMs);
-
-  socket.on('disconnect', () => {
-    clearTimeout(timer);
-  });
-
-  // once：每個連線只接受一次握手，避免重複握手造成狀態混亂
-  socket.once(EVENTS.clientHello, (payload) => {
-    clearTimeout(timer);
-    const parsed = ClientHelloSchema.safeParse(payload);
-    if (!parsed.success) {
-      rejectWith(socket, { code: 'invalid_message', message: '握手訊息格式錯誤' });
-      return;
-    }
-    if (parsed.data.protocolVersion !== PROTOCOL_VERSION) {
-      rejectWith(socket, {
-        code: 'protocol_mismatch',
-        message: `協定版本不符，伺服器為 ${PROTOCOL_VERSION}，請重新整理頁面`,
-      });
-      return;
-    }
-    // 連線識別使用 CSPRNG，不可猜測；M2 起作為重連 token 的基礎
-    const connectionId = randomBytes(16).toString('hex');
-    socket.emit(EVENTS.serverHello, { protocolVersion: PROTOCOL_VERSION, connectionId });
-  });
-}
-
-export function buildApp(config: ServerConfig, options: { helloTimeoutMs?: number } = {}): App {
+export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
   const helloTimeoutMs = options.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
+  const scheduler = options.scheduler ?? realScheduler;
   const fastify = Fastify({ logger: config.nodeEnv === 'production' });
 
   fastify.get('/healthz', () => ({ status: 'ok' as const }));
@@ -84,8 +56,19 @@ export function buildApp(config: ServerConfig, options: { helloTimeoutMs?: numbe
     },
   });
 
+  const sockets = new Map<string, GameSocket>();
+  const rooms: RoomManager = new RoomManager({
+    scheduler,
+    publisher: createPublisher(sockets),
+    newSeed: options.newSeed ?? randomSeed,
+    timings: options.timings ?? DEFAULT_TIMINGS,
+    randomInt: (max) => randomInt(max),
+    maxRooms: config.maxRooms,
+  });
+  const sessions = new SessionStore(scheduler, SESSION_TTL_MS, (id) => rooms.hasRoom(id));
+
   io.on('connection', (socket) => {
-    handleConnection(socket, helloTimeoutMs);
+    handleConnection(socket, { sessions, rooms, scheduler, helloTimeoutMs, sockets });
   });
 
   fastify.addHook('onClose', async () => {
@@ -93,5 +76,5 @@ export function buildApp(config: ServerConfig, options: { helloTimeoutMs?: numbe
     await io.close();
   });
 
-  return { fastify, io };
+  return { fastify, io, rooms, sessions };
 }
