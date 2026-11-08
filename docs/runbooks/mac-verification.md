@@ -153,7 +153,7 @@ pnpm audit --prod
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run check                      # 預期全部通過（規則 265、卡牌組 19、協定 29、網頁 26、伺服器 76 個測試）
+pnpm run check                      # 預期全部通過（規則 274、卡牌組 19、協定 29、網頁 26、伺服器 76 個測試）
 ```
 
 Docker 開發環境（compose 會把 `card-sets/` 以唯讀方式掛進 server）：

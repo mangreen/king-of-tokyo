@@ -7,7 +7,7 @@ import type { Effect } from './cards/effects.js';
 import type { CardDef, RulesEnv } from './cards/types.js';
 import { nextInt } from './rng.js';
 import { aliveMonsters, getMonster, occupantOf } from './state.js';
-import type { DamageCause, GameEvent, GameState, Monster, WinReason } from './types.js';
+import type { DamageCause, GameEvent, GameState, Monster, PlanItem, WinReason } from './types.js';
 
 /** 一次動作處理期間的上下文。 */
 export interface G {
@@ -16,6 +16,11 @@ export interface G {
   ev: GameEvent[];
   /** 這次動作中新翻開的牌（供「新牌即買」使用）。 */
   revealed: string[];
+  /**
+   * 買 Discard 卡時，卡牌的傷害先收集起來、買牌結算完才一起處理，
+   * 讓受害者有機會使用減傷／反應能力（OQ-C3）。null 表示直接造成傷害。
+   */
+  deferDamage: { source: number; items: PlanItem[] } | null;
 }
 
 /** 一張持有中的卡牌。def 是實際生效的卡（複製卡會指向被複製的卡），base 是這張實體自己。 */
@@ -27,7 +32,22 @@ export interface Owned {
 }
 
 export function makeG(s: GameState, env: RulesEnv, ev: GameEvent[]): G {
-  return { s, env, ev, revealed: [] };
+  return { s, env, ev, revealed: [], deferDamage: null };
+}
+
+/** 卡牌造成的傷害：買牌結算中先收集（OQ-C3），否則直接造成。 */
+export function cardDamage(g: G, source: number, seat: number, amount: number): void {
+  const deferred = g.deferDamage;
+  if (deferred && deferred.source === source) {
+    const existing = deferred.items.find((i) => i.seat === seat);
+    if (existing) {
+      existing.amount += amount;
+    } else if (amount > 0) {
+      deferred.items.push({ seat, amount, target: false, asked: false, cause: 'card' });
+    }
+    return;
+  }
+  inflict(g, seat, amount, source, 'card');
 }
 
 export function cardDef(g: G, id: string): CardDef {

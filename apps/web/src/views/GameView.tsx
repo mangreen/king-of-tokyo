@@ -309,7 +309,7 @@ function promptText(state: GameUpdateMessage['state']): string {
       case 'yield':
         return '你被攻擊了，要讓出東京嗎？';
       case 'react':
-        return '你被攻擊了，要使用防禦能力嗎？';
+        return '你即將受到傷害，要使用防禦能力嗎？';
       case 'hearts':
         return `你擲出 ${String(state.pending.hearts)} 個治療，要怎麼分配？`;
       case 'probe':

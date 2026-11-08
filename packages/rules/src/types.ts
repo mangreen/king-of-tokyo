@@ -104,7 +104,15 @@ export type Pending =
   /** 東京內怪獸決定是否讓位。R-TOKYO-04 */
   | { kind: 'yield'; attacker: number; queue: number[] }
   /** 被骰面攻擊的怪獸決定是否使用反應能力。R-CARD-34 */
-  | { kind: 'react'; seat: number; attacker: number; plan: PlanItem[]; index: number }
+  | {
+      kind: 'react';
+      seat: number;
+      attacker: number;
+      plan: PlanItem[];
+      index: number;
+      /** 反應結束後的去向：攻擊（讓位詢問）或買牌的卡牌傷害（回到買牌階段）。省略視為攻擊。 */
+      resume?: 'attack' | 'market';
+    }
   /** 活動怪獸分配治療面。R-CARD-60 */
   | { kind: 'hearts'; seat: number; hearts: number }
   /** 持有「重擲他人骰子」的怪獸依序決定。 */
@@ -120,6 +128,8 @@ export interface PlanItem {
   target: boolean;
   /** 是否已經詢問過反應（避免重複詢問）。 */
   asked: boolean;
+  /** 傷害原因；省略時骰面攻擊目標視為攻擊、其餘為額外傷害。 */
+  cause?: DamageCause;
 }
 
 export type WinReason = 'lastStanding' | 'turnEnd' | 'roundEnd' | 'allEliminated';

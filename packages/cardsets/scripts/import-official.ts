@@ -3,7 +3,7 @@
  * 用法：pnpm --filter @kot/cardsets run import
  * 輸入與輸出都在 card-sets/local/（.gitignore，不提交）。
  */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importOfficialCsv } from '../src/csv.js';
@@ -17,6 +17,18 @@ const map = JSON.parse(readFileSync(join(here, '..', 'src', 'effect-map.json'), 
   EffectMapping
 >;
 
+if (!existsSync(localDir)) {
+  console.error(
+    [
+      `找不到資料夾 ${localDir}。`,
+      '請先建立它，並把卡表 CSV（例如 KingOfTokyo_CardList - EN.csv）放進去：',
+      '  mkdir -p card-sets/local',
+      '  cp <你的卡表>.csv card-sets/local/',
+      '這個資料夾不會被提交到 Git，也不會進 Docker 映像。',
+    ].join('\n'),
+  );
+  process.exit(1);
+}
 const csvFiles = readdirSync(localDir).filter((f) => f.toLowerCase().endsWith('.csv'));
 if (csvFiles.length === 0) {
   console.error(`在 ${localDir} 找不到 CSV 檔。請先把卡表放進去。`);

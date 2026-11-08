@@ -255,13 +255,24 @@ describe('R-CARD-31 加傷', () => {
     expect(none.events.some((e) => e.type === 'smash')).toBe(false);
   });
 
-  it('「每回合固定加傷」沒有攻擊面也構成攻擊，可以讓位（OQ-C6）', () => {
+  it('「每回合固定加傷」沒有攻擊面時不是攻擊：照常受傷，但不能讓位、沒有攻擊事件（OQ-C6）', () => {
     const { env, state } = duel(
       [card('acid', 'attack_bonus', { params: { n: 1, always: true } })],
       { 0: { cards: ['acid'] } },
     );
     const r = resolveWith(state, [1, 2, 3, H, H, H], env);
     expect(hpOf(r.state, 1)).toBe(9);
+    expect(yieldQueue(r.state)).toEqual([]);
+    expect(r.events.some((e) => e.type === 'smash' || e.type === 'yield_requested')).toBe(false);
+  });
+
+  it('有攻擊面時，固定加傷併入這次攻擊，仍可讓位（OQ-C6）', () => {
+    const { env, state } = duel(
+      [card('acid', 'attack_bonus', { params: { n: 1, always: true } })],
+      { 0: { cards: ['acid'] } },
+    );
+    const r = resolveWith(state, [A, 2, 3, H, H, H], env);
+    expect(hpOf(r.state, 1)).toBe(8);
     expect(yieldQueue(r.state)).toEqual([1]);
   });
 

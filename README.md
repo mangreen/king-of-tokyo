@@ -43,7 +43,7 @@ pnpm --filter @kot/cardsets run import                   # 把 card-sets/local/ 
 
 ### 使用自備卡表
 
-把卡表 CSV 放進 `card-sets/local/`（該目錄不會被提交，也不會進 Docker 映像），執行上面的 `import` 指令產生 `set.json`，重啟伺服器後，建房時就會多一個卡牌組選項，且成為預設值。沒有放時只提供原創卡組。Docker 開發環境會自動把 `card-sets/` 以唯讀方式掛進 server 容器。
+先建立資料夾並放入卡表 CSV：`mkdir -p card-sets/local && cp <卡表>.csv card-sets/local/`（該目錄不會被提交，也不會進 Docker 映像），再執行上面的 `import` 指令產生 `set.json`，重啟伺服器後，建房時就會多一個卡牌組選項，且成為預設值。沒有放時只提供原創卡組。Docker 開發環境會自動把 `card-sets/` 以唯讀方式掛進 server 容器。
 
 ## 結構
 

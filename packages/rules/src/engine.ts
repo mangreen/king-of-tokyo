@@ -501,12 +501,16 @@ function attackStage(g: G): void {
     afterAttack(g); // 實際沒有傷害就不算攻擊。R-SMASH-06
     return;
   }
+  // OQ-C6：只有骰面攻擊才是「攻擊」。沒有攻擊面、只靠卡牌的固定加傷造成的傷害不是攻擊：
+  // 受害者不能因此讓位，也不觸發「攻擊時」的效果。
+  const isAttack = a.faces > 0;
   const base = a.faces + a.bonus;
   const plan: PlanItem[] = targets.map((t) => ({
     seat: t.seat,
     amount: base + (t.location !== null ? a.tokyoBonus : 0),
-    target: true,
+    target: isAttack,
     asked: false,
+    ...(isAttack ? {} : { cause: 'card' as const }),
   }));
   if (a.neighbor > 0 && base > 0) {
     for (const n of neighborsOf(s, seat)) {
@@ -518,10 +522,17 @@ function attackStage(g: G): void {
       }
     }
   }
-  s.turn.attackTargets = targets.map((t) => t.seat);
-  g.ev.push({ type: 'smash', attacker: seat, damage: base, targets: s.turn.attackTargets.slice() });
-  for (const { e, o } of effectsWith(g, seat, 'onAttack')) {
-    e.onAttack(g, o, a, s.turn.attackTargets);
+  if (isAttack) {
+    s.turn.attackTargets = targets.map((t) => t.seat);
+    g.ev.push({
+      type: 'smash',
+      attacker: seat,
+      damage: base,
+      targets: s.turn.attackTargets.slice(),
+    });
+    for (const { e, o } of effectsWith(g, seat, 'onAttack')) {
+      e.onAttack(g, o, a, s.turn.attackTargets);
+    }
   }
   processPlan(g, plan, 0, seat);
 }
@@ -537,7 +548,13 @@ function reactionsFor(g: G, item: PlanItem, attacker: number): Owned[] {
   return out;
 }
 
-function processPlan(g: G, plan: PlanItem[], from: number, attacker: number): void {
+function processPlan(
+  g: G,
+  plan: PlanItem[],
+  from: number,
+  attacker: number,
+  resume: 'attack' | 'market' = 'attack',
+): void {
   const s = g.s;
   for (let i = from; i < plan.length; i += 1) {
     const item = plan[i] as PlanItem;
@@ -547,18 +564,29 @@ function processPlan(g: G, plan: PlanItem[], from: number, attacker: number): vo
       item.amount = mitigatePre(g, item.seat, item.amount);
       if (item.amount <= 0) continue;
       if (reactionsFor(g, item, attacker).length > 0) {
-        s.pending = { kind: 'react', seat: item.seat, attacker, plan, index: i };
+        s.pending = { kind: 'react', seat: item.seat, attacker, plan, index: i, resume };
         s.phase = 'prompt';
         return;
       }
     }
-    const dealt = inflict(g, item.seat, item.amount, attacker, item.target ? undefined : 'extra', {
-      skipPre: true,
-    });
+    const dealt = inflict(
+      g,
+      item.seat,
+      item.amount,
+      attacker,
+      item.cause ?? (item.target ? undefined : 'extra'),
+      { skipPre: true },
+    );
     if (dealt > 0 && item.target) {
       s.turn.hit.push(item.seat);
     }
     if (s.phase === 'over') return;
+  }
+  if (resume === 'market') {
+    s.pending = null;
+    s.phase = 'buy';
+    afterMarketChange(g);
+    return;
   }
   afterAttack(g);
 }
@@ -582,7 +610,7 @@ function decideReact(
   }
   g.s.pending = null;
   g.s.phase = 'roll';
-  processPlan(g, pending.plan, pending.index, pending.attacker);
+  processPlan(g, pending.plan, pending.index, pending.attacker, pending.resume ?? 'attack');
   return null;
 }
 
@@ -822,8 +850,16 @@ function purchase(g: G, seat: number, req: BuyRequest): ErrorCode | null {
 }
 
 function handleBuy(g: G, a: Extract<Action, { type: 'buy' }>): ErrorCode | null {
+  g.deferDamage = { source: a.seat, items: [] };
   const err = purchase(g, a.seat, a);
+  const deferred = g.deferDamage;
+  g.deferDamage = null;
   if (err) return err;
+  if (deferred.items.length > 0 && g.s.phase !== 'over') {
+    // OQ-C3：卡牌傷害讓受害者有機會使用減傷／反應，之後才處理新牌即買或回到買牌階段
+    processPlan(g, deferred.items, 0, a.seat, 'market');
+    return null;
+  }
   afterMarketChange(g);
   return null;
 }

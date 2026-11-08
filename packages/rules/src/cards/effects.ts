@@ -8,6 +8,7 @@ import {
   cardDef,
   discardCard,
   effectOf,
+  cardDamage,
   gainEnergy,
   gainVp,
   heal,
@@ -170,12 +171,12 @@ function runOp(g: G, seat: number, op: InstantOp): void {
       return;
     case 'damageOthers':
       for (const m of aliveMonsters(g.s)) {
-        if (m.seat !== seat) inflict(g, m.seat, op.n, seat, 'card');
+        if (m.seat !== seat) cardDamage(g, seat, m.seat, op.n);
       }
       return;
     case 'damageAll':
       for (const m of aliveMonsters(g.s)) {
-        inflict(g, m.seat, op.n, seat, 'card');
+        cardDamage(g, seat, m.seat, op.n);
       }
       return;
     case 'othersLoseVp':
