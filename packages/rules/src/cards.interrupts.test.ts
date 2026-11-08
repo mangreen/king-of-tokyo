@@ -209,7 +209,7 @@ describe('R-CARD-23 擲骰期能力', () => {
     check(s);
   });
 
-  it('只重擲 3（Background Dweller 類）：次數用完後仍可重擲 3，不增加擲骰次數', () => {
+  it('只重擲 3：次數用完後仍可重擲 3，不增加擲骰次數', () => {
     const { env, state } = world([card('bd', 'reroll_threes')], 3, { 0: { cards: ['bd'] } });
     const s = withDice(state, [3, 3, 1, 2, E, A]);
     s.turn.rollsUsed = 3;

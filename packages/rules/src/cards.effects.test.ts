@@ -265,7 +265,7 @@ describe('R-CARD-31 加傷', () => {
     expect(yieldQueue(r.state)).toEqual([1]);
   });
 
-  it('Poison Quills 類：湊成指定三顆時加傷；Gourmet 類：湊成時加 VP', () => {
+  it('湊成指定三顆時加傷；湊成時加 VP', () => {
     const q = card('q', 'triple_bonus', { params: { face: 2, damage: 2 } });
     const g = card('g', 'triple_bonus', { params: { face: 1, vp: 2 } });
     const { env, state } = duel([q, g], { 0: { cards: ['q', 'g'] } });
@@ -276,7 +276,7 @@ describe('R-CARD-31 加傷', () => {
     expect(mon(r2.state, 0).vp).toBe(1 + 2 + 0);
   });
 
-  it('對東京加傷與讓位傷害（Burrowing 類）', () => {
+  it('對東京加傷與讓位傷害', () => {
     const t = card('bu', 'tokyo_target_bonus', { params: { n: 1, yieldDamage: 1 } });
     const { env, state } = duel([t], { 0: { cards: ['bu'] }, 1: { cards: ['bu'] } });
     const r = resolveWith(state, [A, 1, 2, 3, H, H], env);
@@ -292,7 +292,7 @@ describe('R-CARD-31 加傷', () => {
     });
   });
 
-  it('在東京內攻擊的加成（Urbavore 類）：回合開始 +VP、攻擊 +傷害', () => {
+  it('在東京內攻擊的加成：回合開始 +VP、攻擊 +傷害', () => {
     const u = card('ub', 'tokyo_attacker');
     const { env, state } = world([u], 3, { 0: { cards: ['ub'], location: 'city' } });
     const r = resolveWith(state, [A, 1, 2, 3, H, H], env);

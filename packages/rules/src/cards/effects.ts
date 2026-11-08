@@ -638,12 +638,15 @@ export const EFFECTS: Record<string, Effect> = {
   // ── 買牌階段 ──
   mimic: {
     kind: 'keep',
-    validateBuy(g, _o, args) {
+    validateBuy(g, o, args) {
       const targets = mimicTargets(g);
       if (args.target === undefined) {
         return targets.length === 0 ? null : 'invalid_action';
       }
-      return targets.includes(args.target) ? null : 'invalid_action';
+      if (!targets.includes(args.target)) return 'invalid_action';
+      // 買下時效果視同被複製的卡：它的買下條件（例如存放能量的上限）也要檢查
+      const target = cardDef(g, args.target);
+      return effectOf(target)?.validateBuy?.(g, { ...o, def: target }, args) ?? null;
     },
     onBuy(g, o, args) {
       const data = getMonster(g.s, o.seat).cardData[o.cardId];

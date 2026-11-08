@@ -1,8 +1,8 @@
 import { NO_CARDS } from './cards/types.js';
 import type { RulesEnv } from './cards/types.js';
 import { rollDie } from './dice.js';
-import { nextInt, seedToState } from './rng.js';
-import type { RngState } from './rng.js';
+import { nextInt, seedToRng } from './rng.js';
+import type { GameRng, Seed } from './rng.js';
 import type {
   GameEvent,
   GameState,
@@ -101,7 +101,7 @@ function cloneMarket(m: Market | null): Market | null {
 export function cloneState(state: GameState): GameState {
   return {
     config: { ...state.config },
-    rng: state.rng,
+    rng: typeof state.rng === 'number' ? state.rng : { key: state.rng.key, n: state.rng.n },
     version: state.version,
     phase: state.phase,
     firstSeat: state.firstSeat,
@@ -176,11 +176,11 @@ export function occupantOf(state: GameState, location: 'city' | 'bay'): Monster 
  */
 export function createGame(
   config: RulesConfig,
-  seed: number,
+  seed: Seed,
   env: RulesEnv = NO_CARDS,
 ): { state: GameState; events: GameEvent[] } {
   validateConfig(config);
-  let rng: RngState = seedToState(seed);
+  let rng: GameRng = seedToRng(seed);
 
   // R-SETUP-04：每人擲骰比攻擊面，平手者重擲。迴圈設上限避免理論上的無窮迴圈。
   let candidates = Array.from({ length: config.playerCount }, (_, seat) => seat);

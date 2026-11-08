@@ -210,7 +210,7 @@ describe('大廳流程', () => {
     await a.send(EVENTS.roomStart);
     await a.until(() => a.game !== null && a.cards !== null);
     expect(a.cards?.cards.length).toBeGreaterThan(10);
-    expect(a.game?.state.rng).toBe(0);
+    expect(a.game?.state.rng).toEqual({ key: [0, 0, 0, 0], n: 0 });
     expect(a.game?.state.market?.deck.every((c) => c === '')).toBe(true);
     await b.until(() => b.cards !== null);
     const token = b.hello?.sessionToken ?? '';

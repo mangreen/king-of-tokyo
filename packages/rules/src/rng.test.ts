@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextInt, nextUint32, seedToState } from './rng.js';
+import { nextInt, nextUint32, seedToRng, seedToState } from './rng.js';
 
 function sequence(seed: number, count: number, max: number): number[] {
   let state = seedToState(seed);
@@ -68,5 +68,55 @@ describe('rng', () => {
     expect(() => nextUint32(0x1_0000_0000)).toThrow(RangeError);
     expect(() => seedToState(Number.NaN)).toThrow(RangeError);
     expect(() => seedToState(1.5)).toThrow(RangeError);
+  });
+});
+
+describe('密鑰式亂數（KeyedRng）', () => {
+  const seedA = '0123456789abcdef0123456789abcdef';
+  const seedB = '0123456789abcdef0123456789abcdee';
+
+  function draw(seed: string, n: number): number[] {
+    let rng = seedToRng(seed);
+    const out: number[] = [];
+    for (let i = 0; i < n; i += 1) {
+      const [v, next] = nextInt(rng, 6);
+      out.push(v);
+      rng = next;
+    }
+    return out;
+  }
+
+  it('相同 seed 相同序列；差一個字元就完全不同', () => {
+    expect(draw(seedA, 200)).toEqual(draw(seedA, 200));
+    expect(draw(seedA, 200)).not.toEqual(draw(seedB, 200));
+  });
+
+  it('是純函式：不改動傳入的狀態', () => {
+    const rng = seedToRng(seedA);
+    const copy = JSON.parse(JSON.stringify(rng)) as typeof rng;
+    nextInt(rng, 6);
+    expect(rng).toEqual(copy);
+  });
+
+  it('分佈大致均勻（6 面各約 1/6）', () => {
+    const counts = [0, 0, 0, 0, 0, 0];
+    for (const v of draw(seedA, 6000)) counts[v] = (counts[v] ?? 0) + 1;
+    for (const c of counts) expect(Math.abs(c - 1000)).toBeLessThan(150);
+  });
+
+  it('跨越區塊邊界（每 8 次取一個新區塊）仍然連續且不重複同一個字組', () => {
+    let rng = seedToRng(seedA);
+    const words: number[] = [];
+    for (let i = 0; i < 40; i += 1) {
+      const [v, next] = nextInt(rng, 0x1_0000_0000);
+      words.push(v);
+      rng = next;
+    }
+    expect(new Set(words).size).toBe(40);
+  });
+
+  it('太短的字串 seed 被拒絕；數字 seed 維持舊行為', () => {
+    expect(() => seedToRng('short')).toThrow(RangeError);
+    expect(seedToRng(42)).toBe(42);
   });
 });

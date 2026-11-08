@@ -3,7 +3,9 @@ import {
   createGame,
   currentActor,
   defaultConfig,
+  defaultAction,
   greedyBot,
+  legalActions,
   redactEvent,
   redactState,
   type Action,
@@ -12,6 +14,7 @@ import {
   type GameState,
   type RulesConfig,
   type RulesEnv,
+  type Seed,
 } from '@kot/rules';
 import type { LoadedCardSet } from '@kot/cardsets';
 import {
@@ -70,8 +73,8 @@ export const DEFAULT_TIMINGS: Timings = {
 export interface RoomDeps {
   scheduler: Scheduler;
   publisher: Publisher;
-  /** 產生新對局的 seed（正式環境使用 CSPRNG）。 */
-  newSeed: () => number;
+  /** 產生新對局的 seed（正式環境是 128 位元的 CSPRNG 字串；機密，見 randomSeed）。 */
+  newSeed: () => Seed;
   timings: Timings;
   /** 房間關閉時通知管理者。 */
   onClose: (room: Room) => void;
@@ -100,7 +103,7 @@ export class Room {
   private state: GameState | null = null;
   /** 對局動作日誌（含系統代打的動作），M5 寫入事件日誌時使用。 */
   private readonly log: Action[] = [];
-  private seed = 0;
+  private seed: Seed = 0;
   private config: RulesConfig | null = null;
   private readonly env: RulesEnv;
   private readonly cardsMessage: GameCardsMessage;
@@ -156,7 +159,7 @@ export class Room {
   /** 重放所需的全部資料：設定、seed、卡牌組（id 與內容雜湊）與動作日誌。 */
   replayInfo(): {
     config: RulesConfig | null;
-    seed: number;
+    seed: Seed;
     cardSetId: string;
     cardSetHash: string;
     actions: readonly Action[];
@@ -532,16 +535,61 @@ export class Room {
 
     const becameAway = !actor.away;
     actor.away = true;
-    const action = greedyBot(state, this.env);
-    const result = applyAction(state, action, this.env);
-    if (!result.ok) {
-      // 機器人不應該產生非法動作；萬一發生就記錄並以完整時限重試，避免卡死也避免緊迴圈
-      console.error('代打動作被拒絕', this.code, result.error);
+    const picked = this.pickTimeoutAction(state);
+    if (!picked) {
+      // 沒有任何可接受的動作（不應發生）：記錄並以完整時限重試，避免卡死也避免緊迴圈
+      console.error('代打找不到可接受的動作', this.code);
       this.scheduleTurnTimer(this.deps.timings.decisionMs);
       return;
     }
-    this.commit(action, result.state, result.events);
+    this.commit(picked.action, picked.result.state, picked.result.events);
     if (becameAway) this.broadcastRoom();
+  }
+
+  /**
+   * 代打動作：先用機器人的選擇；若被拒絕或丟出例外，改用最保守的預設動作，再不行就逐一嘗試所有合法動作。
+   * 這樣單一卡牌組合的邊角問題不會讓整個房間卡死。
+   */
+  private pickTimeoutAction(
+    state: GameState,
+  ): { action: Action; result: Extract<ReturnType<typeof applyAction>, { ok: true }> } | null {
+    const candidates: (() => Action | null)[] = [
+      () => greedyBot(state, this.env),
+      () => defaultAction(state),
+    ];
+    const tried = new Set<string>();
+    const attempt = (
+      make: () => Action | null,
+    ): { action: Action; result: Extract<ReturnType<typeof applyAction>, { ok: true }> } | null => {
+      try {
+        const action = make();
+        if (!action) return null;
+        const key = JSON.stringify(action);
+        if (tried.has(key)) return null;
+        tried.add(key);
+        const result = applyAction(state, action, this.env);
+        if (result.ok) return { action, result };
+        console.error('代打動作被拒絕', this.code, result.error);
+      } catch (error) {
+        console.error('代打動作失敗', this.code, error instanceof Error ? error.message : error);
+      }
+      return null;
+    };
+    for (const make of candidates) {
+      const picked = attempt(make);
+      if (picked) return picked;
+    }
+    let legal: Action[];
+    try {
+      legal = legalActions(state, this.env);
+    } catch {
+      legal = [];
+    }
+    for (const action of legal) {
+      const picked = attempt(() => action);
+      if (picked) return picked;
+    }
+    return null;
   }
 
   private afterPresenceChange(): void {

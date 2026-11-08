@@ -2,7 +2,7 @@
  * 規則引擎的資料型別。所有型別都是可序列化的純資料（JSON-safe），
  * 才能存進日誌、經由網路傳送、重放。
  */
-import type { RngState } from './rng.js';
+import type { GameRng } from './rng.js';
 
 /** 骰面：1、2、3、能量、攻擊（Smash）、治療（Heal）。R-DICE-03 */
 export type Face = 1 | 2 | 3 | 'energy' | 'attack' | 'heal';
@@ -132,7 +132,7 @@ export interface Outcome {
 
 export interface GameState {
   config: RulesConfig;
-  rng: RngState;
+  rng: GameRng;
   /** 每套用一個動作加 1。 */
   version: number;
   phase: Phase;

@@ -1,6 +1,7 @@
 import { NO_CARDS } from './cards/types.js';
 import type { RulesEnv } from './cards/types.js';
 import { applyAction } from './engine.js';
+import type { Seed } from './rng.js';
 import { createGame } from './state.js';
 import type { Action, GameEvent, GameState, RulesConfig } from './types.js';
 
@@ -9,7 +10,7 @@ import type { Action, GameEvent, GameState, RulesConfig } from './types.js';
  */
 export function replay(
   config: RulesConfig,
-  seed: number,
+  seed: Seed,
   actions: readonly Action[],
   env: RulesEnv = NO_CARDS,
 ): { state: GameState; events: GameEvent[] } {

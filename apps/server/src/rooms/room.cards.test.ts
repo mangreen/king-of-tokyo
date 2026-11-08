@@ -138,3 +138,39 @@ describe('買牌階段的動作', () => {
     expect(ctx.room.snapshot().players.find((p) => p.id === actor)?.away).toBe(true);
   });
 });
+
+describe('對局 seed 是機密', () => {
+  it('randomSeed 產生 128 位元的十六進位字串，每次都不同', async () => {
+    const { randomSeed } = await import('../connection.js');
+    const a = randomSeed();
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(randomSeed()).not.toBe(a);
+  });
+
+  it('seed 只出現在重放資料裡，不會出現在送給玩家的任何訊息', () => {
+    const scheduler = new FakeScheduler();
+    const publisher = new RecordingPublisher();
+    const seed = 'deadbeefdeadbeefdeadbeefdeadbeef';
+    const room = new Room('ABCDE', { id: 'host', nickname: '房主' }, testCardSet(), {
+      scheduler,
+      publisher,
+      newSeed: () => seed,
+      timings: TIMINGS,
+      onClose: () => undefined,
+      onMemberRemoved: () => undefined,
+    });
+    room.join({ id: 'p2', nickname: '客人' });
+    room.setReady('p2', true);
+    room.start('host');
+    expect(room.replayInfo().seed).toBe(seed);
+    const sent = JSON.stringify([
+      publisher.games.get('host'),
+      publisher.games.get('p2'),
+      publisher.cards.get('host'),
+      room.snapshot(),
+    ]);
+    expect(sent).not.toContain(seed);
+    // 密鑰（seed 經雜湊後的四個字組）也不在其中：狀態的 rng 欄位被抹成 0
+    expect(publisher.lastGame('host')?.state.rng).toEqual({ key: [0, 0, 0, 0], n: 0 });
+  });
+});

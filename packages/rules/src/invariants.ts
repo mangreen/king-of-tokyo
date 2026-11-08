@@ -79,9 +79,8 @@ export function checkInvariants(state: GameState): string[] {
     if (state.turn.dice.length !== 0 && state.turn.dice.length !== state.turn.diceCount) {
       problems.push('骰子數量不符');
     }
-    if (state.phase === 'roll' && !state.pending && bay.length > 0 && city.length === 0) {
-      problems.push('東京灣有人但東京市是空的');
-    }
+    // 注意：東京灣有人、東京市卻是空的是合法的——東京市怪獸被卡牌或毒淘汰時位置空出、
+    // 沒人接替（R-TOKYO-07），下一位進入東京的怪獸會先佔東京市。
     if (state.phase === 'prompt') {
       const p = state.pending;
       if (!p) {

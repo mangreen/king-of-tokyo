@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
 import type { CardSetInfo } from '@kot/protocol';
+import type { Seed } from '@kot/rules';
 import { defaultCardSetId, loadCardSets, type LoadedCardSet } from '@kot/cardsets';
 import type { ServerConfig } from './config.js';
 import {
@@ -38,7 +39,7 @@ export interface AppOptions {
   /** 測試用：注入假時鐘與固定 seed、縮短計時。 */
   scheduler?: Scheduler;
   timings?: Timings;
-  newSeed?: () => number;
+  newSeed?: () => Seed;
   /** 測試用：直接提供卡牌組，不讀檔。 */
   cardSets?: ReadonlyMap<string, LoadedCardSet>;
 }

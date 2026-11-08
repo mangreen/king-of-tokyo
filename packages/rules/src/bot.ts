@@ -66,9 +66,16 @@ export function greedyBot(state: GameState, env: RulesEnv = NO_CARDS): Action {
   }
   const canHeal = me.location === null && me.hp < me.maxHp;
   const keep = dice.flatMap((face, index) => (wantsToKeep(face, dice, canHeal) ? [index] : []));
-  const canRoll = legalActions(state, env).some((a) => a.type === 'roll');
-  if (keep.length >= dice.length || !canRoll) {
+  const legalRolls = legalActions(state, env).filter(
+    (a): a is Extract<Action, { type: 'roll' }> => a.type === 'roll',
+  );
+  if (keep.length >= dice.length || legalRolls.length === 0) {
     return { type: 'endRolling', seat };
   }
-  return { type: 'roll', seat, keep };
+  // 只送引擎接受的「保留」組合：次數用完後的免費重擲（只重擲 3）有固定的形式
+  const wanted = new Set(keep);
+  const exact = legalRolls.find(
+    (a) => a.keep.length === wanted.size && a.keep.every((i) => wanted.has(i)),
+  );
+  return exact ?? { type: 'endRolling', seat };
 }

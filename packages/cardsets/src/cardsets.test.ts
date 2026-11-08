@@ -190,7 +190,7 @@ describe('CSV 匯入', () => {
   });
 
   it('卡名正規化與雜湊 key', () => {
-    expect(normalizeName("We're Only (x2) Making It")).toBe('wereonlymakingit');
+    expect(normalizeName("It's A (x2) Test-Card!")).toBe('itsatestcard');
     expect(nameKey('Foo Bar (x2)')).toBe(nameKey('foo-bar'));
   });
 

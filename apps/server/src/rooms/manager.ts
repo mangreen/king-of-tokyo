@@ -1,4 +1,5 @@
 import type { AckErrorCode } from '@kot/protocol';
+import type { Seed } from '@kot/rules';
 import type { LoadedCardSet } from '@kot/cardsets';
 import { Room, type Publisher, type Result, type RoomDeps, type Timings } from './room.js';
 import { generateRoomCode } from './roomCode.js';
@@ -7,7 +8,7 @@ import type { Scheduler } from './scheduler.js';
 export interface ManagerDeps {
   scheduler: Scheduler;
   publisher: Publisher;
-  newSeed: () => number;
+  newSeed: () => Seed;
   timings: Timings;
   /** 回傳 [0, max) 的整數（CSPRNG）。 */
   randomInt: (maxExclusive: number) => number;

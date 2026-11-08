@@ -175,6 +175,11 @@ export function applyAction(
   if (error) {
     return fail(error);
   }
+  if (next.outcome) {
+    // 保險：只要已有結果，狀態就一定是 over
+    next.phase = 'over';
+    next.pending = null;
+  }
   next.version += 1;
   return { ok: true, state: next, events };
 }
@@ -570,6 +575,7 @@ function decideReact(
     if (!owned || !reaction) return 'card_unavailable';
     if (!reaction.available(g, owned, item, pending.attacker)) return 'cannot_use';
     reaction.use(g, owned, item, pending.attacker);
+    if (isOver(g.s)) return null; // 反應的傷害可能已讓遊戲結束
     if (item.amount > 0 && reactionsFor(g, item, pending.attacker).length > 0) {
       return null; // 還有可用的反應，繼續詢問
     }
@@ -631,7 +637,9 @@ function decideYield(g: G, leave: boolean, takeCard?: string): ErrorCode | null 
   pending.queue.shift();
   if (leave && m.location !== null) {
     yieldTokyo(g, seat, pending.attacker);
-    if (swap && takeCard !== undefined && m.alive) {
+    // 讓位效果（例如對攻擊者的傷害）可能讓遊戲結束，或淘汰攻擊者
+    if (isOver(g.s)) return null;
+    if (swap && takeCard !== undefined && m.alive && getMonster(g.s, pending.attacker).alive) {
       transferCard(g, pending.attacker, seat, takeCard);
       transferCard(g, seat, pending.attacker, swap.cardId);
       g.ev.push({
@@ -644,6 +652,9 @@ function decideYield(g: G, leave: boolean, takeCard?: string): ErrorCode | null 
     }
   } else {
     g.ev.push({ type: 'stayed', seat });
+  }
+  if (!getMonster(g.s, pending.attacker).alive) {
+    pending.queue.length = 0; // 攻擊者已淘汰：不再詢問其他怪獸
   }
   const nextSeat = pending.queue[0];
   if (nextSeat !== undefined) {
@@ -763,7 +774,11 @@ function purchase(g: G, seat: number, req: BuyRequest): ErrorCode | null {
 
   const cost = costFor(g, seat, def);
   if (buyer.energy < cost) return 'not_enough_energy';
-  const args = { cost, energy: req.energy, target: req.target };
+  // 向別人買的牌保留原持有者累積的狀態（能量、複製對象），不接受買家額外指定的參數
+  const args =
+    fromSeat === null
+      ? { cost, energy: req.energy, target: req.target }
+      : { cost, energy: undefined, target: undefined };
   const stub: Owned = { seat, cardId: req.cardId, def, base: def };
   const validate = effectOf(def)?.validateBuy;
   if (validate && fromSeat === null) {

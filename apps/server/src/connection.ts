@@ -223,7 +223,10 @@ function registerHandlers(socket: GameSocket, session: Session, ctx: ConnectionC
   });
 }
 
-/** 供測試與 app.ts 使用：不可猜測的隨機 seed（uint32）。 */
-export function randomSeed(): number {
-  return randomBytes(4).readUInt32BE(0);
+/**
+ * 對局的亂數 seed：16 個 CSPRNG 位元組（128 位元）。**seed 是機密**：知道它就能預測所有骰子與牌序，
+ * 所以只留在伺服器記憶體與重放資料裡，不送給任何客戶端、不寫進日誌。
+ */
+export function randomSeed(): string {
+  return randomBytes(16).toString('hex');
 }

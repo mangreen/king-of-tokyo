@@ -1,5 +1,5 @@
-export { nextInt, nextUint32, seedToState } from './rng.js';
-export type { RngState } from './rng.js';
+export { nextInt, nextUint32, seedToRng, seedToState } from './rng.js';
+export type { GameRng, KeyedRng, RngState, Seed } from './rng.js';
 
 export { FACES } from './types.js';
 export type {

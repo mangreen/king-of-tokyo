@@ -203,6 +203,7 @@ export function drawCard(g: G): string | null {
     return null;
   }
   reshuffleIfEmpty(g);
+  g.s.turn.peek = null; // 牌庫頂換了，先前偷看到的牌作廢
   return market.deck.shift() ?? null;
 }
 
@@ -449,6 +450,12 @@ export function checkLastStanding(g: G): void {
       alive.map((m) => m.seat),
       alive.length === 0 ? 'allEliminated' : 'lastStanding',
     );
+    return;
+  }
+  // R-CARD-42：只剩一組搭檔（兩人互為搭檔）時，兩人共同勝利
+  const [a, b] = alive;
+  if (alive.length === 2 && a && b && (a.sidekickOf === b.seat || b.sidekickOf === a.seat)) {
+    endGame(g, [a.seat], 'lastStanding');
   }
 }
 

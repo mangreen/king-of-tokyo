@@ -21,3 +21,7 @@ docker-compose.override.yml
 
 # 使用者自備的卡牌組（官方卡表），不提交；見 docs/adr/0004
 card-sets/local/
+
+# 卡表 CSV 在任何位置都不提交（公開 repo 期間的永久規則，見 AGENTS.md）
+**/KingOfTokyo_CardList*
+card-sets/**/*.csv

@@ -7,7 +7,7 @@ import { cloneState } from './state.js';
 /** viewer 為座位，旁觀者傳 null。牌庫內容以空字串占位（保留張數）。 */
 export function redactState(state: GameState, viewer: number | null): GameState {
   const out = cloneState(state);
-  out.rng = 0; // 亂數狀態一旦洩漏就能預測骰子
+  out.rng = typeof out.rng === 'number' ? 0 : { key: [0, 0, 0, 0], n: 0 }; // 亂數狀態一旦洩漏就能預測骰子
   if (out.market) {
     out.market.deck = out.market.deck.map(() => '');
   }
