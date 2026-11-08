@@ -7,9 +7,12 @@ import {
   EmptyPayloadSchema,
   GameActionSchema,
   PROTOCOL_VERSION,
+  RoomCreateSchema,
   RoomJoinSchema,
   RoomReadySchema,
   type Ack,
+  type CardSetInfo,
+  type GameCardsMessage,
   type GameUpdateMessage,
   type RoomSnapshot,
   type RoomStateMessage,
@@ -37,6 +40,7 @@ export interface ServerToClientEvents {
   [EVENTS.serverError]: (payload: ServerError) => void;
   [EVENTS.roomState]: (payload: RoomStateMessage) => void;
   [EVENTS.gameUpdate]: (payload: GameUpdateMessage) => void;
+  [EVENTS.gameCards]: (payload: GameCardsMessage) => void;
 }
 
 export type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -52,6 +56,9 @@ export interface ConnectionContext {
   helloTimeoutMs: number;
   /** playerId → 目前連線。 */
   sockets: Map<string, GameSocket>;
+  /** 握手時告知客戶端的可用卡牌組與預設值。 */
+  cardSets: CardSetInfo[];
+  defaultCardSetId: string;
 }
 
 /** 把房間的推送送到玩家目前的連線；不在線就略過。 */
@@ -59,6 +66,9 @@ export function createPublisher(sockets: Map<string, GameSocket>): Publisher {
   return {
     roomState(playerId: string, room: RoomSnapshot | null) {
       sockets.get(playerId)?.emit(EVENTS.roomState, { room });
+    },
+    gameCards(playerId: string, message: GameCardsMessage) {
+      sockets.get(playerId)?.emit(EVENTS.gameCards, message);
     },
     gameUpdate(playerId: string, message: GameUpdateMessage) {
       sockets.get(playerId)?.emit(EVENTS.gameUpdate, message);
@@ -131,6 +141,8 @@ export function handleConnection(socket: GameSocket, ctx: ConnectionContext): vo
       sessionToken: token,
       resumed: resumedSession !== undefined,
       nickname: session.nickname,
+      cardSets: ctx.cardSets,
+      defaultCardSetId: ctx.defaultCardSetId,
     });
 
     const room = ctx.rooms.roomOf(session.playerId);
@@ -182,8 +194,8 @@ function registerHandlers(socket: GameSocket, session: Session, ctx: ConnectionC
 
   const identity = { id: session.playerId, nickname: session.nickname };
 
-  on(EVENTS.roomCreate, EmptyPayloadSchema, () => {
-    const result = ctx.rooms.createRoom(identity);
+  on(EVENTS.roomCreate, RoomCreateSchema, ({ cardSetId }) => {
+    const result = ctx.rooms.createRoom(identity, cardSetId);
     return result.ok ? { ok: true } : result;
   });
 
@@ -211,7 +223,10 @@ function registerHandlers(socket: GameSocket, session: Session, ctx: ConnectionC
   });
 }
 
-/** 供測試與 app.ts 使用：不可猜測的隨機 seed（uint32）。 */
-export function randomSeed(): number {
-  return randomBytes(4).readUInt32BE(0);
+/**
+ * 對局的亂數 seed：16 個 CSPRNG 位元組（128 位元）。**seed 是機密**：知道它就能預測所有骰子與牌序，
+ * 所以只留在伺服器記憶體與重放資料裡，不送給任何客戶端、不寫進日誌。
+ */
+export function randomSeed(): string {
+  return randomBytes(16).toString('hex');
 }

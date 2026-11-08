@@ -9,12 +9,15 @@ import {
   PROTOCOL_VERSION,
   type Ack,
   type GameActionInput,
+  type GameCardsMessage,
   type GameUpdateMessage,
   type RoomSnapshot,
   type ServerHello,
 } from '@kot/protocol';
+import { defaultAction } from '@kot/rules';
 import { buildApp, type App } from './app.js';
 import type { ServerConfig } from './config.js';
+import { testCardSets } from './rooms/testing.js';
 
 const ORIGIN = 'http://localhost:5173';
 const config: ServerConfig = {
@@ -23,6 +26,7 @@ const config: ServerConfig = {
   port: 0,
   allowedOrigins: [ORIGIN],
   maxRooms: 10,
+  cardSetsDir: 'card-sets',
 };
 
 let app: App;
@@ -34,6 +38,8 @@ class TestClient {
   hello: ServerHello | null = null;
   room: RoomSnapshot | null | undefined = undefined;
   game: GameUpdateMessage | null = null;
+  cards: GameCardsMessage | null = null;
+  cardsReceived = 0;
   readonly gameUpdates: GameUpdateMessage[] = [];
   private waiters: (() => void)[] = [];
 
@@ -51,6 +57,11 @@ class TestClient {
     });
     this.socket.on(EVENTS.roomState, (message: { room: RoomSnapshot | null }) => {
       this.room = message.room;
+      this.notify();
+    });
+    this.socket.on(EVENTS.gameCards, (message: GameCardsMessage) => {
+      this.cards = message;
+      this.cardsReceived += 1;
       this.notify();
     });
     this.socket.on(EVENTS.gameUpdate, (update: GameUpdateMessage) => {
@@ -108,7 +119,7 @@ class TestClient {
 }
 
 beforeEach(async () => {
-  app = buildApp(config, { helloTimeoutMs: 2000 });
+  app = buildApp(config, { helloTimeoutMs: 2000, cardSets: testCardSets() });
   await app.fastify.listen({ host: config.host, port: 0 });
   const { port } = app.fastify.server.address() as AddressInfo;
   url = `http://127.0.0.1:${String(port)}`;
@@ -181,6 +192,34 @@ describe('大廳流程', () => {
     });
   });
 
+  it('握手回傳可用卡牌組與預設值；建房可指定卡牌組，未知的被拒絕', async () => {
+    const a = await new TestClient('Alice').hi();
+    expect(a.hello?.defaultCardSetId).toBe('original');
+    expect(a.hello?.cardSets.map((c) => c.id)).toContain('original');
+    expect(await a.send(EVENTS.roomCreate, { cardSetId: 'nope' })).toEqual({
+      ok: false,
+      code: 'unknown_card_set',
+    });
+    expect(await a.send(EVENTS.roomCreate, { cardSetId: 'original' })).toEqual({ ok: true });
+    await a.until(() => Boolean(a.room));
+    expect(a.room?.cardSet.id).toBe('original');
+  });
+
+  it('開局時收到卡牌目錄，且狀態不含牌庫內容；重連後再收到一次', async () => {
+    const { a, b } = await twoInRoom();
+    await a.send(EVENTS.roomStart);
+    await a.until(() => a.game !== null && a.cards !== null);
+    expect(a.cards?.cards.length).toBeGreaterThan(10);
+    expect(a.game?.state.rng).toEqual({ key: [0, 0, 0, 0], n: 0 });
+    expect(a.game?.state.market?.deck.every((c) => c === '')).toBe(true);
+    await b.until(() => b.cards !== null);
+    const token = b.hello?.sessionToken ?? '';
+    b.socket.disconnect();
+    const b2 = await new TestClient('Bob').hi(token);
+    await b2.until(() => b2.cards !== null && b2.game !== null);
+    expect(b2.cardsReceived).toBe(1);
+  });
+
   it('離開房間後收到 room:null', async () => {
     const a = await new TestClient('Alice').hi();
     await a.send(EVENTS.roomCreate);
@@ -197,11 +236,17 @@ describe('對局', () => {
     client.socket.on(EVENTS.gameUpdate, (update: GameUpdateMessage) => {
       if (update.actorSeat === null || update.actorSeat !== client.seat) return;
       const { state } = update;
-      let action: GameActionInput;
-      if (state.phase === 'yield') action = { type: 'yieldDecision', leave: false };
-      else if (state.turn.rollsUsed === 0) action = { type: 'roll', keep: [] };
-      else action = { type: 'endRolling' };
-      void client.act(action);
+      // 最保守的動作（擲一次就停、不買牌、不讓位）；座位由伺服器決定，所以去掉 seat
+      const fallback = defaultAction(state);
+      if (!fallback) return;
+      const intent = Object.fromEntries(Object.entries(fallback).filter(([key]) => key !== 'seat'));
+      // 限流是正常行為（每連線每秒補 5 則）：被限流就稍後重送同一個動作
+      const send = (): void => {
+        void client.act(intent as GameActionInput).then((ack) => {
+          if (!ack.ok && ack.code === 'rate_limited') setTimeout(send, 250);
+        });
+      };
+      send();
     });
   }
 

@@ -2,7 +2,7 @@
 
 本文件是規則引擎的**唯一規則來源**。每條規則有編號，測試以編號標註對應關係（例如測試名稱含 `R-TOKYO-03`）。
 
-- 狀態：**M1 定稿（無卡牌部分）**。卡牌相關規則（R-CARD）在 M3 實作時再補。
+- 狀態：**M1 定稿（無卡牌部分）**；卡牌規則（R-CARD）見 [rules-spec-cards.md](rules-spec-cards.md)（M3，含待使用者確認的詮釋 OQ-C1…C9）。
 - 依據：`KOT2-rulebook_EN.pdf`（2016 第二版，下稱 **KOT2**）為基準；`king-of-tokyo-navodila.pdf` / `king-of-tokyo_rules.txt`（2012 初版，下稱 **KOT1**）用來補充與比對。
 - 決策見 [ADR-0001](adr/0001-ruleset-and-end-conditions.md)。
 
@@ -100,13 +100,13 @@ stateDiagram-v2
 
 ### 2.6 能力卡（R-CARD）
 
-| 編號      | 規則                                                                                                                                                                                                                                                |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R-CARD-01 | 買牌時可購買任意張面朝上的卡，每張支付卡面費用的能量。購買後立即從牌堆補牌，新牌立即可買。                                                                                                                                                          |
-| R-CARD-02 | 可花 2 能量把 3 張面朝上的卡全部捨棄並翻出 3 張新牌；買牌與清牌可任意順序，直到能量用完。                                                                                                                                                           |
-| R-CARD-03 | Keep 卡保留在面前直到遊戲結束（除非卡牌另有說明）；Discard 卡立即結算後捨棄。                                                                                                                                                                       |
-| R-CARD-04 | 卡牌不能讓 HP 超過 10，除非卡牌明確寫了可以（例如 Even Bigger）。                                                                                                                                                                                   |
-| R-CARD-05 | 個別卡牌的補充說明（Mimic、Opportunist、Parasitic Tentacles、Metamorph、Poison Spit、Shrink Ray、Fire Breathing、Solar Powered、Drop from High Altitude、Eater of the Dead、Even Bigger）見 [rules-spec-cards.md](rules-spec-cards.md)（M3 建立）。 |
+| 編號      | 規則                                                                                                                                                                                                                                     |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-CARD-01 | 買牌時可購買任意張面朝上的卡，每張支付卡面費用的能量。購買後立即從牌堆補牌，新牌立即可買。                                                                                                                                               |
+| R-CARD-02 | 可花 2 能量把 3 張面朝上的卡全部捨棄並翻出 3 張新牌；買牌與清牌可任意順序，直到能量用完。                                                                                                                                                |
+| R-CARD-03 | Keep 卡保留在面前直到遊戲結束（除非卡牌另有說明）；Discard 卡立即結算後捨棄。                                                                                                                                                            |
+| R-CARD-04 | 卡牌不能讓 HP 超過 10，除非卡牌明確寫了可以（例如 Even Bigger）。                                                                                                                                                                        |
+| R-CARD-05 | 個別卡牌的補充說明（Mimic、Opportunist、Parasitic Tentacles、Metamorph、Poison Spit、Shrink Ray、Fire Breathing、Solar Powered、Drop from High Altitude、Eater of the Dead、Even Bigger）見 [rules-spec-cards.md](rules-spec-cards.md)。 |
 
 ### 2.7 勝負（R-END）
 

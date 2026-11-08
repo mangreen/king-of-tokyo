@@ -68,6 +68,8 @@ describe('ServerHelloSchema', () => {
     sessionToken: 'ab'.repeat(32),
     resumed: false,
     nickname: 'Mang',
+    cardSets: [{ id: 'original', name: '原創卡組', cardCount: 72 }],
+    defaultCardSetId: 'original',
   };
 
   it('版本必須等於目前協定版本', () => {

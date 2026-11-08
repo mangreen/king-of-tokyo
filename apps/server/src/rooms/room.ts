@@ -3,16 +3,27 @@ import {
   createGame,
   currentActor,
   defaultConfig,
+  defaultAction,
   greedyBot,
+  legalActions,
+  redactEvent,
+  redactState,
   type Action,
+  type CardDef,
   type GameEvent,
   type GameState,
+  type RulesConfig,
+  type RulesEnv,
+  type Seed,
 } from '@kot/rules';
+import type { LoadedCardSet } from '@kot/cardsets';
 import {
   MAX_PLAYERS,
   MIN_PLAYERS,
   type AckErrorCode,
+  type CardSetInfo,
   type GameActionInput,
+  type GameCardsMessage,
   type GameUpdateMessage,
   type PlayerInfo,
   type RoomPhase,
@@ -27,13 +38,15 @@ const fail = (code: AckErrorCode): Result => ({ ok: false, code });
 /** 把狀態推送給玩家。玩家不在線時由實作端忽略。 */
 export interface Publisher {
   roomState(playerId: string, room: RoomSnapshot | null): void;
+  /** 這場對局的完整卡牌目錄（開局與重連時送出）。 */
+  gameCards(playerId: string, message: GameCardsMessage): void;
   gameUpdate(playerId: string, message: GameUpdateMessage): void;
 }
 
 export interface Timings {
   /** 輪到在線玩家擲骰／停止的時限。 */
   decisionMs: number;
-  /** 輪到在線玩家決定是否讓位的時限。 */
+  /** 輪到在線玩家回應提示（讓位、反應、分配治療等）的時限。 */
   yieldMs: number;
   /** 已被標為代打、但仍在線的玩家，每一步的等待時間（給他搶回控制權的機會）。 */
   awayConnectedMs: number;
@@ -60,8 +73,8 @@ export const DEFAULT_TIMINGS: Timings = {
 export interface RoomDeps {
   scheduler: Scheduler;
   publisher: Publisher;
-  /** 產生新對局的 seed（正式環境使用 CSPRNG）。 */
-  newSeed: () => number;
+  /** 產生新對局的 seed（正式環境是 128 位元的 CSPRNG 字串；機密，見 randomSeed）。 */
+  newSeed: () => Seed;
   timings: Timings;
   /** 房間關閉時通知管理者。 */
   onClose: (room: Room) => void;
@@ -90,7 +103,10 @@ export class Room {
   private state: GameState | null = null;
   /** 對局動作日誌（含系統代打的動作），M5 寫入事件日誌時使用。 */
   private readonly log: Action[] = [];
-  private seed = 0;
+  private seed: Seed = 0;
+  private config: RulesConfig | null = null;
+  private readonly env: RulesEnv;
+  private readonly cardsMessage: GameCardsMessage;
   private cancelTurnTimer: (() => void) | null = null;
   private cancelCloseTimer: (() => void) | null = null;
   private cancelOverTimer: (() => void) | null = null;
@@ -101,8 +117,13 @@ export class Room {
   constructor(
     readonly code: string,
     host: { id: string; nickname: string },
+    private readonly cardSet: LoadedCardSet,
     private readonly deps: RoomDeps,
   ) {
+    const cards: Record<string, CardDef> = {};
+    for (const card of cardSet.set.cards) cards[card.id] = card;
+    this.env = { cards };
+    this.cardsMessage = { cardSetId: cardSet.set.id, cards: cardSet.set.cards };
     this.hostId = host.id;
     this.members.push({
       id: host.id,
@@ -135,9 +156,30 @@ export class Room {
     return this.members.filter((m) => !m.left).map((m) => m.id);
   }
 
-  /** 供測試與除錯：重放用的 seed 與動作日誌。 */
-  replayInfo(): { seed: number; actions: readonly Action[] } {
-    return { seed: this.seed, actions: this.log };
+  /** 重放所需的全部資料：設定、seed、卡牌組（id 與內容雜湊）與動作日誌。 */
+  replayInfo(): {
+    config: RulesConfig | null;
+    seed: Seed;
+    cardSetId: string;
+    cardSetHash: string;
+    actions: readonly Action[];
+  } {
+    return {
+      config: this.config,
+      seed: this.seed,
+      cardSetId: this.cardSet.set.id,
+      cardSetHash: this.cardSet.hash,
+      actions: this.log,
+    };
+  }
+
+  /** 卡牌組摘要（顯示用）。 */
+  cardSetInfo(): CardSetInfo {
+    return {
+      id: this.cardSet.set.id,
+      name: this.cardSet.set.name,
+      cardCount: this.cardSet.set.cards.length,
+    };
   }
 
   snapshot(): RoomSnapshot {
@@ -150,7 +192,13 @@ export class Room {
       away: m.away,
       left: m.left,
     }));
-    return { code: this.code, phase: this.phase, hostId: this.hostId, players };
+    return {
+      code: this.code,
+      cardSet: this.cardSetInfo(),
+      phase: this.phase,
+      hostId: this.hostId,
+      players,
+    };
   }
 
   // ── 大廳 ───────────────────────────────────────────────
@@ -203,11 +251,13 @@ export class Room {
       m.away = false;
     });
     this.seed = this.deps.newSeed();
-    const created = createGame(defaultConfig(players.length), this.seed);
+    this.config = defaultConfig(players.length);
+    const created = createGame(this.config, this.seed, this.env);
     this.state = created.state;
     this.phase = 'playing';
     this.armTurnTimer(); // 先設計時，推送的 remainingMs 才有值
     this.broadcastRoom();
+    this.broadcastCards();
     this.broadcastGame(created.events);
     return OK;
   }
@@ -308,6 +358,7 @@ export class Room {
     if (!member) return;
     this.deps.publisher.roomState(playerId, this.snapshot());
     if (this.state) {
+      this.deps.publisher.gameCards(playerId, this.cardsMessage);
       this.deps.publisher.gameUpdate(playerId, this.buildUpdate(member, []));
     }
   }
@@ -320,7 +371,7 @@ export class Room {
     if (this.phase === 'lobby' || !this.state || member.seat === null) return fail('wrong_state');
 
     const action = this.toAction(input, member.seat);
-    const result = applyAction(this.state, action);
+    const result = applyAction(this.state, action, this.env);
     if (!result.ok) return fail(result.error);
 
     const wasAway = member.away;
@@ -341,9 +392,62 @@ export class Room {
       case 'roll':
         return { type: 'roll', seat, keep: input.keep };
       case 'endRolling':
-        return { type: 'endRolling', seat };
+      case 'sweep':
+      case 'endTurn':
+        return { type: input.type, seat };
       case 'yieldDecision':
-        return { type: 'yieldDecision', seat, leave: input.leave };
+        return input.takeCard === undefined
+          ? { type: 'yieldDecision', seat, leave: input.leave }
+          : { type: 'yieldDecision', seat, leave: input.leave, takeCard: input.takeCard };
+      case 'buy': {
+        const action: Extract<Action, { type: 'buy' }> = {
+          type: 'buy',
+          seat,
+          cardId: input.cardId,
+        };
+        if (input.from !== undefined) action.from = input.from;
+        if (input.energy !== undefined) action.energy = input.energy;
+        if (input.target !== undefined) action.target = input.target;
+        return action;
+      }
+      case 'useCard': {
+        const action: Extract<Action, { type: 'useCard' }> = {
+          type: 'useCard',
+          seat,
+          cardId: input.cardId,
+        };
+        if (input.args !== undefined) {
+          const args: NonNullable<typeof action.args> = {};
+          if (input.args.die !== undefined) args.die = input.args.die;
+          if (input.args.face !== undefined) args.face = input.args.face;
+          if (input.args.target !== undefined) args.target = input.args.target;
+          if (input.args.cards !== undefined) args.cards = input.args.cards;
+          action.args = args;
+        }
+        return action;
+      }
+      case 'reactDecision':
+        return { type: 'reactDecision', seat, cardId: input.cardId };
+      case 'heartsDecision':
+        return {
+          type: 'heartsDecision',
+          seat,
+          self: input.self,
+          poison: input.poison,
+          shrink: input.shrink,
+          others: input.others,
+        };
+      case 'probeDecision': {
+        const action: Extract<Action, { type: 'probeDecision' }> = {
+          type: 'probeDecision',
+          seat,
+          die: input.die,
+        };
+        if (input.target !== undefined) action.target = input.target;
+        return action;
+      }
+      case 'opportunityDecision':
+        return { type: 'opportunityDecision', seat, buy: input.buy };
     }
   }
 
@@ -396,7 +500,7 @@ export class Room {
       ? timings.awayOfflineMs
       : actor.away
         ? timings.awayConnectedMs
-        : state.phase === 'yield'
+        : state.phase === 'prompt'
           ? timings.yieldMs
           : timings.decisionMs;
     this.scheduleTurnTimer(delay);
@@ -431,16 +535,61 @@ export class Room {
 
     const becameAway = !actor.away;
     actor.away = true;
-    const action = greedyBot(state);
-    const result = applyAction(state, action);
-    if (!result.ok) {
-      // 機器人不應該產生非法動作；萬一發生就記錄並以完整時限重試，避免卡死也避免緊迴圈
-      console.error('代打動作被拒絕', this.code, result.error);
+    const picked = this.pickTimeoutAction(state);
+    if (!picked) {
+      // 沒有任何可接受的動作（不應發生）：記錄並以完整時限重試，避免卡死也避免緊迴圈
+      console.error('代打找不到可接受的動作', this.code);
       this.scheduleTurnTimer(this.deps.timings.decisionMs);
       return;
     }
-    this.commit(action, result.state, result.events);
+    this.commit(picked.action, picked.result.state, picked.result.events);
     if (becameAway) this.broadcastRoom();
+  }
+
+  /**
+   * 代打動作：先用機器人的選擇；若被拒絕或丟出例外，改用最保守的預設動作，再不行就逐一嘗試所有合法動作。
+   * 這樣單一卡牌組合的邊角問題不會讓整個房間卡死。
+   */
+  private pickTimeoutAction(
+    state: GameState,
+  ): { action: Action; result: Extract<ReturnType<typeof applyAction>, { ok: true }> } | null {
+    const candidates: (() => Action | null)[] = [
+      () => greedyBot(state, this.env),
+      () => defaultAction(state),
+    ];
+    const tried = new Set<string>();
+    const attempt = (
+      make: () => Action | null,
+    ): { action: Action; result: Extract<ReturnType<typeof applyAction>, { ok: true }> } | null => {
+      try {
+        const action = make();
+        if (!action) return null;
+        const key = JSON.stringify(action);
+        if (tried.has(key)) return null;
+        tried.add(key);
+        const result = applyAction(state, action, this.env);
+        if (result.ok) return { action, result };
+        console.error('代打動作被拒絕', this.code, result.error);
+      } catch (error) {
+        console.error('代打動作失敗', this.code, error instanceof Error ? error.message : error);
+      }
+      return null;
+    };
+    for (const make of candidates) {
+      const picked = attempt(make);
+      if (picked) return picked;
+    }
+    let legal: Action[];
+    try {
+      legal = legalActions(state, this.env);
+    } catch {
+      legal = [];
+    }
+    for (const action of legal) {
+      const picked = attempt(() => action);
+      if (picked) return picked;
+    }
+    return null;
   }
 
   private afterPresenceChange(): void {
@@ -480,21 +629,27 @@ export class Room {
     }
   }
 
+  private broadcastCards(): void {
+    for (const member of this.members) {
+      if (!member.left) this.deps.publisher.gameCards(member.id, this.cardsMessage);
+    }
+  }
+
   private broadcastGame(events: GameEvent[]): void {
     for (const member of this.members) {
       if (!member.left) this.deps.publisher.gameUpdate(member.id, this.buildUpdate(member, events));
     }
   }
 
-  private buildUpdate(_viewer: Member, events: GameEvent[]): GameUpdateMessage {
+  private buildUpdate(viewer: Member, events: GameEvent[]): GameUpdateMessage {
     const state = this.state;
     if (!state) throw new Error('對局尚未開始');
     const actor = currentActor(state);
     return {
       version: state.version,
-      // M3 起依 viewer 遮蔽隱藏資訊（牌堆）；目前骰子遊戲沒有隱藏資訊
-      state,
-      events,
+      // 依視角遮蔽：牌庫內容、亂數狀態、別人窺看到的牌都不外洩
+      state: redactState(state, viewer.seat),
+      events: events.map((event) => redactEvent(event, viewer.seat)),
       remainingMs:
         this.deadline === null ? null : Math.max(0, this.deadline - this.deps.scheduler.now()),
       actorSeat: actor,

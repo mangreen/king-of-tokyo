@@ -1,10 +1,10 @@
 import { nextInt } from './rng.js';
-import type { RngState } from './rng.js';
+import type { GameRng } from './rng.js';
 import { FACES } from './types.js';
 import type { Face } from './types.js';
 
 /** 擲一顆骰子。 */
-export function rollDie(rng: RngState): [face: Face, nextRng: RngState] {
+export function rollDie(rng: GameRng): [face: Face, nextRng: GameRng] {
   const [index, next] = nextInt(rng, FACES.length);
   return [FACES[index] as Face, next];
 }

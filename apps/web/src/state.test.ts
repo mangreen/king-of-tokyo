@@ -10,10 +10,13 @@ const hello = {
   sessionToken: TOKEN,
   resumed: false,
   nickname: 'Mang',
+  cardSets: [{ id: 'original', name: '原創卡組', cardCount: 72 }],
+  defaultCardSetId: 'original',
 };
 
 const room: RoomSnapshot = {
   code: 'ABCDE',
+  cardSet: { id: 'original', name: '原創卡組', cardCount: 72 },
   phase: 'lobby',
   hostId: 'p1',
   players: [
@@ -166,5 +169,49 @@ describe('提示', () => {
     const state = appReducer(initialAppState, { type: 'notice', message: '還沒輪到你' });
     expect(state.notice).toBe('還沒輪到你');
     expect(appReducer(state, { type: 'notice', message: null }).notice).toBeNull();
+  });
+});
+
+describe('卡牌', () => {
+  const cards = [
+    {
+      id: 'c1',
+      name: '測試卡',
+      cost: 3,
+      kind: 'keep',
+      text: '效果',
+      effectId: 'max_hp',
+      params: {},
+    },
+  ];
+
+  it('握手記下可用卡牌組與預設值', () => {
+    const state = online();
+    expect(state.cardSets).toEqual(hello.cardSets);
+    expect(state.defaultCardSetId).toBe('original');
+  });
+
+  it('game:cards 存入卡牌目錄；格式不符則忽略；離開房間清掉', () => {
+    let state = online();
+    state = appReducer(state, { type: 'game-cards', payload: { cardSetId: 'original', cards } });
+    expect(state.cards).toHaveLength(1);
+    expect(appReducer(state, { type: 'game-cards', payload: { cards: 'x' } }).cards).toHaveLength(
+      1,
+    );
+    state = appReducer(state, { type: 'room-state', payload: { room: null } });
+    expect(state.cards).toBeNull();
+  });
+
+  it('事件日誌用卡牌名稱而不是 id', () => {
+    let state = appReducer(online(), { type: 'room-state', payload: { room } });
+    state = appReducer(state, { type: 'game-cards', payload: { cardSetId: 'original', cards } });
+    const base = update(1, false);
+    state = appReducer(state, {
+      type: 'game-update',
+      at: 0,
+      payload: { ...base, events: [{ type: 'card_revealed', cardId: 'c1' }] },
+    });
+    expect(state.log.join('\n')).toContain('測試卡');
+    expect(state.log.join('\n')).not.toContain('c1');
   });
 });

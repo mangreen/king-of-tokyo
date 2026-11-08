@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction } from './engine.js';
 import { checkInvariants } from './invariants.js';
-import { eventTypes, makeState, mon, must, resolveWith } from './test-utils.js';
+import { eventTypes, makeState, mon, must, resolveWith, yieldQueue } from './test-utils.js';
 import type { Face } from './types.js';
 
 const A: Face = 'attack';
@@ -144,8 +144,9 @@ describe('R-TOKYO-04/05/06/07 讓位', () => {
 
   it('R-TOKYO-04：被攻擊後進入讓位階段，由東京內的怪獸決定', () => {
     const r = resolveWith(cityOccupied(), attacks(1));
-    expect(r.state.phase).toBe('yield');
-    expect(r.state.pending).toEqual({ attacker: 0, queue: [2] });
+    expect(r.state.phase).toBe('prompt');
+    expect(r.state.pending?.kind).toBe('yield');
+    expect(r.state.pending).toEqual({ kind: 'yield', attacker: 0, queue: [2] });
     expect(r.events).toContainEqual({ type: 'yield_requested', seat: 2, attacker: 0 });
     expect(mon(r.state, 2).hp).toBe(9);
     // 攻擊者還沒進入東京，回合也還沒結束
@@ -204,10 +205,10 @@ describe('R-TOKYO-04/05/06/07 讓位', () => {
       monsters: { 0: { location: 'bay' }, 1: { location: 'city' } },
     });
     const r1 = resolveWith(s, attacks(1));
-    expect(r1.state.pending).toEqual({ attacker: 3, queue: [0, 1] });
+    expect(r1.state.pending).toEqual({ kind: 'yield', attacker: 3, queue: [0, 1] });
     const r2 = must(r1.state, { type: 'yieldDecision', seat: 0, leave: false });
     expect(r2.events).toContainEqual({ type: 'yield_requested', seat: 1, attacker: 3 });
-    expect(r2.state.pending?.queue).toEqual([1]);
+    expect(yieldQueue(r2.state)).toEqual([1]);
   });
 
   it('R-TOKYO-06：兩位都讓位，攻擊者進入東京市，東京灣暫時空著', () => {
@@ -273,7 +274,7 @@ describe('R-TOKYO-04/05/06/07 讓位', () => {
       monsters: { 1: { location: 'city', hp: 1 }, 2: { location: 'bay' } },
     });
     const r = resolveWith(s, attacks(1));
-    expect(r.state.pending).toEqual({ attacker: 0, queue: [2] });
+    expect(r.state.pending).toEqual({ kind: 'yield', attacker: 0, queue: [2] });
   });
 });
 
@@ -298,7 +299,7 @@ describe('R-TOKYO-09 東京灣關閉', () => {
       monsters: { 1: { location: 'city', hp: 1 }, 2: { location: 'bay' } },
     });
     let st = resolveWith(s, attacks(1)).state;
-    expect(st.pending).toEqual({ attacker: 0, queue: [2] });
+    expect(st.pending).toEqual({ kind: 'yield', attacker: 0, queue: [2] });
     const r = must(st, { type: 'yieldDecision', seat: 2, leave: false });
     st = r.state;
     expect(mon(st, 0)).toMatchObject({ location: 'city', vp: 1 });

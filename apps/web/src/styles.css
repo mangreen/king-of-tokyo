@@ -221,3 +221,58 @@ input {
   font-size: 0.85rem;
   white-space: pre-wrap;
 }
+
+select {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+}
+.owned {
+  max-width: 14rem;
+}
+.owned .tag {
+  display: inline-block;
+  margin: 0 0.3rem 0.2rem 0;
+}
+.market-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.6rem;
+}
+.market-card {
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.market-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  flex: 1;
+}
+.market-card .cost {
+  font-weight: 700;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.use-group {
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+}
+.use-group summary {
+  cursor: pointer;
+}
+.use-group .row {
+  margin: 0.5rem 0;
+  max-width: 22rem;
+}

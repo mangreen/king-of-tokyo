@@ -4,6 +4,7 @@ import {
   GameActionSchema,
   ROOM_CODE_ALPHABET,
   RoomCodeSchema,
+  RoomCreateSchema,
   RoomJoinSchema,
   RoomReadySchema,
 } from './lobby.js';
@@ -29,7 +30,7 @@ describe('RoomCodeSchema', () => {
 });
 
 describe('GameActionSchema', () => {
-  it('接受三種意圖', () => {
+  it('接受基本意圖', () => {
     expect(GameActionSchema.safeParse({ type: 'roll', keep: [0, 2] }).success).toBe(true);
     expect(GameActionSchema.safeParse({ type: 'endRolling' }).success).toBe(true);
     expect(GameActionSchema.safeParse({ type: 'yieldDecision', leave: false }).success).toBe(true);
@@ -81,8 +82,65 @@ describe('其他訊息', () => {
       'invalid_action',
       'no_rolls_left',
       'roll_first',
+      'not_enough_energy',
+      'card_unavailable',
+      'cannot_use',
     ]) {
       expect(ACK_ERROR_CODES).toContain(code);
+    }
+  });
+
+  it('room:create 可帶卡牌組 id，格式錯誤或多餘欄位會被拒絕', () => {
+    expect(RoomCreateSchema.safeParse({}).success).toBe(true);
+    expect(RoomCreateSchema.safeParse({ cardSetId: 'original' }).success).toBe(true);
+    for (const bad of [{ cardSetId: 'Bad Id' }, { cardSetId: '' }, { cardSetId: 1 }, { x: 1 }]) {
+      expect(RoomCreateSchema.safeParse(bad).success).toBe(false);
+    }
+  });
+});
+
+describe('GameActionSchema：卡牌相關意圖', () => {
+  it('接受買牌、翻牌、使用能力與各種提示的回應', () => {
+    const ok: unknown[] = [
+      { type: 'buy', cardId: 'c1' },
+      { type: 'buy', cardId: 'c1', from: 'deck' },
+      { type: 'buy', cardId: 'c1', from: 2, energy: 3, target: 'c9' },
+      { type: 'sweep' },
+      { type: 'endTurn' },
+      { type: 'useCard', cardId: 'c1' },
+      { type: 'useCard', cardId: 'c1', args: { die: 2, face: 'energy' } },
+      { type: 'useCard', cardId: 'c1', args: { cards: ['a', 'b'] } },
+      { type: 'yieldDecision', leave: true, takeCard: 'c3' },
+      { type: 'reactDecision', cardId: null },
+      { type: 'reactDecision', cardId: 'c4' },
+      { type: 'heartsDecision', self: 1, poison: 0, shrink: 0, others: [{ seat: 2, amount: 1 }] },
+      { type: 'probeDecision', die: null },
+      { type: 'probeDecision', die: 3, target: 1 },
+      { type: 'opportunityDecision', buy: true },
+    ];
+    for (const payload of ok) {
+      expect(GameActionSchema.safeParse(payload).success, JSON.stringify(payload)).toBe(true);
+    }
+  });
+
+  it('拒絕不合理的參數與多餘的 args 欄位', () => {
+    const bad: unknown[] = [
+      { type: 'buy' },
+      { type: 'buy', cardId: '../x' },
+      { type: 'buy', cardId: 'c1', from: 'market' },
+      { type: 'buy', cardId: 'c1', from: 9 },
+      { type: 'buy', cardId: 'c1', energy: -1 },
+      { type: 'useCard', cardId: 'c1', args: { die: 99 } },
+      { type: 'useCard', cardId: 'c1', args: { face: 4 } },
+      { type: 'useCard', cardId: 'c1', args: { seat: 1 } },
+      { type: 'reactDecision' },
+      { type: 'heartsDecision', self: -1, poison: 0, shrink: 0, others: [] },
+      { type: 'heartsDecision', self: 1, poison: 0, shrink: 0 },
+      { type: 'probeDecision', die: 'x' },
+      { type: 'opportunityDecision' },
+    ];
+    for (const payload of bad) {
+      expect(GameActionSchema.safeParse(payload).success, JSON.stringify(payload)).toBe(false);
     }
   });
 });

@@ -21,6 +21,9 @@ export function RoomView({ room, selfId, onReady, onStart, onLeave }: Props) {
       <h2>
         房間 <span className="room-code">{room.code}</span>
       </h2>
+      <p>
+        卡牌組：<strong>{room.cardSet.name}</strong>（{room.cardSet.cardCount} 張）
+      </p>
       <p className="muted">把房號傳給朋友，讓他們從大廳輸入加入（2–6 人）。</p>
       <ul className="players">
         {room.players.map((p) => (

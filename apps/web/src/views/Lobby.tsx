@@ -1,15 +1,19 @@
 import { useState, type FormEvent } from 'react';
-import { RoomCodeSchema } from '@kot/protocol';
+import { RoomCodeSchema, type CardSetInfo } from '@kot/protocol';
 
 interface Props {
   nickname: string;
-  onCreate: () => void;
+  cardSets: CardSetInfo[];
+  defaultCardSetId: string | null;
+  onCreate: (cardSetId?: string) => void;
   onJoin: (code: string) => void;
   onLogout: () => void;
 }
 
-export function Lobby({ nickname, onCreate, onJoin, onLogout }: Props) {
+export function Lobby({ nickname, cardSets, defaultCardSetId, onCreate, onJoin, onLogout }: Props) {
   const [code, setCode] = useState('');
+  const [chosenSet, setChosenSet] = useState<string | null>(null);
+  const cardSetId = chosenSet ?? defaultCardSetId ?? cardSets[0]?.id;
   const [error, setError] = useState<string | null>(null);
 
   function join(event: FormEvent): void {
@@ -28,9 +32,33 @@ export function Lobby({ nickname, onCreate, onJoin, onLogout }: Props) {
       <p>
         你好，<strong>{nickname}</strong>
       </p>
-      <button className="primary" onClick={onCreate}>
-        建立房間
-      </button>
+      <div className="row">
+        {cardSets.length > 1 && (
+          <label>
+            卡牌組{' '}
+            <select
+              value={cardSetId}
+              onChange={(e) => {
+                setChosenSet(e.target.value);
+              }}
+            >
+              {cardSets.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}（{c.cardCount} 張）
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button
+          className="primary"
+          onClick={() => {
+            onCreate(cardSetId);
+          }}
+        >
+          建立房間
+        </button>
+      </div>
       <hr />
       <form onSubmit={join} className="row">
         <input

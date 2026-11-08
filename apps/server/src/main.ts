@@ -3,7 +3,8 @@ import { loadConfig } from './config.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  const { fastify } = buildApp(config);
+  const { fastify, cardSetInfos } = buildApp(config);
+  fastify.log.info({ cardSets: cardSetInfos.map((c) => c.id) }, '已載入卡牌組');
 
   let shuttingDown = false;
   const shutdown = (signal: string): void => {

@@ -11,3 +11,7 @@ docs
 *.md
 !README.md
 .DS_Store
+
+# 使用者自備的卡牌組與卡表絕不進映像
+card-sets/local
+**/*.csv

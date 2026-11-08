@@ -1,6 +1,7 @@
 /** 測試用工具（不從 index 匯出）。 */
 import { applyAction } from './engine.js';
-import { cloneState, createGame, defaultConfig } from './state.js';
+import type { CardCatalog, CardDef, RulesEnv } from './cards/types.js';
+import { cloneState, createGame, defaultConfig, newTurn } from './state.js';
 import type { Action, Face, GameEvent, GameState, Monster } from './types.js';
 
 export interface MakeStateOptions {
@@ -12,19 +13,51 @@ export interface MakeStateOptions {
   monsters?: Record<number, Partial<Monster>>;
   round?: number;
   seed?: number;
+  /** 卡牌目錄；提供時商店以 faceUp／deck 指定。 */
+  env?: RulesEnv;
+  faceUp?: string[];
+  deck?: string[];
+}
+
+/** 測試用卡牌：只需指定 effectId，其餘用預設值。 */
+export function card(id: string, effectId: string, extra: Partial<CardDef> = {}): CardDef {
+  return {
+    id,
+    name: id,
+    cost: 3,
+    kind: effectId === 'instant' ? 'discard' : 'keep',
+    text: '',
+    effectId,
+    params: {},
+    ...extra,
+  };
+}
+
+export function makeEnv(...defs: CardDef[]): RulesEnv {
+  const cards: Record<string, CardDef> = {};
+  for (const d of defs) cards[d.id] = d;
+  return { cards: cards as CardCatalog };
 }
 
 /** 建立指定情境的狀態（不經過先手擲骰）。 */
 export function makeState(opts: MakeStateOptions): GameState {
-  const state = cloneState(createGame(defaultConfig(opts.players), opts.seed ?? 1).state);
+  const state = cloneState(createGame(defaultConfig(opts.players), opts.seed ?? 1, opts.env).state);
+  if (opts.env && state.market) {
+    state.market.faceUp = [...(opts.faceUp ?? [])];
+    state.market.deck = [...(opts.deck ?? [])];
+    state.market.discard = [];
+  }
   const first = opts.firstSeat ?? 0;
   state.firstSeat = first;
   state.round = opts.round ?? 1;
-  state.turn = { seat: opts.turnSeat ?? first, rollsUsed: 0, dice: [] };
+  state.turn = newTurn(opts.turnSeat ?? first, state.config.diceCount);
   for (const [seat, patch] of Object.entries(opts.monsters ?? {})) {
     const monster = state.monsters[Number(seat)];
     if (!monster) throw new Error(`座位 ${seat} 不存在`);
     Object.assign(monster, patch);
+    for (const id of monster.cards) {
+      monster.cardData[id] ??= { n: 0, ref: null };
+    }
   }
   return state;
 }
@@ -33,12 +66,17 @@ export function makeState(opts: MakeStateOptions): GameState {
 export function withDice(state: GameState, dice: Face[]): GameState {
   const next = cloneState(state);
   next.turn.dice = [...dice];
+  next.turn.diceCount = dice.length;
   next.turn.rollsUsed = 1;
   return next;
 }
 
-export function must(state: GameState, action: Action): { state: GameState; events: GameEvent[] } {
-  const result = applyAction(state, action);
+export function must(
+  state: GameState,
+  action: Action,
+  env?: RulesEnv,
+): { state: GameState; events: GameEvent[] } {
+  const result = applyAction(state, action, env);
   if (!result.ok) {
     throw new Error(`動作被拒絕：${result.error}`);
   }
@@ -49,9 +87,15 @@ export function must(state: GameState, action: Action): { state: GameState; even
 export function resolveWith(
   state: GameState,
   dice: Face[],
+  env?: RulesEnv,
 ): { state: GameState; events: GameEvent[] } {
   const seat = state.turn.seat;
-  return must(withDice(state, dice), { type: 'endRolling', seat });
+  return must(withDice(state, dice), { type: 'endRolling', seat }, env);
+}
+
+/** 讓位詢問中尚未決定的座位。 */
+export function yieldQueue(state: GameState): number[] {
+  return state.pending?.kind === 'yield' ? state.pending.queue : [];
 }
 
 export function eventTypes(events: readonly GameEvent[]): string[] {

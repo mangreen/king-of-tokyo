@@ -13,6 +13,7 @@ export type { ClientHello, ErrorCode, ServerError, ServerHello } from './message
 
 export {
   ACK_ERROR_CODES,
+  CardSetIdSchema,
   EmptyPayloadSchema,
   GameActionSchema,
   MAX_PLAYERS,
@@ -20,13 +21,16 @@ export {
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   RoomCodeSchema,
+  RoomCreateSchema,
   RoomJoinSchema,
   RoomReadySchema,
 } from './lobby.js';
 export type {
   Ack,
   AckErrorCode,
+  CardSetInfo,
   GameActionInput,
+  GameCardsMessage,
   GameUpdateMessage,
   PlayerInfo,
   RoomPhase,

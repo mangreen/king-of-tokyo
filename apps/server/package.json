@@ -17,6 +17,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@kot/cardsets": "workspace:*",
     "@kot/protocol": "workspace:*",
     "@kot/rules": "workspace:*",
     "@types/node": "^26.6.6",

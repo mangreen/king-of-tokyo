@@ -10,6 +10,7 @@ import {
 } from '@kot/protocol';
 import { buildApp, type App } from './app.js';
 import type { ServerConfig } from './config.js';
+import { testCardSets } from './rooms/testing.js';
 
 const ALLOWED_ORIGIN = 'http://localhost:5173';
 const config: ServerConfig = {
@@ -18,6 +19,7 @@ const config: ServerConfig = {
   port: 0,
   allowedOrigins: [ALLOWED_ORIGIN],
   maxRooms: 50,
+  cardSetsDir: 'card-sets',
 };
 
 let app: App;
@@ -42,7 +44,7 @@ function once<T>(socket: Socket, event: string): Promise<T> {
 }
 
 beforeEach(async () => {
-  app = buildApp(config, { helloTimeoutMs: 300 });
+  app = buildApp(config, { helloTimeoutMs: 300, cardSets: testCardSets() });
   await app.fastify.listen({ host: config.host, port: 0 });
   const { port } = app.fastify.server.address() as AddressInfo;
   url = `http://127.0.0.1:${String(port)}`;

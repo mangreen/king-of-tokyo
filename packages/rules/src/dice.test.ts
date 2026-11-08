@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { countFaces, numberVp, rollDie } from './dice.js';
 import { FACES } from './types.js';
 import type { Face } from './types.js';
+import type { GameRng } from './rng.js';
 
 describe('R-DICE-04 數字面的 VP', () => {
   const cases: [Face[], number][] = [
@@ -34,7 +35,7 @@ describe('countFaces', () => {
 
 describe('R-DICE-03 骰面', () => {
   it('rollDie 只會擲出六種面，且每種都出現', () => {
-    let rng = 42;
+    let rng: GameRng = 42;
     const seen = new Set<Face>();
     for (let i = 0; i < 300; i += 1) {
       const [face, next] = rollDie(rng);

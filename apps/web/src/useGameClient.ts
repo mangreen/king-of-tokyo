@@ -20,7 +20,7 @@ export interface GameClient {
   /** 用暱稱登入（沒有帳號）；之後以 token 自動重連。 */
   login(nickname: string): void;
   logout(): void;
-  createRoom(): void;
+  createRoom(cardSetId?: string): void;
   joinRoom(code: string): void;
   leaveRoom(): void;
   setReady(ready: boolean): void;
@@ -65,6 +65,9 @@ export function useGameClient(): GameClient {
       });
       socket.on(EVENTS.roomState, (payload: unknown) => {
         dispatch({ type: 'room-state', payload });
+      });
+      socket.on(EVENTS.gameCards, (payload: unknown) => {
+        dispatch({ type: 'game-cards', payload });
       });
       socket.on(EVENTS.gameUpdate, (payload: unknown) => {
         dispatch({ type: 'game-update', payload, at: Date.now() });
@@ -113,8 +116,8 @@ export function useGameClient(): GameClient {
     state,
     login,
     logout,
-    createRoom: () => {
-      request(EVENTS.roomCreate, {});
+    createRoom: (cardSetId) => {
+      request(EVENTS.roomCreate, cardSetId === undefined ? {} : { cardSetId });
     },
     joinRoom: (code) => {
       request(EVENTS.roomJoin, { code });

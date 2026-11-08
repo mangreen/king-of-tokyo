@@ -1,0 +1,896 @@
+{
+  "id": "original",
+  "name": "原創卡組",
+  "version": 1,
+  "cards": [
+    {
+      "id": "o-high-rise",
+      "name": "高樓開發案",
+      "cost": 6,
+      "kind": "discard",
+      "text": "★ +4。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-kiosk",
+      "name": "路邊小攤",
+      "cost": 2,
+      "kind": "discard",
+      "text": "★ +1。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-subway",
+      "name": "地鐵延伸線",
+      "cost": 4,
+      "kind": "discard",
+      "text": "★ +2。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-power-surge",
+      "name": "電網過載",
+      "cost": 7,
+      "kind": "discard",
+      "text": "⚡ +8。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "energy",
+            "n": 8
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-first-aid",
+      "name": "野戰醫院",
+      "cost": 3,
+      "kind": "discard",
+      "text": "回復 3 點 HP。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "heal",
+            "n": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-fusion",
+      "name": "核融合反應爐",
+      "cost": 6,
+      "kind": "discard",
+      "text": "★ +2，並回復 3 點 HP。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 2
+          },
+          {
+            "op": "heal",
+            "n": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-armor-column",
+      "name": "裝甲縱隊",
+      "cost": 4,
+      "kind": "discard",
+      "text": "★ +3，但你受到 2 點傷害。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 3
+          },
+          {
+            "op": "selfDamage",
+            "n": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-bombers",
+      "name": "低空轟炸",
+      "cost": 4,
+      "kind": "discard",
+      "text": "★ +4，但你受到 3 點傷害。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 4
+          },
+          {
+            "op": "selfDamage",
+            "n": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-rumor",
+      "name": "恐慌謠言",
+      "cost": 6,
+      "kind": "discard",
+      "text": "其他怪獸各失去 4 ★。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "othersLoseVp",
+            "n": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-acid-rain",
+      "name": "酸雨",
+      "cost": 3,
+      "kind": "discard",
+      "text": "其他怪獸各受到 2 點傷害。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "damageOthers",
+            "n": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-refinery",
+      "name": "煉油廠連環爆",
+      "cost": 6,
+      "kind": "discard",
+      "text": "★ +2，其他怪獸各受到 3 點傷害。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 2
+          },
+          {
+            "op": "damageOthers",
+            "n": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-meteors",
+      "name": "流星雨",
+      "cost": 4,
+      "kind": "discard",
+      "text": "所有怪獸（包含你）各受到 3 點傷害。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "damageAll",
+            "n": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-airdrop",
+      "name": "空降突襲",
+      "cost": 5,
+      "kind": "discard",
+      "text": "★ +2，並奪取東京（若你還不在東京）。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 2
+          },
+          {
+            "op": "takeTokyo"
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-blackout",
+      "name": "全城停電",
+      "cost": 6,
+      "kind": "discard",
+      "text": "★ +2，其他怪獸每 3 點 ⚡ 失去 1 點。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "vp",
+            "n": 2
+          },
+          {
+            "op": "othersLoseEnergyPer",
+            "per": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-encore",
+      "name": "加演一場",
+      "cost": 7,
+      "kind": "discard",
+      "text": "本回合結束後，你立刻再進行一個回合。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "extraTurn"
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-conscription",
+      "name": "徵召令",
+      "cost": 2,
+      "kind": "discard",
+      "text": "你每持有 1 張保留卡，得到 1 ★ 並受到 1 點傷害。",
+      "effectId": "instant",
+      "params": {
+        "ops": [
+          {
+            "op": "perCard",
+            "vp": 1,
+            "damage": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "o-third-head",
+      "name": "第三顆頭",
+      "cost": 6,
+      "kind": "keep",
+      "text": "你多擲 1 顆骰子。",
+      "effectId": "extra_dice",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-overclock",
+      "name": "超頻大腦",
+      "cost": 5,
+      "kind": "keep",
+      "text": "每回合多 1 次重擲機會。",
+      "effectId": "extra_rolls",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-haggler",
+      "name": "討價還價",
+      "cost": 4,
+      "kind": "keep",
+      "text": "買卡時費用少 1 ⚡（最低 0）。",
+      "effectId": "cost_discount",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-resonance",
+      "name": "能量共鳴",
+      "cost": 4,
+      "kind": "keep",
+      "text": "每次你得到 ⚡ 時，額外得到 1 ⚡。",
+      "effectId": "energy_bonus",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-regrowth",
+      "name": "再生細胞",
+      "cost": 4,
+      "kind": "keep",
+      "text": "每次你回復 HP 時，額外回復 1 點。",
+      "effectId": "heal_bonus",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-colossus",
+      "name": "巨大化",
+      "cost": 5,
+      "kind": "keep",
+      "text": "你的最大 HP +2，買下時回復 2 點。",
+      "effectId": "max_hp",
+      "params": {
+        "n": 2
+      }
+    },
+    {
+      "id": "o-lucky-three",
+      "name": "幸運三",
+      "cost": 3,
+      "kind": "keep",
+      "text": "即使重擲次數用完，你也可以重擲任意顆 [3]。",
+      "effectId": "reroll_threes",
+      "params": {}
+    },
+    {
+      "id": "o-twist-of-fate",
+      "name": "命運扭轉",
+      "cost": 3,
+      "kind": "keep",
+      "text": "把 1 顆骰子改成任意結果，然後棄掉這張卡。",
+      "effectId": "die_change",
+      "params": {
+        "cost": 0,
+        "to": "any",
+        "discard": true
+      }
+    },
+    {
+      "id": "o-flex-limb",
+      "name": "伸縮觸手",
+      "cost": 3,
+      "kind": "keep",
+      "text": "花 2 ⚡，把 1 顆骰子改成任意結果。",
+      "effectId": "die_change",
+      "params": {
+        "cost": 2,
+        "to": "any"
+      }
+    },
+    {
+      "id": "o-shepherd",
+      "name": "牧羊人",
+      "cost": 3,
+      "kind": "keep",
+      "text": "每回合一次，把 1 顆骰子改成 [1]。",
+      "effectId": "die_change",
+      "params": {
+        "cost": 0,
+        "to": 1,
+        "once": true
+      }
+    },
+    {
+      "id": "o-mind-link",
+      "name": "心電感應",
+      "cost": 4,
+      "kind": "keep",
+      "text": "花 1 ⚡，多重擲 1 次。",
+      "effectId": "reroll_energy",
+      "params": {
+        "cost": 1
+      }
+    },
+    {
+      "id": "o-smoke-bomb",
+      "name": "煙霧彈",
+      "cost": 4,
+      "kind": "keep",
+      "text": "有 3 次充能。花 1 次充能多重擲 1 次，用完棄掉。",
+      "effectId": "reroll_charges",
+      "params": {
+        "charges": 3
+      }
+    },
+    {
+      "id": "o-mind-reader",
+      "name": "讀心術",
+      "cost": 3,
+      "kind": "keep",
+      "text": "你可以在別人結算前，重擲他的 1 顆骰子。若重擲結果是 ❤，棄掉這張卡。",
+      "effectId": "probe",
+      "params": {}
+    },
+    {
+      "id": "o-thorn-trio",
+      "name": "荊棘三連",
+      "cost": 3,
+      "kind": "keep",
+      "text": "若你擲出三顆以上的 [3]，另外造成 2 點傷害。",
+      "effectId": "triple_bonus",
+      "params": {
+        "face": 3,
+        "damage": 2
+      }
+    },
+    {
+      "id": "o-feast",
+      "name": "饕客",
+      "cost": 4,
+      "kind": "keep",
+      "text": "若你擲出三顆以上的 [1]，額外得到 2 ★。",
+      "effectId": "triple_bonus",
+      "params": {
+        "face": 1,
+        "vp": 2
+      }
+    },
+    {
+      "id": "o-full-set",
+      "name": "六面圓滿",
+      "cost": 3,
+      "kind": "keep",
+      "text": "若你擲出 [1][2][3]❤💥⚡ 各至少一顆，得到 8 ★。",
+      "effectId": "complete_set",
+      "params": {
+        "vp": 8
+      }
+    },
+    {
+      "id": "o-run",
+      "name": "順子",
+      "cost": 4,
+      "kind": "keep",
+      "text": "若你擲出 [1][2][3] 各至少一顆，額外得到 2 ★。",
+      "effectId": "straight_vp",
+      "params": {
+        "vp": 2
+      }
+    },
+    {
+      "id": "o-ringleader",
+      "name": "領袖氣質",
+      "cost": 5,
+      "kind": "keep",
+      "text": "你的攻擊真的打到人時，得到 1 ★。",
+      "effectId": "attack_vp",
+      "params": {
+        "vp": 1
+      }
+    },
+    {
+      "id": "o-razor-claw",
+      "name": "利爪",
+      "cost": 5,
+      "kind": "keep",
+      "text": "你攻擊時多造成 1 點傷害。",
+      "effectId": "attack_bonus",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-berserk",
+      "name": "狂怒",
+      "cost": 7,
+      "kind": "keep",
+      "text": "每回合都會多造成 1 點傷害，即使你沒有擲出 💥。",
+      "effectId": "attack_bonus",
+      "params": {
+        "n": 1,
+        "always": true
+      }
+    },
+    {
+      "id": "o-tunnel",
+      "name": "地底突襲",
+      "cost": 5,
+      "kind": "keep",
+      "text": "攻擊東京內的怪獸時多造成 1 點傷害；你讓出東京時，對接手者造成 1 點傷害。",
+      "effectId": "tokyo_target_bonus",
+      "params": {
+        "n": 1,
+        "yieldDamage": 1
+      }
+    },
+    {
+      "id": "o-city-lord",
+      "name": "都市領主",
+      "cost": 4,
+      "kind": "keep",
+      "text": "回合開始時若你在東京，多得 1 ★；你在東京攻擊時多造成 1 點傷害。",
+      "effectId": "tokyo_attacker",
+      "params": {
+        "startVp": 1,
+        "damage": 1
+      }
+    },
+    {
+      "id": "o-scorch",
+      "name": "灼熱鼻息",
+      "cost": 4,
+      "kind": "keep",
+      "text": "你造成傷害時，你左右兩側的鄰座各多受到 1 點傷害（不算攻擊）。",
+      "effectId": "neighbor_damage",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-shockwave",
+      "name": "全域衝擊波",
+      "cost": 7,
+      "kind": "keep",
+      "text": "你的攻擊會傷害所有其他怪獸。",
+      "effectId": "nova",
+      "params": {}
+    },
+    {
+      "id": "o-menace",
+      "name": "震懾咆哮",
+      "cost": 3,
+      "kind": "keep",
+      "text": "被你的攻擊傷到的東京怪獸必須讓位。",
+      "effectId": "forced_yield",
+      "params": {}
+    },
+    {
+      "id": "o-plating",
+      "name": "鋼鐵裝甲",
+      "cost": 4,
+      "kind": "keep",
+      "text": "你受到的傷害若剛好是 1 點，忽略它。",
+      "effectId": "armor",
+      "params": {
+        "max": 1
+      }
+    },
+    {
+      "id": "o-mimicry-skin",
+      "name": "保護色",
+      "cost": 3,
+      "kind": "keep",
+      "text": "你受傷時，每 1 點傷害擲 1 顆骰子；擲出 ❤ 就免除那 1 點。",
+      "effectId": "camouflage",
+      "params": {}
+    },
+    {
+      "id": "o-mirror-scale",
+      "name": "鏡面鱗甲",
+      "cost": 6,
+      "kind": "keep",
+      "text": "你受到傷害時，造成傷害的怪獸也受到 1 點傷害。",
+      "effectId": "reflect",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-resolve",
+      "name": "越挫越勇",
+      "cost": 3,
+      "kind": "keep",
+      "text": "一次失去 2 點以上 HP 時，得到 1 ⚡。",
+      "effectId": "lose_hp_energy",
+      "params": {
+        "min": 2,
+        "energy": 1
+      }
+    },
+    {
+      "id": "o-gust-shield",
+      "name": "氣流護罩",
+      "cost": 6,
+      "kind": "keep",
+      "text": "花 2 ⚡：本回合你不會受到任何傷害。",
+      "effectId": "wings",
+      "params": {
+        "cost": 2
+      }
+    },
+    {
+      "id": "o-sidestep",
+      "name": "閃身步",
+      "cost": 4,
+      "kind": "keep",
+      "text": "每回合一次，花 1 ⚡，免除 1 點即將受到的傷害。",
+      "effectId": "super_jump",
+      "params": {
+        "cost": 1,
+        "n": 1
+      }
+    },
+    {
+      "id": "o-escape-rocket",
+      "name": "脫身火箭",
+      "cost": 5,
+      "kind": "keep",
+      "text": "你在東京被攻擊時，可以立刻讓位並完全不受那次攻擊的傷害。",
+      "effectId": "jets",
+      "params": {}
+    },
+    {
+      "id": "o-body-swap",
+      "name": "基因互換",
+      "cost": 3,
+      "kind": "keep",
+      "text": "你讓位時，可以從接手者那裡拿走 1 張保留卡，並把這張卡換給他。",
+      "effectId": "swap_on_yield",
+      "params": {}
+    },
+    {
+      "id": "o-venom",
+      "name": "毒液",
+      "cost": 4,
+      "kind": "keep",
+      "text": "你傷到怪獸時，給他 1 個毒指示物。毒指示物在他的回合結束時，每個造成 1 點傷害。",
+      "effectId": "counter_attack",
+      "params": {
+        "counter": "poison"
+      }
+    },
+    {
+      "id": "o-shrinker",
+      "name": "縮小光線",
+      "cost": 6,
+      "kind": "keep",
+      "text": "你傷到怪獸時，給他 1 個縮小指示物。每個縮小指示物讓他少擲 1 顆骰子。",
+      "effectId": "counter_attack",
+      "params": {
+        "counter": "shrink"
+      }
+    },
+    {
+      "id": "o-bloodthirst",
+      "name": "噬血",
+      "cost": 5,
+      "kind": "keep",
+      "text": "你每傷到 1 隻怪獸，回復 1 點 HP。",
+      "effectId": "lifesteal",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-undertaker",
+      "name": "收屍人",
+      "cost": 4,
+      "kind": "keep",
+      "text": "每當有怪獸的 HP 歸零，你得到 3 ★。",
+      "effectId": "death_vp",
+      "params": {
+        "vp": 3
+      }
+    },
+    {
+      "id": "o-return-egg",
+      "name": "再臨之卵",
+      "cost": 7,
+      "kind": "keep",
+      "text": "你被淘汰時，棄掉所有卡、失去所有 ★，回復到 10 HP 重新開始。",
+      "effectId": "revive_self",
+      "params": {
+        "hp": 10
+      }
+    },
+    {
+      "id": "o-blood-pact",
+      "name": "同命夥伴",
+      "cost": 4,
+      "kind": "keep",
+      "text": "若有人擊殺你，你以 10 HP 復活、失去所有 ★，並與他結為搭檔：任一方獲勝，兩人同時獲勝；他被淘汰時你也被淘汰。只能生效一次。",
+      "effectId": "revive_partner",
+      "params": {
+        "hp": 10
+      }
+    },
+    {
+      "id": "o-press-office",
+      "name": "公關團隊",
+      "cost": 3,
+      "kind": "keep",
+      "text": "你每買下 1 張卡，得到 1 ★。",
+      "effectId": "vp_on_buy",
+      "params": {
+        "vp": 1
+      }
+    },
+    {
+      "id": "o-capacitor",
+      "name": "儲能電容",
+      "cost": 3,
+      "kind": "keep",
+      "text": "回合結束時，你每有 6 ⚡ 就得到 1 ★。",
+      "effectId": "end_energy_vp",
+      "params": {
+        "per": 6,
+        "vp": 1
+      }
+    },
+    {
+      "id": "o-solar-panel",
+      "name": "太陽能板",
+      "cost": 2,
+      "kind": "keep",
+      "text": "回合結束時若你沒有 ⚡，得到 1 ⚡。",
+      "effectId": "end_empty_energy",
+      "params": {
+        "n": 1
+      }
+    },
+    {
+      "id": "o-pacifist",
+      "name": "和平主義",
+      "cost": 5,
+      "kind": "keep",
+      "text": "回合結束時若你本回合沒有傷害任何怪獸，得到 1 ★。",
+      "effectId": "end_peaceful_vp",
+      "params": {
+        "vp": 1
+      }
+    },
+    {
+      "id": "o-heavy-hitter",
+      "name": "重拳出擊",
+      "cost": 4,
+      "kind": "keep",
+      "text": "若你本回合總共造成 3 點以上傷害，得到 2 ★。",
+      "effectId": "big_hit_vp",
+      "params": {
+        "min": 3,
+        "vp": 2
+      }
+    },
+    {
+      "id": "o-comeback",
+      "name": "後來居上",
+      "cost": 3,
+      "kind": "keep",
+      "text": "任何回合結束時，若你的 ★ 最少（並列也算），得到 1 ★。",
+      "effectId": "end_underdog",
+      "params": {
+        "vp": 1
+      }
+    },
+    {
+      "id": "o-quake",
+      "name": "震地步伐",
+      "cost": 3,
+      "kind": "keep",
+      "text": "若你本回合得到 4 ★ 以上，所有怪獸少擲 1 顆骰子，直到你的下一個回合開始。",
+      "effectId": "stomp",
+      "params": {
+        "min": 4
+      }
+    },
+    {
+      "id": "o-spare-cells",
+      "name": "備用電池",
+      "cost": 2,
+      "kind": "keep",
+      "text": "買下時可從你的 ⚡ 放上任意數量；每個你的回合開始，取下 2 ⚡ 進入你的庫存；取完後棄掉。",
+      "effectId": "batteries",
+      "params": {
+        "perTurn": 2
+      }
+    },
+    {
+      "id": "o-chameleon",
+      "name": "變色龍之眼",
+      "cost": 8,
+      "kind": "keep",
+      "text": "買下時選擇場上任一張保留卡，視同你剛買下一張相同的卡。你的回合開始時可花 1 ⚡ 改選目標。目標離場時，重新指定前這張卡沒有效果。",
+      "effectId": "mimic",
+      "params": {
+        "switchCost": 1
+      }
+    },
+    {
+      "id": "o-leech",
+      "name": "寄生觸手",
+      "cost": 4,
+      "kind": "keep",
+      "text": "你可以向其他怪獸購買他們的保留卡，把費用付給他。",
+      "effectId": "buy_from_others",
+      "params": {}
+    },
+    {
+      "id": "o-oracle",
+      "name": "先知",
+      "cost": 2,
+      "kind": "keep",
+      "text": "買牌階段可偷看牌庫頂的一張卡，並以一般費用購買它。",
+      "effectId": "peek_buy",
+      "params": {}
+    },
+    {
+      "id": "o-vulture",
+      "name": "機會主義者",
+      "cost": 3,
+      "kind": "keep",
+      "text": "每當有新卡翻開，你可以在別人之前立即購買它。",
+      "effectId": "opportunist",
+      "params": {}
+    },
+    {
+      "id": "o-mending-beam",
+      "name": "治癒光束",
+      "cost": 4,
+      "kind": "keep",
+      "text": "你的 ❤ 可以用來治療其他怪獸；他們每回復 1 點要付你 2 ⚡（不足就付全部）。",
+      "effectId": "heal_others",
+      "params": {
+        "rate": 2
+      }
+    },
+    {
+      "id": "o-disassemble",
+      "name": "拆解重組",
+      "cost": 3,
+      "kind": "keep",
+      "text": "買牌階段結束前，你可以賣掉任意張保留卡，每張得到它的卡面費用。",
+      "effectId": "metamorph",
+      "params": {}
+    },
+    {
+      "id": "o-time-rift",
+      "name": "時間裂縫",
+      "cost": 5,
+      "kind": "keep",
+      "text": "若你本回合擲出三顆以上的 [1]，你可以在回合結束後再進行一個回合，但少擲 1 顆骰子。",
+      "effectId": "extra_turn_triple",
+      "params": {
+        "penalty": 1
+      }
+    },
+    {
+      "id": "o-quick-mend",
+      "name": "急速癒合",
+      "cost": 3,
+      "kind": "keep",
+      "text": "花 2 ⚡，回復 1 點 HP。",
+      "effectId": "rapid_heal",
+      "params": {
+        "cost": 2,
+        "heal": 1
+      }
+    },
+    {
+      "id": "o-power-nap",
+      "name": "儲能轉換",
+      "cost": 3,
+      "kind": "keep",
+      "text": "花 3 ⚡，得到 1 ★。",
+      "effectId": "energy_to_vp",
+      "params": {
+        "cost": 3,
+        "vp": 1
+      }
+    }
+  ]
+}

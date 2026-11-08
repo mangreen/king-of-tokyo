@@ -253,7 +253,8 @@ describe('動作資訊', () => {
     const s = makeState({ players: 4, monsters: { 2: { location: 'city' } } });
     expect(currentActor(s)).toBe(0);
     const yielding = resolveWith(s, [A, 1, 1, 2, 2, 3]).state;
-    expect(yielding.phase).toBe('yield');
+    expect(yielding.phase).toBe('prompt');
+    expect(yielding.pending?.kind).toBe('yield');
     expect(currentActor(yielding)).toBe(2);
   });
 

@@ -1,0 +1,568 @@
+{
+  "032b2db404d945c84ef52802ffd55615e31e25e7094aa30588027142485a477e": {
+    "effectId": "reroll_threes",
+    "params": {}
+  },
+  "038ae48fee8bb80216c82180df8863a2241d06ad6e285e6ab39532e44383abc7": {
+    "effectId": "reflect",
+    "params": {
+      "n": 1
+    }
+  },
+  "0caf38f68d41ed3325ca0bb0b593be8b7d6b967e3f7fc0fcab832f6a4169f84f": {
+    "effectId": "heal_others",
+    "params": {
+      "rate": 2
+    }
+  },
+  "0cb96ecf1ffa75850d040345a4a0870425fb04e1f49e9a4110af60929de000f3": {
+    "effectId": "vp_on_buy",
+    "params": {
+      "vp": 1
+    }
+  },
+  "10723e75f8e7fb2ceadd48d34c2ba836dc9c5b90d1e1d129fe04fcd9c93d6d56": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 9,
+          "op": "energy"
+        }
+      ]
+    }
+  },
+  "15eff425a5a2d103cde53ed8b7cd698391b05658f58e11de48ca645764431169": {
+    "effectId": "revive_self",
+    "params": {
+      "hp": 10
+    }
+  },
+  "18d013af33573f117e8de535f71cc28729a8f6d5b68f6be9ca6ce6fb5de43348": {
+    "effectId": "opportunist",
+    "params": {}
+  },
+  "1cbc24eb80e806b01196f5fd17825677da5f10ac0df0b3f443649af1d5c4ddf6": {
+    "effectId": "triple_bonus",
+    "params": {
+      "damage": 2,
+      "face": 2
+    }
+  },
+  "1d3c5fd9b7f295f695967049c9dbf2d9cde1087a0adddddccc6611eba4ceb595": {
+    "effectId": "lifesteal",
+    "params": {
+      "n": 1
+    }
+  },
+  "1f1a4e7311b4c3ab6c1f5587d014be789cffa397b2f7ac8cceff5571268809a6": {
+    "effectId": "swap_on_yield",
+    "params": {}
+  },
+  "2056a5304d292ebe5f6283ce4ff05ff97c64d7436f241e5c914c0b616473351c": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "vp"
+        },
+        {
+          "n": 2,
+          "op": "selfDamage"
+        }
+      ]
+    }
+  },
+  "24debbe22c8035c34c460ccf6e302d0358828c7db6f32ea0e21044383bf6a040": {
+    "effectId": "attack_bonus",
+    "params": {
+      "n": 1
+    }
+  },
+  "28ef198078c8d2b88a454e28ae3863221c81fd087352350bee73df2bcbd9ae3a": {
+    "effectId": "counter_attack",
+    "params": {
+      "counter": "poison"
+    }
+  },
+  "2914fcd32115902048d7ecdc352f8fe6cbf9e71b3591d39b47ff754d510a85d9": {
+    "effectId": "rapid_heal",
+    "params": {
+      "cost": 2,
+      "heal": 1
+    }
+  },
+  "2a429a148761eee4f91277ef3d9a035e92e51b74876fa6da685947c607a4c938": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "vp"
+        },
+        {
+          "op": "othersLoseEnergyPer",
+          "per": 2
+        }
+      ]
+    }
+  },
+  "2a87722099377e70afbcacb763b427b9429949f1252d5364c6e59d55cf395349": {
+    "effectId": "big_hit_vp",
+    "params": {
+      "min": 3,
+      "vp": 2
+    }
+  },
+  "38a6e0bdc8dbdcb26471eae44feb462ae48b2dc7a088997ebc3ffbcf9a743141": {
+    "effectId": "neighbor_damage",
+    "params": {
+      "n": 1
+    }
+  },
+  "396e9ba2beda7b4635894f96a0b8fc1f7c8b75e51f68cf8e237fcf8214baaa97": {
+    "effectId": "heal_bonus",
+    "params": {
+      "n": 1
+    }
+  },
+  "40628df3038d31b89c61f3c544ce280aac08e400b9a04e13ea34bdf14cc59d68": {
+    "effectId": "energy_bonus",
+    "params": {
+      "n": 1
+    }
+  },
+  "40d38a3bb13de8d09b63db89729da7a1270ffbd3dd77eb58295bc69c9b68a189": {
+    "effectId": "reroll_charges",
+    "params": {
+      "charges": 3
+    }
+  },
+  "44ff30f3c7242b3c1bc814ba06c74ad1bad6e0796e5e99f48898f65f93d815ca": {
+    "effectId": "wings",
+    "params": {
+      "cost": 2
+    }
+  },
+  "4b29228fc720429159f62f43a6375b783b4c96b7aa7ee409461e9b2ae15aba87": {
+    "effectId": "jets",
+    "params": {}
+  },
+  "51d14d7fe450cead1896a1114dbb0693fa1e71727af728e7e1807a6618da6928": {
+    "effectId": "complete_set",
+    "params": {
+      "vp": 9
+    }
+  },
+  "524bea36f889e9989fb64bd5572e99822479cab69705273bcfe1146cf7df5346": {
+    "effectId": "batteries",
+    "params": {
+      "perTurn": 2
+    }
+  },
+  "533fc5a03b930751d810e4c5f4c0b09b7e07ff599ae685c792f1dad21615ccae": {
+    "effectId": "tokyo_attacker",
+    "params": {
+      "damage": 1,
+      "startVp": 1
+    }
+  },
+  "599f8341fe3e0fd23de7d89500b8224965ab536307049a175bcd30331d0918c5": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "heal"
+        }
+      ]
+    }
+  },
+  "692e51978c0e4aa1f130e5cb9a536421f7925c8bae0a2291414791b9f86ee000": {
+    "effectId": "mimic",
+    "params": {
+      "switchCost": 1
+    }
+  },
+  "6bae2b75bd1f8ee1ab147b6284aadbc2e0a6671f417a43cb92feac51d697844e": {
+    "effectId": "attack_vp",
+    "params": {
+      "vp": 1
+    }
+  },
+  "6cb360a9baa7f2960b443df156021e3c7f90f1ea60caa23f7321894f3fb5ada5": {
+    "effectId": "end_empty_energy",
+    "params": {
+      "n": 1
+    }
+  },
+  "6d65e1ec04390948825129f2e892e3266caf0a635dd2cd7761d70b805efc41c9": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "vp"
+        },
+        {
+          "n": 3,
+          "op": "heal"
+        }
+      ]
+    }
+  },
+  "726a339c2c636fc0ef202daf15f4987e45e954b2fc722b477ea759a23434130d": {
+    "effectId": "die_change",
+    "params": {
+      "cost": 0,
+      "discard": true,
+      "to": "any"
+    }
+  },
+  "7562fe443cc260114c3eef52651fd9b340cd378c0e550e316b802900eb03c132": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 3,
+          "op": "damageAll"
+        }
+      ]
+    }
+  },
+  "756e1073a69d8a529e233a293489c4022a778d102d1dad33ef7d957f0b3e7d92": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "damageOthers"
+        }
+      ]
+    }
+  },
+  "7e24dd931573c86919e9a9ce1fac33a023cce7e6990b3744d8d27fc7990c84a9": {
+    "effectId": "die_change",
+    "params": {
+      "cost": 2,
+      "to": "any"
+    }
+  },
+  "7e704e7a88d214815a1fc166665616d1ea6a4ff2717983a1a1bc942869383ad3": {
+    "effectId": "tokyo_target_bonus",
+    "params": {
+      "n": 1,
+      "yieldDamage": 1
+    }
+  },
+  "7f5b9133e556f386c798141d20c40861cc785c2774b8a139fe0e62aab381c1eb": {
+    "effectId": "metamorph",
+    "params": {}
+  },
+  "8082d8516e38ecb305495e11ab58cda9b142396344b50d5ab3c70b7d79ee8ee7": {
+    "effectId": "reroll_energy",
+    "params": {
+      "cost": 1
+    }
+  },
+  "863082b712aa8a4d66e2c03975dab3ba0b95dffd0d542aa4f147b4d629a82c8e": {
+    "effectId": "cost_discount",
+    "params": {
+      "n": 1
+    }
+  },
+  "87d609a33c732b88eb5c63c08e59c0121f80b24c60effa9b2e4917fd1271a846": {
+    "effectId": "extra_turn_triple",
+    "params": {
+      "penalty": 1
+    }
+  },
+  "8a54864c3328927f7f2b5633952834d568d7572e9f525a24935a8cb460f7f1c3": {
+    "effectId": "peek_buy",
+    "params": {}
+  },
+  "8b36b72ff879be9193a659a8367f9bcbcb593ae0e1a0b7e184e59a3bc6cc0c62": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 5,
+          "op": "vp"
+        },
+        {
+          "n": 4,
+          "op": "selfDamage"
+        }
+      ]
+    }
+  },
+  "8ddf6b3ed1e732bd72e43d4011d39748b67df1fb23c71103878b42bc8496d19f": {
+    "effectId": "max_hp",
+    "params": {
+      "n": 2
+    }
+  },
+  "8f2a4c25b0a01af8693bb43ec2ee52f76b9d9fc7c95c1e91b1196b69a1d49405": {
+    "effectId": "die_change",
+    "params": {
+      "cost": 0,
+      "once": true,
+      "to": 1
+    }
+  },
+  "939f88156a6be03c6bfab376a0de4563260a7f968e149b0064595354c074e28c": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 4,
+          "op": "vp"
+        }
+      ]
+    }
+  },
+  "93d54922883a80dd3f192d95b772e4c6f212f397f6a91e09ad3f246960dd5747": {
+    "effectId": "straight_vp",
+    "params": {
+      "vp": 2
+    }
+  },
+  "9f3027e49804fbf1d5db7ea6247f1093ae991fd1dd1dca4c50e699e3c8086c91": {
+    "effectId": "lose_hp_energy",
+    "params": {
+      "energy": 1,
+      "min": 2
+    }
+  },
+  "a2ed7053fcb5857d3ccd276f9a93c9e16d3ef30958b1da9c8496d86c71d69317": {
+    "effectId": "extra_rolls",
+    "params": {
+      "n": 1
+    }
+  },
+  "ab68748124162cf1b33102e51c96a37205a96f86ac149e11c135e3c3ffcfb0a1": {
+    "effectId": "buy_from_others",
+    "params": {}
+  },
+  "adf62b818cde1763ae789ddf07d444a17137c8794d9e3e59e3d19ef8fb4b378f": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 3,
+          "op": "vp"
+        }
+      ]
+    }
+  },
+  "ae43bd50f9fc84736680b95c60218a3c708466ca237767c76e2d049ac2c6d177": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "vp"
+        },
+        {
+          "n": 3,
+          "op": "damageOthers"
+        }
+      ]
+    }
+  },
+  "b09ecc4ef59a3c64a0fb3ec7918abdc558a9b18bd8478233817936d2c18336fb": {
+    "effectId": "revive_partner",
+    "params": {
+      "hp": 10
+    }
+  },
+  "b2fd5cdba2b1484db46c26a3426f70878d2b31f44f18f806fd262f34887a6320": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "damage": 1,
+          "op": "perCard",
+          "vp": 1
+        }
+      ]
+    }
+  },
+  "b31c3bede2adef43fde9200e5bb9fed305069e68edf4612f6f808c517c899554": {
+    "effectId": "end_underdog",
+    "params": {
+      "vp": 1
+    }
+  },
+  "b38a679238200132b2f5140d5745df007cbcca6a3b09c9a32f83b69d7154925b": {
+    "effectId": "end_energy_vp",
+    "params": {
+      "per": 6,
+      "vp": 1
+    }
+  },
+  "b5565b9590ce6468c000258971527c6749739bfaf13de2e40055f3b637a62c5a": {
+    "effectId": "super_jump",
+    "params": {
+      "cost": 1,
+      "n": 1
+    }
+  },
+  "b8eb0921e9a6e6f7cda3983a09a9308b696df9890840cf77fb87e95c6b50e051": {
+    "effectId": "energy_to_vp",
+    "params": {
+      "cost": 3,
+      "vp": 1
+    }
+  },
+  "bc3c49f1c1f39716444c9ba2ad192047d3e11c4dee9591bc986081d99e93cac6": {
+    "effectId": "counter_attack",
+    "params": {
+      "counter": "shrink"
+    }
+  },
+  "bcea3764a11df7c506a5794eb913f3dec9caa9b84a9ab5ffa13825113c7c6872": {
+    "effectId": "end_peaceful_vp",
+    "params": {
+      "vp": 1
+    }
+  },
+  "bffec069b633be9ef969251c82fab9f08c42a65df07008b0d4cca381e74f8d1f": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "vp"
+        },
+        {
+          "op": "takeTokyo"
+        }
+      ]
+    }
+  },
+  "c88a642512e3e6959b916f32f53352c3f6cf05dba4bd34f21238e172306c6668": {
+    "effectId": "stomp",
+    "params": {
+      "min": 4
+    }
+  },
+  "cb2da3c390f0054b7efc4e52f3b221fc2e273327ce0a81f37a0da59f74552af0": {
+    "effectId": "nova",
+    "params": {}
+  },
+  "cbb1ef42f5658b91e34106bb434a3704c6b5f8948a9e080f4196cb4d700b2580": {
+    "effectId": "probe",
+    "params": {}
+  },
+  "d1eb08aaa75076120c4ce662c32d59b565255e88460b5bd0bed256b40936d407": {
+    "effectId": "extra_dice",
+    "params": {
+      "n": 1
+    }
+  },
+  "d41c3421332ffda7b79675b843cccc8b2be9716d49692c6b17e674c726bad4ef": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 4,
+          "op": "vp"
+        }
+      ]
+    }
+  },
+  "d51bb67453164fe77b52ee1f0f446abc945d83d574259a38ab0559a087db6328": {
+    "effectId": "camouflage",
+    "params": {}
+  },
+  "d852f024927257bf7c514d6f7e4bb74ec5ff5ec05af84c496f81517e47b3207b": {
+    "effectId": "attack_bonus",
+    "params": {
+      "always": true,
+      "n": 1
+    }
+  },
+  "df4f3bd7a48161236dc60a07118c1e6a6e765475e612293957d70be6e73ebc30": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 4,
+          "op": "vp"
+        },
+        {
+          "n": 3,
+          "op": "selfDamage"
+        }
+      ]
+    }
+  },
+  "e26e529880d757641933d064ff6b2068efb59023c9c8777ba477189a8e6a4e71": {
+    "effectId": "triple_bonus",
+    "params": {
+      "face": 1,
+      "vp": 2
+    }
+  },
+  "e2720c7c598cf90d5bf706a59b59749a6be2412400b70184699565aa6c643ba9": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 1,
+          "op": "vp"
+        }
+      ]
+    }
+  },
+  "e2826e78626bacd7fe10d8d754dd9edbcd866ef2bf441cfed4168f1630afb1eb": {
+    "effectId": "death_vp",
+    "params": {
+      "vp": 3
+    }
+  },
+  "edf1284e21c7ac15c0af580bd4df41d84307dfd8611b12c2609f52a689add0e7": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 5,
+          "op": "othersLoseVp"
+        }
+      ]
+    }
+  },
+  "f2e25ed01cf81f96ef19a44079655b934b0434aee58a4089d844e32d3bb64b78": {
+    "effectId": "forced_yield",
+    "params": {}
+  },
+  "f44faea484e767ed42f00a8c423239332e496eeee879cd7b8483910545875ee1": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "op": "extraTurn"
+        }
+      ]
+    }
+  },
+  "f629dafcb7c45af6f6cfda9ba62ae699dd052455847d42d1242a56fda308fd66": {
+    "effectId": "instant",
+    "params": {
+      "ops": [
+        {
+          "n": 2,
+          "op": "vp"
+        }
+      ]
+    }
+  },
+  "fda73519bd491be3b816468ed0821c554a13a6b8617fca1a07539aa0d690e24b": {
+    "effectId": "armor",
+    "params": {
+      "max": 1
+    }
+  }
+}

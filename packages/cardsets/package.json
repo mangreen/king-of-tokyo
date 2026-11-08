@@ -1,0 +1,24 @@
+{
+  "name": "@kot/cardsets",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "卡牌組：schema 驗證、載入、內容雜湊、官方 CSV 匯入（見 ADR-0004）",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "import": "tsx scripts/import-official.ts"
+  },
+  "dependencies": {
+    "@kot/rules": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "4.20.6",
+    "vitest": "^5.1.0"
+  }
+}
