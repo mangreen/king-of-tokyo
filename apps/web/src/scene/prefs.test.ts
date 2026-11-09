@@ -4,17 +4,24 @@ import { toSnapshot } from './snapshot.js';
 
 describe('scene prefs', () => {
   it('沒有儲存值 → 預設（自動畫質；減少動態偏好時關閉鏡頭運動）', () => {
-    expect(parsePrefs(null, false)).toEqual({ enabled: true, quality: 'auto', cameraMotion: true });
+    expect(parsePrefs(null, false)).toEqual({
+      enabled: true,
+      quality: 'auto',
+      cameraMotion: true,
+      follow: true,
+    });
     expect(parsePrefs(null, true).cameraMotion).toBe(false);
     expect(defaultPrefs(false).enabled).toBe(true);
   });
 
   it('正常讀回，壞資料逐欄退回預設', () => {
-    expect(parsePrefs('{"enabled":false,"quality":"low","cameraMotion":false}', false)).toEqual({
-      enabled: false,
-      quality: 'low',
-      cameraMotion: false,
-    });
+    expect(
+      parsePrefs('{"enabled":false,"quality":"low","cameraMotion":false,"follow":false}', false),
+    ).toEqual({ enabled: false, quality: 'low', cameraMotion: false, follow: false });
+    // 舊版偏好沒有 follow 欄位 → 預設開啟
+    expect(parsePrefs('{"enabled":true,"quality":"auto","cameraMotion":true}', false).follow).toBe(
+      true,
+    );
     expect(parsePrefs('{"enabled":"yes","quality":"ultra","cameraMotion":1}', false)).toEqual(
       defaultPrefs(false),
     );

@@ -8,6 +8,8 @@ import {
   clampView,
   dragPan,
   groundHit,
+  FOLLOW_ZOOM,
+  followView,
   isDefaultView,
   zoomAt,
 } from './view.js';
@@ -73,5 +75,19 @@ describe('user view', () => {
       2,
     );
     expect(v.zoom).toBe(ZOOM_MAX);
+  });
+
+  it('跟隨：怪獸會落在畫面中心，並且拉近', () => {
+    const v = followView({ x: -8, z: 6 }, OVERVIEW_POSE.lookAt);
+    expect(v.zoom).toBe(FOLLOW_ZOOM);
+    const hit = groundHit(applyView(OVERVIEW_POSE, v), A, 0, 0);
+    expect(hit?.x).toBeCloseTo(-8, 3);
+    expect(hit?.z).toBeCloseTo(6, 3);
+  });
+
+  it('跟隨很遠的目標時仍受平移上限限制', () => {
+    const v = followView({ x: 500, z: -500 }, OVERVIEW_POSE.lookAt);
+    expect(Math.abs(v.panX)).toBeLessThanOrEqual(PAN_LIMIT);
+    expect(Math.abs(v.panZ)).toBeLessThanOrEqual(PAN_LIMIT);
   });
 });

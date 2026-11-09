@@ -53,6 +53,7 @@ import {
   applyView,
   clampView,
   isDefaultView,
+  followView,
   zoomAt,
   type UserView,
 } from './view.js';
@@ -83,6 +84,8 @@ export interface RendererOptions {
   quality: QualitySetting;
   /** 鏡頭運動與震動（無障礙：prefers-reduced-motion 時預設關閉）。 */
   cameraMotion: boolean;
+  /** 鏡頭跟隨行動中的怪獸（預設開）。 */
+  follow?: boolean;
   seed: number;
   onTierChange?: (tier: QualityTier) => void;
   onFatal?: (reason: string) => void;
@@ -161,6 +164,7 @@ export class SceneRenderer {
   private viewCustom = false;
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private interacting = false;
+  private follow = true;
   private disposed = false;
   private lost = false;
   private frames = 0;
@@ -301,6 +305,7 @@ export class SceneRenderer {
     this.setting = opts.quality;
     this.tier = startTier(opts.quality);
     this.cameraMotion = opts.cameraMotion;
+    this.follow = opts.follow ?? true;
     const q = QUALITY[this.tier];
 
     try {
@@ -385,6 +390,11 @@ export class SceneRenderer {
   }
 
   // ── 對外介面 ─────────────────────────────────────
+
+  /** 鏡頭是否跟隨行動中的怪獸（還需要鏡頭運動開啟）。 */
+  setFollow(on: boolean): void {
+    this.follow = on;
+  }
 
   setCameraMotion(on: boolean): void {
     this.cameraMotion = on;
@@ -952,6 +962,14 @@ export class SceneRenderer {
       const t = (this.simMs - this.shotSpec.start) / this.shotSpec.dur;
       desired = poseFor(this.shotSpec.spec, spotOf, smoothstep(t));
       rate = 6;
+    } else if (this.follow && this.cameraMotion) {
+      // 沒有演出鏡頭時，跟著輪到行動的怪獸（它跳進東京、移動時鏡頭也跟著）
+      const seat = this.snapshot?.activeSeat ?? null;
+      const a = seat === null ? undefined : this.actors.get(seat);
+      if (a?.alive === true) {
+        desired = applyView(desired, followView({ x: a.x, z: a.z }, OVERVIEW_POSE.lookAt));
+        rate = 2.6;
+      }
     }
     const k = 1 - Math.exp(-dt * rate);
     this.pose = blendPose(this.pose, desired, k);

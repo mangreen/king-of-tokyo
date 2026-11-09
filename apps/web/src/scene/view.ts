@@ -27,6 +27,15 @@ export function isDefaultView(v: UserView): boolean {
   return Math.abs(v.panX) < 0.01 && Math.abs(v.panZ) < 0.01 && Math.abs(v.zoom - 1) < 0.005;
 }
 
+/** 跟隨行動中的怪獸：總覽姿態平移到怪獸身上並拉近（方位不變，地圖不會旋轉）。 */
+export const FOLLOW_ZOOM = 1.7;
+export function followView(
+  target: { x: number; z: number },
+  center: { x: number; z: number },
+): UserView {
+  return clampView({ panX: target.x - center.x, panZ: target.z - center.z, zoom: FOLLOW_ZOOM });
+}
+
 /** 把使用者視角套到一個基準姿態：沿視線推近／拉遠，再整體平移。 */
 export function applyView(base: CameraPose, v: UserView): CameraPose {
   const { position: p, lookAt: l } = base;

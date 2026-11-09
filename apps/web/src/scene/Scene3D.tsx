@@ -45,6 +45,7 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
   const [reduced, setReduced] = useState(prefersReducedMotion);
   // 系統要求減少動態時一律不做鏡頭運動／震動／停頓（即使偏好勾選了）
   const motion = prefs.cameraMotion && !reduced;
+  const follow = prefs.follow && motion;
 
   useEffect(() => watchReducedMotion(setReduced), []);
 
@@ -66,6 +67,7 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
         overlay,
         quality: prefs.quality,
         cameraMotion: motion,
+        follow,
         seed,
         onTierChange: setTier,
         onFatal: (reason) => {
@@ -99,6 +101,10 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
   useEffect(() => {
     rendererRef.current?.setCameraMotion(motion);
   }, [motion]);
+
+  useEffect(() => {
+    rendererRef.current?.setFollow(follow);
+  }, [follow]);
 
   // 先登記新事件（play 會加上 hold），再套用快照：這樣快照裡「結算後」的狀態
   // 會被 hold 擋住，等對應的演出播到才更新畫面。
@@ -194,6 +200,17 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
             >
               －
             </button>
+            <button
+              aria-label="鏡頭跟隨行動中的怪獸"
+              aria-pressed={follow}
+              disabled={!motion}
+              className={follow ? 'on' : undefined}
+              onClick={() => {
+                update({ follow: !prefs.follow });
+              }}
+            >
+              🎯
+            </button>
             {customView && (
               <button
                 className="reset"
@@ -251,6 +268,17 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
             }}
           />{' '}
           鏡頭動態與震動{reduced ? '（系統已要求減少動態）' : ''}
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={follow}
+            disabled={!motion}
+            onChange={(e) => {
+              update({ follow: e.target.checked });
+            }}
+          />{' '}
+          鏡頭跟隨行動中的怪獸
         </label>
         {typeof document !== 'undefined' && document.fullscreenEnabled && (
           <button className="link" onClick={toggleFullscreen}>
