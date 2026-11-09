@@ -27,6 +27,9 @@ const config: ServerConfig = {
   allowedOrigins: [ORIGIN],
   maxRooms: 10,
   cardSetsDir: 'card-sets',
+  maxConnections: 100,
+  webDir: null,
+  allowSameOrigin: false,
 };
 
 let app: App;

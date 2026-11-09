@@ -67,3 +67,39 @@ FROM nginx:stable-alpine AS web
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
+
+# ---------- demo（單一容器的試玩版，部署到 Cloud Run）----------
+# 伺服器直接提供網頁（同一個網址與埠），房間與玩家都在記憶體，沒有資料庫。
+# 只有明確執行 `make demo-image`（docker build --target demo）才會建置；
+# docker compose 與 CI 都不會碰它。
+FROM dev AS demo-build
+# VITE_SERVER_URL 設成空字串＝網頁連同一個網址；不帶 sourcemap；預先壓縮
+RUN pnpm --filter @kot/server build \
+    && VITE_SERVER_URL= VITE_NO_SOURCEMAP=1 pnpm --filter @kot/web build \
+    && node scripts/precompress.mjs apps/web/dist
+
+FROM node:22-alpine AS demo
+RUN rm -rf /usr/local/lib/node_modules \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
+WORKDIR /app
+COPY --from=server-deps /app/node_modules ./node_modules
+COPY --from=server-deps /app/apps/server/node_modules ./apps/server/node_modules
+COPY apps/server/package.json ./apps/server/package.json
+COPY --from=demo-build /app/apps/server/dist ./apps/server/dist
+COPY --from=demo-build /app/apps/web/dist ./web
+# 只帶原創卡組；使用者自備的卡表絕不進映像（見 .dockerignore）
+COPY card-sets/original ./card-sets/original
+# 限制：同時最多 5 個房間、30 個連線，保護 Cloud Run 免費額度。
+# PORT 由 Cloud Run 注入（預設 8080）；ALLOWED_ORIGINS 保留預設值，但同來源一律放行。
+ENV NODE_ENV=production \
+    CARD_SETS_DIR=/app/card-sets \
+    WEB_DIR=/app/web \
+    ALLOW_SAME_ORIGIN=true \
+    MAX_ROOMS=5 \
+    MAX_CONNECTIONS=30 \
+    PORT=8080
+USER node
+WORKDIR /app/apps/server
+EXPOSE 8080
+CMD ["node", "dist/main.js"]

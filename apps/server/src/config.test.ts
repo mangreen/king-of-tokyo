@@ -10,7 +10,28 @@ describe('loadConfig', () => {
       allowedOrigins: ['http://localhost:5173'],
       maxRooms: 2000,
       cardSetsDir: 'card-sets',
+      maxConnections: 10_000,
+      webDir: null,
+      allowSameOrigin: false,
     });
+  });
+
+  it('PORT（Cloud Run）可當作監聽埠，SERVER_PORT 優先', () => {
+    expect(loadConfig({ PORT: '8080' }).port).toBe(8080);
+    expect(loadConfig({ PORT: '8080', SERVER_PORT: '4000' }).port).toBe(4000);
+    expect(() => loadConfig({ PORT: 'x' })).toThrow(/環境變數設定錯誤/);
+  });
+
+  it('試玩版設定：連線數上限、網頁目錄、同來源', () => {
+    const c = loadConfig({
+      MAX_CONNECTIONS: '30',
+      WEB_DIR: '/app/web',
+      ALLOW_SAME_ORIGIN: 'true',
+    });
+    expect(c).toMatchObject({ maxConnections: 30, webDir: '/app/web', allowSameOrigin: true });
+    expect(loadConfig({ WEB_DIR: '  ' }).webDir).toBeNull();
+    expect(() => loadConfig({ MAX_CONNECTIONS: '0' })).toThrow(/環境變數設定錯誤/);
+    expect(() => loadConfig({ ALLOW_SAME_ORIGIN: 'yes' })).toThrow(/環境變數設定錯誤/);
   });
 
   it('解析逗號分隔的來源並去除空白', () => {

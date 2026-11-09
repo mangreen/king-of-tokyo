@@ -35,6 +35,7 @@ pnpm --filter @kot/rules run play -- --players 4 --seed 7   # 規則引擎文字
 pnpm run dev:server   # 本機直接跑 server（不用 Docker）
 pnpm run dev:web      # 本機直接跑 web
 docker compose up --build   # 完整開發環境（需 cp .env.example .env）
+make demo-image             # 單一容器的試玩版 image（Cloud Run；只有這個指令才會建，見 docs/runbooks/cloud-run-demo.md）
 ```
 
 ## 環境約束（重要）
