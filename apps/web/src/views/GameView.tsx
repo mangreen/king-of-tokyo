@@ -117,6 +117,7 @@ export function GameView({
       labelCtx={labelCtx}
       prompt={prompt}
       log={log}
+      feed={feed}
       kept={kept}
       spins={spins.counts}
       canToggle={canToggle}

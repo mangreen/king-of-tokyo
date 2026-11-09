@@ -1,8 +1,13 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import type { Action, GameState, Monster, RulesEnv } from '@kot/rules';
 import type { GameActionInput, RoomSnapshot } from '@kot/protocol';
 import type { ActionGroup, LabelContext } from '../actions.js';
 import { Countdown } from '../views/Countdown.js';
+import type { EventBatch } from '../state.js';
+import { latestVersion, takeNew } from '../scene/feed.js';
+import { noticesFor, shopNotice } from './notices.js';
+import { shouldHoldEndTurn } from './shopGate.js';
+import { ToastHost, type Toast } from './Toasts.js';
 import { Tip } from './Tip.js';
 import {
   ActionPanel,
@@ -14,6 +19,8 @@ import {
   ShopPanel,
 } from './Panels.js';
 import { endRules } from './rulesText.js';
+
+const MAX_TOASTS = 4;
 
 export type HudTab = 'players' | 'shop' | 'log' | 'rules' | 'mine';
 
@@ -39,6 +46,8 @@ export interface HudProps {
   labelCtx: LabelContext;
   prompt: string;
   log: string[];
+  /** 事件批次（用來挑出重大事件提示）。 */
+  feed: EventBatch[];
   // 骰子
   kept: ReadonlySet<number>;
   spins: number[];
@@ -77,6 +86,51 @@ export function GameHud(p: HudProps) {
     setAuto({ key: auto.key, opened: false });
     if (tab === 'shop') setTab('players');
   }
+
+  // 提示（toast）：重大事件＋「商店可以買」。用「渲染中推導狀態」，不用 effect。
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [seen, setSeen] = useState(() => latestVersion(p.feed));
+  const [shopShownFor, setShopShownFor] = useState<string | null>(null);
+  // 這個買牌階段已按過「離開商店」（之後才會出現「結束回合」）
+  const [leftShopFor, setLeftShopFor] = useState<string | null>(null);
+  const latest = latestVersion(p.feed);
+  if (latest > seen) {
+    const added = takeNew(p.feed, seen).batches.flatMap((b) =>
+      noticesFor(b.events, {
+        mySeat: p.mySeat,
+        nameOf: p.nameOf,
+        cardName: (id) => p.env.cards[id]?.name ?? id,
+        victoryPoints: state.config.victoryPoints,
+        vpNow: (seat) => state.monsters.find((m) => m.seat === seat)?.vp ?? 0,
+      }).map((n): Toast => ({ ...n, key: `${String(b.version)}-${n.id}` })),
+    );
+    setSeen(latest);
+    if (added.length > 0) setToasts((t) => [...t, ...added].slice(-MAX_TOASTS));
+  }
+  if (buyKey !== null && buyKey !== shopShownFor && p.marketBuys.length > 0) {
+    setShopShownFor(buyKey);
+    const n = shopNotice(p.marketBuys.length);
+    if (n)
+      setToasts((t) =>
+        [...t.filter((x) => x.action !== 'shop'), { ...n, key: `shop-${buyKey}` }].slice(
+          -MAX_TOASTS,
+        ),
+      );
+  }
+  const holdEndTurn = shouldHoldEndTurn(buyKey, leftShopFor, p.marketBuys.length);
+  const leaveShop = (): void => {
+    setLeftShopFor(buyKey);
+    if (tab === 'shop') setTab('players');
+  };
+  const dismiss = useCallback((key: string) => {
+    setToasts((t) => t.filter((x) => x.key !== key));
+  }, []);
+  const openShop = (): void => {
+    setTab('shop');
+    document.querySelector('.hud-info')?.scrollIntoView({ block: 'nearest' });
+  };
+  // 離開買牌階段後，「商店可以買」就不再有意義
+  const shownToasts = toasts.filter((t) => t.action !== 'shop' || buyKey !== null);
 
   const me: Monster | undefined = state.monsters.find((m) => m.seat === p.mySeat);
   const rules = ruleConfigOf(state);
@@ -138,6 +192,8 @@ export function GameHud(p: HudProps) {
             groups={p.groups}
             labelCtx={p.labelCtx}
             onAct={p.onAct}
+            holdEndTurn={holdEndTurn}
+            onLeaveShop={leaveShop}
           />
         </div>
       )}
@@ -187,6 +243,13 @@ export function GameHud(p: HudProps) {
         </div>
       </div>
       {p.tools}
+      <ToastHost
+        toasts={shownToasts}
+        onDismiss={dismiss}
+        onAction={() => {
+          openShop();
+        }}
+      />
     </div>
   );
 }

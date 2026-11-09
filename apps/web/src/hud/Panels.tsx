@@ -268,6 +268,9 @@ interface ActionProps {
   labelCtx: LabelContext;
   onAct: Act;
   extra?: ReactNode;
+  /** 商店還有買得起的牌、玩家也還沒按「離開商店」：結束回合的按鈕先換成「離開商店」。 */
+  holdEndTurn?: boolean;
+  onLeaveShop?: () => void;
 }
 
 export function ActionPanel(p: ActionProps) {
@@ -356,19 +359,31 @@ export function ActionPanel(p: ActionProps) {
         <div className="actions">
           {p.groups.map((g) =>
             g.title === null ? (
-              g.actions.map((a) => (
-                <button
-                  key={g.key}
-                  className={
-                    a.type === 'endTurn' || a.type === 'yieldDecision' ? 'primary' : undefined
-                  }
-                  onClick={() => {
-                    p.onAct(toIntent(a));
-                  }}
-                >
-                  {labelAction(a, p.labelCtx)}
-                </button>
-              ))
+              g.actions.map((a) =>
+                a.type === 'endTurn' && p.holdEndTurn ? (
+                  <button
+                    key={g.key}
+                    className="leave-shop"
+                    onClick={() => {
+                      p.onLeaveShop?.();
+                    }}
+                  >
+                    🚪 離開商店
+                  </button>
+                ) : (
+                  <button
+                    key={g.key}
+                    className={
+                      a.type === 'endTurn' || a.type === 'yieldDecision' ? 'primary' : undefined
+                    }
+                    onClick={() => {
+                      p.onAct(toIntent(a));
+                    }}
+                  >
+                    {labelAction(a, p.labelCtx)}
+                  </button>
+                ),
+              )
             ) : (
               <details key={g.key} className="use-group">
                 <summary>使用 {g.title}</summary>

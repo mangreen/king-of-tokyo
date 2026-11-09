@@ -202,14 +202,15 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
             </button>
             <button
               aria-label="鏡頭跟隨行動中的怪獸"
+              title={follow ? '鏡頭跟隨：開' : '鏡頭跟隨：關'}
               aria-pressed={follow}
               disabled={!motion}
-              className={follow ? 'on' : undefined}
+              className={`follow-btn ${follow ? 'on' : 'off'}`}
               onClick={() => {
                 update({ follow: !prefs.follow });
               }}
             >
-              🎯
+              🎥
             </button>
             {customView && (
               <button

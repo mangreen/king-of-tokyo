@@ -888,3 +888,96 @@ main.wide {
   border-bottom: 0;
   border-radius: 11px;
 }
+
+/* 提示（toast） */
+.toast-host {
+  position: fixed;
+  z-index: 900;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  width: min(26rem, calc(100vw - 1.5rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border: 2.5px solid #1d1b16;
+  border-radius: 12px;
+  box-shadow: 3px 4px 0 #1d1b16;
+  background: var(--card);
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 0.95rem;
+  animation: toast-in 0.22s ease-out;
+}
+.toast.good {
+  background: #d9f2c4;
+  color: #1d1b16;
+}
+.toast.warn {
+  background: #ffe29a;
+  color: #1d1b16;
+}
+.toast.danger {
+  background: #ffb3a1;
+  color: #1d1b16;
+}
+.toast-icon {
+  font-size: 1.3rem;
+}
+.toast-text {
+  flex: 1;
+}
+.toast button {
+  min-height: 2rem;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.85rem;
+  color: #1d1b16;
+}
+.toast-action {
+  background: #fff;
+  font-weight: 800;
+}
+.toast-close {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+.hud-info {
+  scroll-margin-top: calc(42vh + 1rem);
+}
+
+/* 商店還能買時的「離開商店」與鏡頭跟隨開關 */
+.leave-shop {
+  background: #ffb02e;
+  color: #1d1b16;
+  border-color: #1d1b16;
+  font-weight: 800;
+}
+.map-controls .follow-btn.on {
+  background: #8fdc6b;
+  color: #1d1b16;
+}
+.map-controls .follow-btn.off {
+  background: #c9c4b8;
+  color: #6b665b;
+  filter: grayscale(1);
+}
