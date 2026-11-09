@@ -25,6 +25,8 @@ make demo-run            # http://localhost:8080
 在 Apple Silicon 上建置要加 `--platform linux/amd64`（Cloud Run 要 amd64）；Intel Mac 不用。
 用兩個瀏覽器分頁（或一個一般視窗＋一個無痕視窗）登入不同暱稱，建房、加入、開始，確認可以完整玩一局。
 
+`make demo-run` 用 Ctrl+C 就會乾淨結束並自動移除容器（`--rm`）。如果容器卡住（舊版伺服器有這個問題，已修正），先 `docker stop kot-demo`（等不到就 `docker kill kot-demo`），再 `docker rmi kot-demo`；image 只要還有容器在用（即使已停止）就刪不掉。
+
 建完請看一下 image 大小並回報：`docker image ls kot-demo`（我預估壓縮後約 60–80 MB，這是估計，沒有量過）。
 
 ## 2. 第一次部署（區域：台灣 `asia-east1`）

@@ -115,8 +115,11 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     });
   });
 
-  fastify.addHook('onClose', async () => {
-    // io.close() 會一併關閉底層 http server；Fastify 隨後的關閉對已停止的 server 是無害的
+  // 必須在 preClose（Fastify 開始等待連線結束「之前」）就把 Socket.IO 關掉：
+  // 已升級成 WebSocket 的連線不會被 Fastify 當成閒置連線關閉，若等到 onClose 才處理，
+  // 只要還有玩家連著，close() 就永遠等不到結束（docker stop／Ctrl+C 會卡到被強制砍掉）。
+  // io.close() 會一併關閉底層 http server；Fastify 隨後的關閉對已停止的 server 是無害的。
+  fastify.addHook('preClose', async () => {
     await io.close();
   });
 

@@ -183,3 +183,19 @@ describe('連線數上限', () => {
     expect(await hello).toMatchObject({ nickname: 'late' });
   });
 });
+
+describe('優雅關閉', () => {
+  it('還有玩家連著時 close() 也會結束（不會卡住，否則 docker stop／Ctrl+C 會掛住）', async () => {
+    const { app, url, host } = await start(config({ maxConnections: 5 }));
+    const s = client(url, { Origin: `http://${host}` });
+    await whenConnected(s);
+    const hello = new Promise<unknown>((resolve) => s.once(EVENTS.serverHello, resolve));
+    s.emit(EVENTS.clientHello, { protocolVersion: PROTOCOL_VERSION, nickname: 'stay' });
+    await hello;
+    const closed = await Promise.race([
+      app.fastify.close().then(() => 'closed'),
+      new Promise((r) => setTimeout(() => r('hung'), 3000)),
+    ]);
+    expect(closed).toBe('closed');
+  }, 10_000);
+});
