@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { latestVersion, takeNew, type FeedBatch } from './feed.js';
 import { prefersReducedMotion, savePrefs, watchReducedMotion, type ScenePrefs } from './prefs.js';
+import { followClick, followTitle, followUi } from './followState.js';
 import { SceneRenderer, type SceneSnapshot } from './SceneRenderer.js';
 import type { QualitySetting, QualityTier } from './quality.js';
 
@@ -46,6 +47,8 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
   // 系統要求減少動態時一律不做鏡頭運動／震動／停頓（即使偏好勾選了）
   const motion = prefs.cameraMotion && !reduced;
   const follow = prefs.follow && motion;
+  // 手動拖曳／縮放後自動鏡頭暫停：UI 要反映「實際」狀態
+  const followState = followUi(prefs.follow, motion, customView);
 
   useEffect(() => watchReducedMotion(setReduced), []);
 
@@ -160,6 +163,12 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
     onPrefs(next);
   };
 
+  const toggleFollow = (): void => {
+    const c = followClick(prefs.follow, customView);
+    if (c.resetView) rendererRef.current?.resetView();
+    if (c.pref !== prefs.follow) update({ follow: c.pref });
+  };
+
   return (
     <section className="scene" aria-label="3D 戰場與遊戲操作">
       <div
@@ -207,12 +216,12 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
             </button>
             <button
               aria-label="鏡頭跟隨行動中的怪獸"
-              title={follow ? '鏡頭跟隨：開' : '鏡頭跟隨：關'}
-              aria-pressed={follow}
+              title={followTitle(followState)}
+              aria-pressed={followState.active}
               disabled={!motion}
-              className={`follow-btn ${follow ? 'on' : 'off'}`}
+              className={`follow-btn ${followState.active ? 'on' : followState.paused ? 'paused' : 'off'}`}
               onClick={() => {
-                update({ follow: !prefs.follow });
+                toggleFollow();
               }}
             >
               🎥
@@ -278,10 +287,10 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
         <label>
           <input
             type="checkbox"
-            checked={follow}
+            checked={followState.active}
             disabled={!motion}
-            onChange={(e) => {
-              update({ follow: e.target.checked });
+            onChange={() => {
+              toggleFollow();
             }}
           />{' '}
           鏡頭跟隨行動中的怪獸

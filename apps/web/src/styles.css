@@ -976,6 +976,12 @@ main.wide {
   background: #8fdc6b;
   color: #1d1b16;
 }
+.map-controls .follow-btn.paused {
+  background: #c9c4b8;
+  color: #1d1b16;
+  outline: 3px dashed #4f9a2f;
+  outline-offset: -3px;
+}
 .map-controls .follow-btn.off {
   background: #c9c4b8;
   color: #6b665b;
