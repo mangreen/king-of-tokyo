@@ -1,11 +1,16 @@
-import { useState } from 'react';
-import type { Action, CardDef, Face, Monster } from '@kot/rules';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import type { Action, CardDef, Monster } from '@kot/rules';
 import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
 import { envOf, groupActions, labelAction, myActions, toIntent } from '../actions.js';
 import { Countdown } from './Countdown.js';
+import { Die3D } from '../scene/Die3D.js';
+import { nextSpins } from '../scene/dice.js';
+import { loadPrefs, savePrefs, seedFromCode, webglAvailable } from '../scene/prefs.js';
+import { toSnapshot } from '../scene/snapshot.js';
+import type { EventBatch } from '../state.js';
 
-const FACE_TEXT: Record<string, string> = { energy: '⚡', attack: '💥', heal: '❤️' };
-const faceText = (face: Face): string => FACE_TEXT[String(face)] ?? String(face);
+// 3D 場景（Three.js）動態載入：大廳與房間不必下載它
+const Scene3D = lazy(() => import('../scene/Scene3D.js'));
 
 const EMPTY_SET: ReadonlySet<number> = new Set();
 
@@ -23,12 +28,38 @@ interface Props {
   selfId: string;
   cards: CardDef[] | null;
   log: string[];
+  feed: EventBatch[];
   onAct: (action: GameActionInput) => void;
   onLeave: () => void;
 }
 
-export function GameView({ room, game, deadlineAt, selfId, cards, log, onAct, onLeave }: Props) {
+export function GameView({
+  room,
+  game,
+  deadlineAt,
+  selfId,
+  cards,
+  log,
+  feed,
+  onAct,
+  onLeave,
+}: Props) {
   const { state } = game;
+  const [prefs, setPrefs] = useState(loadPrefs);
+  // 每顆骰子的轉動次數：新的一批事件有重擲／改骰時加一（render 期間依 version 推導，不用 effect）
+  const [spins, setSpins] = useState<{ version: number; counts: number[] }>(() => ({
+    version: game.version,
+    counts: [],
+  }));
+  if (spins.version !== game.version) {
+    setSpins({ version: game.version, counts: nextSpins(spins.counts, game.events) });
+  }
+  const [canGL] = useState(() => webglAvailable());
+  const snapshot = useMemo(
+    () => toSnapshot(room, state, game.actorSeat, selfId),
+    [room, state, game.actorSeat, selfId],
+  );
+  const seed = useMemo(() => seedFromCode(room.code), [room.code]);
   const mySeat = room.players.find((p) => p.id === selfId)?.seat ?? null;
   const nameOf = (seat: number): string =>
     room.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
@@ -92,6 +123,28 @@ export function GameView({ room, game, deadlineAt, selfId, cards, log, onAct, on
             : '全員淘汰，沒有勝者'}
           （{REASON_TEXT[state.outcome.reason]}）
         </div>
+      )}
+
+      {canGL && prefs.enabled ? (
+        <Suspense fallback={<p className="muted scene-loading">載入 3D 場景…</p>}>
+          <Scene3D snapshot={snapshot} feed={feed} prefs={prefs} onPrefs={setPrefs} seed={seed} />
+        </Suspense>
+      ) : (
+        <p className="muted">
+          {canGL ? '3D 場景已關閉。' : '這個瀏覽器不支援 WebGL，已使用純文字介面。'}{' '}
+          {canGL && (
+            <button
+              className="link"
+              onClick={() => {
+                const next = { ...prefs, enabled: true };
+                savePrefs(next);
+                setPrefs(next);
+              }}
+            >
+              開啟 3D
+            </button>
+          )}
+        </p>
       )}
 
       <section className="tokyo">
@@ -213,7 +266,7 @@ export function GameView({ room, game, deadlineAt, selfId, cards, log, onAct, on
                   }}
                   aria-pressed={kept.has(i)}
                 >
-                  {faceText(face)}
+                  <Die3D face={face} spin={spins.counts[i] ?? 0} />
                 </button>
               ))
             )}

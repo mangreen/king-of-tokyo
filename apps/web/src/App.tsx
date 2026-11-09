@@ -37,6 +37,7 @@ export function App() {
         selfId={connection.playerId}
         cards={state.cards}
         log={state.log}
+        feed={state.feed}
         onAct={client.act}
         onLeave={client.leaveRoom}
       />
@@ -64,8 +65,9 @@ export function App() {
     );
   }
 
+  const inGame = Boolean(room && game && room.phase !== 'lobby');
   return (
-    <main>
+    <main className={inGame ? 'wide' : undefined}>
       <h1>東京之王 King of Tokyo</h1>
       {connection.status === 'reconnecting' && (
         <div className="notice" role="status">

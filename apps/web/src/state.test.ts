@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, defaultConfig } from '@kot/rules';
 import { PROTOCOL_VERSION, type GameUpdateMessage, type RoomSnapshot } from '@kot/protocol';
-import { appReducer, initialAppState, LOG_LIMIT, selfPlayer, type AppState } from './state.js';
+import {
+  appReducer,
+  FEED_LIMIT,
+  initialAppState,
+  LOG_LIMIT,
+  selfPlayer,
+  type AppState,
+} from './state.js';
 
 const TOKEN = 'ab'.repeat(32);
 const hello = {
@@ -111,7 +118,7 @@ describe('房間狀態', () => {
     state = appReducer(state, { type: 'game-update', payload: update(1), at: 0 });
     expect(state.log.length).toBeGreaterThan(0);
     state = appReducer(state, { type: 'room-state', payload: { room: null } });
-    expect(state).toMatchObject({ room: null, game: null, deadlineAt: null, log: [] });
+    expect(state).toMatchObject({ room: null, game: null, deadlineAt: null, log: [], feed: [] });
   });
 
   it('格式不符的房間訊息被忽略', () => {
@@ -127,6 +134,20 @@ describe('對局更新', () => {
     expect(state.game?.version).toBe(0);
     expect(state.deadlineAt).toBe(31_000);
     expect(state.log.some((line) => line.includes('先手'))).toBe(true);
+  });
+
+  it('事件批次進入 feed（供 3D 重播）；沒有事件的重送不進 feed；長度有上限', () => {
+    let state = appReducer(online(), { type: 'game-update', payload: update(0), at: 0 });
+    expect(state.feed).toHaveLength(1);
+    expect(state.feed[0]?.version).toBe(0);
+    expect(state.feed[0]?.events.length).toBeGreaterThan(0);
+    state = appReducer(state, { type: 'game-update', payload: update(0, false), at: 5 });
+    expect(state.feed).toHaveLength(1);
+    for (let v = 1; v <= FEED_LIMIT + 10; v++) {
+      state = appReducer(state, { type: 'game-update', payload: update(v), at: v });
+    }
+    expect(state.feed).toHaveLength(FEED_LIMIT);
+    expect(state.feed.at(-1)?.version).toBe(FEED_LIMIT + 10);
   });
 
   it('重連時的完整重送（沒有事件）不會重複寫入日誌', () => {
