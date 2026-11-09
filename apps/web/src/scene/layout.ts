@@ -20,7 +20,7 @@ export interface Point {
 }
 
 /** 外圍怪獸所在圓圈的半徑。 */
-export const RING_RADIUS = 12.5;
+export const RING_RADIUS = 13.5;
 /** 單隻怪獸占地半徑（建築與地標都要避開）。 */
 export const MONSTER_FOOTPRINT = 3.2;
 /** 東京市中央廣場半徑。 */
@@ -93,11 +93,23 @@ export const BAY_SPOT: Spot = {
 /** 外圍座位排在西側（市區側）半圈，避開海灣。角度：x = cos、z = sin，90° = 南。 */
 const RING_START = (75 * Math.PI) / 180;
 const RING_SPAN = (210 * Math.PI) / 180;
+/**
+ * 東京鐵塔會擋住這段圓弧後方的怪獸（鏡頭從東南往西北看）：座位要跳過它。
+ * 範圍由 occlusion.ts 的檢查得出（215°–250° 之間會被擋）。
+ */
+export const BLOCKED_ARC = {
+  start: (212 * Math.PI) / 180,
+  end: (252 * Math.PI) / 180,
+} as const;
 
 /** 座位固定對應圓圈上的位置（不隨存活人數變動，怪獸才不會跳來跳去）。 */
 export function ringSpot(seat: number, playerCount: number): Spot {
   const n = Math.max(1, Math.min(MAX_SEATS, playerCount));
-  const angle = RING_START + (RING_SPAN / n) * (seat + 0.5);
+  // 可用圓弧 = 整段半圈扣掉被鐵塔擋住的一段；座位均分可用圓弧，再把落在缺口之後的角度補回去
+  const gap = BLOCKED_ARC.end - BLOCKED_ARC.start;
+  const usable = RING_SPAN - gap;
+  let angle = RING_START + (usable / n) * (seat + 0.5);
+  if (angle >= BLOCKED_ARC.start) angle += gap;
   const x = Math.cos(angle) * RING_RADIUS;
   const z = Math.sin(angle) * RING_RADIUS;
   return { x, z, yaw: facingOrigin(x, z) };

@@ -20,6 +20,7 @@ import type { GameEvent } from '@kot/rules';
 import { MonsterActor } from './actor.js';
 import { buildCity, type CityBuild } from './city.js';
 import { directEvents, type Cue } from './director.js';
+import { AttackFxSystem, attackStyleOf } from './attackFx.js';
 import { CrackSystem, DebrisSystem, DustSystem, ShieldSystem, ShockwaveSystem } from './effects.js';
 import { Holds } from './holds.js';
 import {
@@ -86,6 +87,8 @@ export interface RendererOptions {
   cameraMotion: boolean;
   /** 鏡頭跟隨行動中的怪獸（預設開）。 */
   follow?: boolean;
+  /** 怪獸各自的攻擊特效（預設開）。 */
+  attackFx?: boolean;
   seed: number;
   onTierChange?: (tier: QualityTier) => void;
   onFatal?: (reason: string) => void;
@@ -135,6 +138,7 @@ export class SceneRenderer {
   private debris: DebrisSystem;
   private waves: ShockwaveSystem;
   private cracks: CrackSystem;
+  private attackFx!: AttackFxSystem;
   private shields: ShieldSystem;
   private readonly blobTex: Texture = makeSoftDotTexture();
   private readonly blobs = new Map<number, Mesh>();
@@ -350,6 +354,20 @@ export class SceneRenderer {
     this.waves = new ShockwaveSystem(this.fx);
     this.cracks = new CrackSystem(this.fx);
     this.shields = new ShieldSystem(this.fx);
+    this.attackFx = new AttackFxSystem(
+      this.fx,
+      {
+        dust: this.dust,
+        debris: this.debris,
+        waves: this.waves,
+        cracks: this.cracks,
+        dustScale: () => QUALITY[this.tier].dust / QUALITY.high.dust,
+        shake: (amount) => {
+          if (this.cameraMotion) this.shake = Math.max(this.shake, amount);
+        },
+      },
+      opts.attackFx ?? true,
+    );
     this.fx.add(this.dust.points, this.debris.mesh);
 
     const markerGeo = new RingGeometry(1.9, 2.3, 40);
@@ -394,6 +412,11 @@ export class SceneRenderer {
   /** 鏡頭是否跟隨行動中的怪獸（還需要鏡頭運動開啟）。 */
   setFollow(on: boolean): void {
     this.follow = on;
+  }
+
+  /** 開關怪獸各自的攻擊特效。 */
+  setAttackFx(on: boolean): void {
+    this.attackFx.setEnabled(on);
   }
 
   setCameraMotion(on: boolean): void {
@@ -442,6 +465,7 @@ export class SceneRenderer {
       }
     }
     this.shotSpec = null;
+    this.attackFx.clear();
     this.holds.clear();
     if (this.snapshot) for (const m of this.snapshot.monsters) this.syncSeat(m.seat, true);
     this.refreshTags();
@@ -490,6 +514,7 @@ export class SceneRenderer {
     this.debris.dispose();
     this.waves.dispose();
     this.cracks.dispose();
+    this.attackFx.dispose();
     this.shields.dispose();
     this.blobTex.dispose();
     this.marker.geometry.dispose();
@@ -658,6 +683,12 @@ export class SceneRenderer {
         const cx = ts.reduce((s, t) => s + t.x, 0) / ts.length;
         const cz = ts.reduce((s, t) => s + t.z, 0) / ts.length;
         a.lunge(cx, cz, cue.power);
+        this.attackFx.play(
+          attackStyleOf(cue.seat),
+          { x: a.x, z: a.z },
+          ts.map((t) => ({ x: t.x, z: t.z })),
+          cue.power,
+        );
         break;
       }
       case 'hit': {
@@ -891,6 +922,7 @@ export class SceneRenderer {
     this.debris.update(sdt);
     this.waves.update(sdt);
     this.cracks.update(sdt);
+    this.attackFx.update(sdt, this.camera);
     this.shields.update(sdt);
     this.updateMarker(time);
     this.updateCamera(dt);

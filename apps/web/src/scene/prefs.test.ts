@@ -9,6 +9,7 @@ describe('scene prefs', () => {
       quality: 'auto',
       cameraMotion: true,
       follow: true,
+      attackFx: true,
     });
     expect(parsePrefs(null, true).cameraMotion).toBe(false);
     expect(defaultPrefs(false).enabled).toBe(true);
@@ -17,7 +18,14 @@ describe('scene prefs', () => {
   it('正常讀回，壞資料逐欄退回預設', () => {
     expect(
       parsePrefs('{"enabled":false,"quality":"low","cameraMotion":false,"follow":false}', false),
-    ).toEqual({ enabled: false, quality: 'low', cameraMotion: false, follow: false });
+    ).toEqual({
+      enabled: false,
+      quality: 'low',
+      cameraMotion: false,
+      follow: false,
+      attackFx: true,
+    });
+    expect(parsePrefs('{"attackFx":false}', false).attackFx).toBe(false);
     // 舊版偏好沒有 follow 欄位 → 預設開啟
     expect(parsePrefs('{"enabled":true,"quality":"auto","cameraMotion":true}', false).follow).toBe(
       true,

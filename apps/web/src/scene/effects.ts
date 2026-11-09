@@ -70,6 +70,8 @@ export interface DustOptions {
   life?: number;
   /** 起始位置的隨機半徑。 */
   radius?: number;
+  /** 額外的水平初速（讓粒子朝某個方向噴出）。 */
+  drift?: { x: number; z: number };
 }
 
 export class DustSystem {
@@ -155,9 +157,9 @@ export class DustSystem {
       this.pos[i * 3] = x + Math.cos(a) * r;
       this.pos[i * 3 + 1] = y;
       this.pos[i * 3 + 2] = z + Math.sin(a) * r;
-      this.vel[i * 3] = Math.cos(a) * sp;
+      this.vel[i * 3] = Math.cos(a) * sp + (o.drift?.x ?? 0);
       this.vel[i * 3 + 1] = (o.up ?? 1.5) * rand(0.5, 1.2);
-      this.vel[i * 3 + 2] = Math.sin(a) * sp;
+      this.vel[i * 3 + 2] = Math.sin(a) * sp + (o.drift?.z ?? 0);
       this.color[i * 3] = c.r;
       this.color[i * 3 + 1] = c.g;
       this.color[i * 3 + 2] = c.b;

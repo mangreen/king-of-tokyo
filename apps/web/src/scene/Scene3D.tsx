@@ -68,6 +68,7 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
         quality: prefs.quality,
         cameraMotion: motion,
         follow,
+        attackFx: prefs.attackFx,
         seed,
         onTierChange: setTier,
         onFatal: (reason) => {
@@ -105,6 +106,10 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
   useEffect(() => {
     rendererRef.current?.setFollow(follow);
   }, [follow]);
+
+  useEffect(() => {
+    rendererRef.current?.setAttackFx(prefs.attackFx);
+  }, [prefs.attackFx]);
 
   // 先登記新事件（play 會加上 hold），再套用快照：這樣快照裡「結算後」的狀態
   // 會被 hold 擋住，等對應的演出播到才更新畫面。
@@ -280,6 +285,16 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
             }}
           />{' '}
           鏡頭跟隨行動中的怪獸
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={prefs.attackFx}
+            onChange={(e) => {
+              update({ attackFx: e.target.checked });
+            }}
+          />{' '}
+          怪獸招式特效（吐息、雷射、噴火…）
         </label>
         {typeof document !== 'undefined' && document.fullscreenEnabled && (
           <button className="link" onClick={toggleFullscreen}>
