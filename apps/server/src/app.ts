@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
-import type { CardSetInfo } from '@kot/protocol';
+import { EVENTS, type CardSetInfo } from '@kot/protocol';
 import type { Seed } from '@kot/rules';
 import { defaultCardSetId, loadCardSets, type LoadedCardSet } from '@kot/cardsets';
 import type { ServerConfig } from './config.js';
@@ -17,6 +17,8 @@ import { RoomManager } from './rooms/manager.js';
 import { DEFAULT_TIMINGS, type Timings } from './rooms/room.js';
 import { realScheduler, type Scheduler } from './rooms/scheduler.js';
 import { SessionStore } from './rooms/sessions.js';
+import { isOriginAllowed } from './origin.js';
+import { registerWeb } from './web.js';
 
 /** 握手逾時：連線後必須在此時間內送出 client:hello。 */
 export const HELLO_TIMEOUT_MS = 5_000;
@@ -50,6 +52,7 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
   const fastify = Fastify({ logger: config.nodeEnv === 'production' });
 
   fastify.get('/healthz', () => ({ status: 'ok' as const }));
+  if (config.webDir !== null) registerWeb(fastify, config.webDir);
 
   const io = new SocketServer<ClientToServerEvents, ServerToClientEvents>(fastify.server, {
     maxHttpBufferSize: MAX_MESSAGE_BYTES,
@@ -58,8 +61,15 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     // 沒有 Origin 標頭的請求（非瀏覽器客戶端，如測試工具）允許通過，
     // 瀏覽器一定會帶 Origin，因此仍可擋掉其他網站的惡意頁面。
     allowRequest: (req, callback) => {
-      const origin = req.headers.origin;
-      callback(null, origin === undefined || config.allowedOrigins.includes(origin));
+      callback(
+        null,
+        isOriginAllowed(
+          req.headers.origin,
+          req.headers.host,
+          config.allowedOrigins,
+          config.allowSameOrigin,
+        ),
+      );
     },
   });
 
@@ -85,6 +95,15 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
   const sessions = new SessionStore(scheduler, SESSION_TTL_MS, (id) => rooms.hasRoom(id));
 
   io.on('connection', (socket) => {
+    // 同時連線數上限（試玩版保護免費額度）：已連線的人不受影響，新來的被告知名額已滿
+    if (io.engine.clientsCount > config.maxConnections) {
+      socket.emit(EVENTS.serverError, {
+        code: 'server_full',
+        message: '試玩名額已滿（同時連線人數已達上限），請稍後再來',
+      });
+      socket.disconnect(true);
+      return;
+    }
     handleConnection(socket, {
       sessions,
       rooms,
@@ -96,8 +115,11 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     });
   });
 
-  fastify.addHook('onClose', async () => {
-    // io.close() 會一併關閉底層 http server；Fastify 隨後的關閉對已停止的 server 是無害的
+  // 必須在 preClose（Fastify 開始等待連線結束「之前」）就把 Socket.IO 關掉：
+  // 已升級成 WebSocket 的連線不會被 Fastify 當成閒置連線關閉，若等到 onClose 才處理，
+  // 只要還有玩家連著，close() 就永遠等不到結束（docker stop／Ctrl+C 會卡到被強制砍掉）。
+  // io.close() 會一併關閉底層 http server；Fastify 隨後的關閉對已停止的 server 是無害的。
+  fastify.addHook('preClose', async () => {
     await io.close();
   });
 

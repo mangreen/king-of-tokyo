@@ -66,6 +66,7 @@ export const ERROR_CODES = [
   'protocol_mismatch',
   'rate_limited',
   'session_replaced',
+  'server_full',
 ] as const;
 export const ErrorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;

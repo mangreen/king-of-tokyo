@@ -34,6 +34,8 @@ pnpm run dev:web       # 網頁 http://localhost:5173
 
 不連伺服器看 3D 場景：開 `http://localhost:5173/?scene-demo`（離線展示頁，可手動觸發各種演出、切換畫質）。
 
+**試玩版（單一容器，可部署到 Cloud Run）：** `make demo-image` 建置、`make demo-run` 在本機試跑（http://localhost:8080）。伺服器直接提供網頁，房間全在記憶體、沒有資料庫，同時最多 5 個房間、30 個連線，只含原創卡組。只有明確執行 `make demo-image` 才會建置。部署與預算警示步驟見 [docs/runbooks/cloud-run-demo.md](docs/runbooks/cloud-run-demo.md)（**未實測**）。
+
 或用 Docker（完整開發環境，含 PostgreSQL；資料庫要到 M5 才會用到）：
 
 ```bash
