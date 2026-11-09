@@ -18,7 +18,7 @@ packages/rules      純規則引擎（無 I/O、可重現、前後端共用）
 packages/protocol   WebSocket 訊息型別與 zod 驗證、協定版本
 packages/cardsets   卡牌組 schema 驗證、載入、內容雜湊、官方 CSV 匯入
 apps/server         Fastify + Socket.IO，房間與計時，呼叫 rules
-apps/web            Vite + React，之後加入 Three.js 場景
+apps/web            Vite + React；src/scene/ 為 Three.js 場景（動態載入，事件回放，見 ADR-0003）
 card-sets/          卡牌組資料（original 提交；local 不提交，見 ADR-0004）
 ```
 

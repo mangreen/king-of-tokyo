@@ -8,7 +8,8 @@
 - 打完整局規則：擲骰與重擲、能量／治療／攻擊、東京市與東京灣、讓位、淘汰、勝負判定（20 VP 或最後存活，支援多勝者）。
 - **能力卡：** 商店三張牌、買牌、花 2 能量清掉商店、持續（Keep）與一次性（Discard）卡、使用卡牌能力、被攻擊時的防禦反應、治療分配、復活與搭檔共同勝利。建房時可選卡牌組（原創卡組；若放了自備卡表則多一個選項）。
 - 斷線可回來接回同一座位；逾時由系統代打（代打不買牌、不使用能力）。
-- **尚未有：** 3D 場景與特效（M4）、事件日誌與負載測試（M5）。目前的畫面是刻意簡陋的功能版。
+- **3D 戰場（M4）：** 真實東京灣配置的場景——東京鐵塔、晴空塔、彩虹大橋、台場（摩天輪）、隅田川、東京灣；原創的程序化怪獸（6 種造型）、踩踏／打擊感／淘汰／護盾特效、事件鏡頭、3D 骰子。所有演出都是伺服器事件的回放，可跳過；畫質可自動降級，也可關閉 3D（沒有 WebGL 時自動退回純 DOM 介面）。
+- **尚未有：** 事件日誌持久化與負載測試（M5）。3D 效能目前只在沙盒（軟體算圖）量過，基準機實測見 [runbook](docs/runbooks/mac-verification.md)。
 
 進度、里程碑與驗證狀態見 [docs/architecture.md](docs/architecture.md)。
 
@@ -24,6 +25,8 @@ pnpm run dev:web       # 網頁 http://localhost:5173
 ```
 
 開兩個瀏覽器視窗（其一用無痕），各輸入暱稱；一邊建房，另一邊輸入房號加入並按「準備」，房主開始。
+
+不連伺服器看 3D 場景：開 `http://localhost:5173/?scene-demo`（離線展示頁，可手動觸發各種演出、切換畫質）。
 
 或用 Docker（完整開發環境，含 PostgreSQL；資料庫要到 M5 才會用到）：
 
@@ -52,7 +55,7 @@ packages/rules      純規則引擎（無 I/O、可重現、前後端共用）
 packages/protocol   WebSocket 訊息型別與 zod 驗證
 packages/cardsets   卡牌組驗證、載入、雜湊與 CSV 匯入（伺服器與匯入腳本使用）
 apps/server         Fastify + Socket.IO：身分、房間、計時，呼叫 rules
-apps/web            Vite + React 前端（之後加入 Three.js）
+apps/web            Vite + React 前端；src/scene/ 是 Three.js 場景（動態載入）
 card-sets/          卡牌組資料（original 提交；官方卡表只放 local/，不提交）
 ```
 

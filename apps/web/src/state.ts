@@ -1,4 +1,4 @@
-import { describeEvent, type CardDef } from '@kot/rules';
+import { describeEvent, type CardDef, type GameEvent } from '@kot/rules';
 import {
   ServerErrorSchema,
   ServerHelloSchema,
@@ -17,6 +17,12 @@ export type Connection =
   | { status: 'reconnecting'; playerId: string; nickname: string }
   | { status: 'error'; message: string };
 
+/** 一次 game:update 帶來的事件，供 3D 場景重播（不影響狀態）。 */
+export interface EventBatch {
+  version: number;
+  events: GameEvent[];
+}
+
 export interface AppState {
   connection: Connection;
   room: RoomSnapshot | null;
@@ -30,6 +36,8 @@ export interface AppState {
   deadlineAt: number | null;
   /** 事件日誌（文字），最新的在最後。 */
   log: string[];
+  /** 最近幾批事件（最新在最後），3D 場景依 version 去重後播放。 */
+  feed: EventBatch[];
   /** 操作失敗等一次性提示。 */
   notice: string | null;
 }
@@ -47,6 +55,7 @@ export type AppAction =
   | { type: 'reset' };
 
 export const LOG_LIMIT = 200;
+export const FEED_LIMIT = 30;
 
 export const initialAppState: AppState = {
   connection: { status: 'idle' },
@@ -57,6 +66,7 @@ export const initialAppState: AppState = {
   cards: null,
   deadlineAt: null,
   log: [],
+  feed: [],
   notice: null,
 };
 
@@ -158,7 +168,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const room = isRecord(payload) ? payload.room : undefined;
       if (room === null) {
         // 不在任何房間：清掉對局畫面
-        return { ...state, room: null, game: null, cards: null, deadlineAt: null, log: [] };
+        return {
+          ...state,
+          room: null,
+          game: null,
+          cards: null,
+          deadlineAt: null,
+          log: [],
+          feed: [],
+        };
       }
       return isRoomSnapshot(room) ? { ...state, room } : state;
     }
@@ -179,9 +197,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         .map((e) => describeEvent(e, nameOf, cardName))
         .filter((l) => l !== '');
       const log = [...state.log, ...lines].slice(-LOG_LIMIT);
+      const feed =
+        update.events.length === 0
+          ? state.feed
+          : [
+              ...state.feed,
+              { version: update.version, events: update.events as GameEvent[] },
+            ].slice(-FEED_LIMIT);
       return {
         ...state,
         game: update,
+        feed,
         deadlineAt: update.remainingMs === null ? null : action.at + update.remainingMs,
         log,
       };
