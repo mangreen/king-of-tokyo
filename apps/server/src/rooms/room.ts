@@ -17,6 +17,7 @@ import {
   type Seed,
 } from '@kot/rules';
 import type { LoadedCardSet } from '@kot/cardsets';
+import { pickMonsters } from './monsters.js';
 import {
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -75,6 +76,8 @@ export interface RoomDeps {
   publisher: Publisher;
   /** 產生新對局的 seed（正式環境是 128 位元的 CSPRNG 字串；機密，見 randomSeed）。 */
   newSeed: () => Seed;
+  /** 為這場對局隨機分配怪獸造型（外觀用，不是機密；預設為 CSPRNG 洗牌）。 */
+  pickMonsters?: (playerCount: number) => number[];
   timings: Timings;
   /** 房間關閉時通知管理者。 */
   onClose: (room: Room) => void;
@@ -90,6 +93,8 @@ interface Member {
   away: boolean;
   left: boolean;
   seat: number | null;
+  /** 這場的怪獸造型（開局時隨機分配）。 */
+  monster: number | null;
 }
 
 /**
@@ -133,6 +138,7 @@ export class Room {
       away: false,
       left: false,
       seat: null,
+      monster: null,
     });
     this.broadcastRoom();
   }
@@ -187,6 +193,7 @@ export class Room {
       id: m.id,
       nickname: m.nickname,
       seat: m.seat,
+      monster: m.monster,
       ready: m.ready,
       connected: m.connected,
       away: m.away,
@@ -221,6 +228,7 @@ export class Room {
       away: false,
       left: false,
       seat: null,
+      monster: null,
     });
     this.cancelClose();
     this.broadcastRoom();
@@ -246,8 +254,10 @@ export class Room {
     if (players.length < MIN_PLAYERS) return fail('not_enough_players');
     if (players.some((m) => !m.ready)) return fail('not_ready');
 
+    const looks = (this.deps.pickMonsters ?? pickMonsters)(players.length);
     players.forEach((m, seat) => {
       m.seat = seat;
+      m.monster = looks[seat] ?? seat;
       m.away = false;
     });
     this.seed = this.deps.newSeed();

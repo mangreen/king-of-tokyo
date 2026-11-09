@@ -139,11 +139,6 @@ input {
   border-color: var(--warn);
   color: var(--warn);
 }
-.game-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
 .countdown {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
@@ -160,40 +155,6 @@ input {
   border-radius: 10px;
   margin: 1rem 0;
 }
-.tokyo {
-  display: flex;
-  gap: 1rem;
-  margin: 1rem 0;
-}
-.slot {
-  flex: 1;
-  border: 2px dashed var(--line);
-  border-radius: 10px;
-  padding: 0.5rem 1rem;
-  text-align: center;
-}
-.slot h3 {
-  margin: 0.2rem 0;
-}
-.monsters {
-  width: 100%;
-  border-collapse: collapse;
-}
-.monsters th,
-.monsters td {
-  border-bottom: 1px solid var(--muted);
-  padding: 0.4rem;
-  text-align: left;
-}
-.monsters tr.active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-.monsters tr.me td:first-child {
-  font-weight: 700;
-}
-.monsters tr.dead {
-  opacity: 0.45;
-}
 .dice {
   display: flex;
   gap: 0.5rem;
@@ -201,8 +162,8 @@ input {
   flex-wrap: wrap;
 }
 .die {
-  width: 4rem;
-  height: 4rem;
+  width: var(--die, 4rem);
+  height: var(--die, 4rem);
   padding: 0;
   border: 0;
   background: transparent;
@@ -236,7 +197,7 @@ input {
   inset: 0;
   display: grid;
   place-items: center;
-  font-size: 1.9rem;
+  font-size: calc(var(--die, 4rem) * 0.47);
   font-weight: 900;
   color: #1d1b16;
   background: #fffdf6;
@@ -246,22 +207,22 @@ input {
   /* 立方體邊長 = 4rem，每面往外推半邊長 */
 }
 .side.front {
-  transform: translateZ(2rem);
+  transform: translateZ(calc(var(--die, 4rem) / 2));
 }
 .side.back {
-  transform: rotateY(180deg) translateZ(2rem);
+  transform: rotateY(180deg) translateZ(calc(var(--die, 4rem) / 2));
 }
 .side.right {
-  transform: rotateY(90deg) translateZ(2rem);
+  transform: rotateY(90deg) translateZ(calc(var(--die, 4rem) / 2));
 }
 .side.left {
-  transform: rotateY(-90deg) translateZ(2rem);
+  transform: rotateY(-90deg) translateZ(calc(var(--die, 4rem) / 2));
 }
 .side.top {
-  transform: rotateX(90deg) translateZ(2rem);
+  transform: rotateX(90deg) translateZ(calc(var(--die, 4rem) / 2));
 }
 .side.bottom {
-  transform: rotateX(-90deg) translateZ(2rem);
+  transform: rotateX(-90deg) translateZ(calc(var(--die, 4rem) / 2));
 }
 .side.left {
   background: #ffe1d6;
@@ -277,16 +238,6 @@ input {
     transition: none;
   }
 }
-.log {
-  max-height: 14rem;
-  overflow: auto;
-}
-.log ol {
-  margin: 0;
-  padding-left: 1.2rem;
-  font-size: 0.85rem;
-  white-space: pre-wrap;
-}
 
 select {
   font: inherit;
@@ -295,41 +246,6 @@ select {
   border-radius: 8px;
   background: var(--card);
   color: var(--fg);
-}
-.owned {
-  max-width: 14rem;
-}
-.owned .tag {
-  display: inline-block;
-  margin: 0 0.3rem 0.2rem 0;
-}
-.market-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.6rem;
-}
-.market-card {
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  padding: 0.5rem 0.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.market-card p {
-  margin: 0;
-  font-size: 0.85rem;
-  flex: 1;
-}
-.market-card .cost {
-  align-self: flex-start;
-  padding: 0.05rem 0.55rem;
-  font-weight: 900;
-  color: #1d1b16;
-  background: #ffd23f;
-  border: 2.5px solid #1d1b16;
-  border-radius: 999px;
-  box-shadow: 2px 2px 0 #1d1b16;
 }
 .actions {
   display: flex;
@@ -363,28 +279,90 @@ main.wide {
 }
 .scene-wrap {
   position: relative;
-  aspect-ratio: 16 / 9;
-  /* 寬度同時受視窗高度限制，避免畫面比 16:9 更寬而裁掉場景上下 */
-  width: min(100%, calc(72vh * 16 / 9));
+  width: 100%;
   margin-inline: auto;
   border: 3px solid var(--line);
   border-radius: 14px;
-  overflow: hidden;
-  background: #cfe3f2;
+  background: var(--bg);
   box-shadow: 4px 5px 0 var(--line);
+}
+/* 窄螢幕／直向：地圖固定在畫面上方，操作面板在下方捲動，地圖與怪獸始終看得到 */
+.scene-view {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: clamp(13rem, 42vh, 30rem);
+  overflow: hidden;
+  border-radius: 11px 11px 0 0;
+  border-bottom: 3px solid var(--line);
+  background: #cfe3f2;
 }
 .scene-canvas {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+.scene-canvas:active {
+  cursor: grabbing;
+}
+.scene-canvas:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
 }
 /* 簡單的暈影（CSS，不用後處理） */
-.scene-wrap::after {
+.scene-view::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(30, 20, 10, 0.35) 100%);
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(30, 20, 10, 0.3) 100%);
+}
+.map-controls {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.map-controls button {
+  width: 2.5rem;
+  height: 2.5rem;
+  min-height: 0;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  touch-action: manipulation;
+}
+.map-controls .reset {
+  background: #ffd23f;
+  color: #1d1b16;
+}
+.map-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  margin: 0;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
+  animation: map-hint-fade 7s forwards;
+}
+@keyframes map-hint-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .kot-overlay {
   position: absolute;
@@ -400,6 +378,12 @@ main.wide {
   align-items: center;
   margin-top: 0.5rem;
   font-size: 0.9rem;
+}
+.scene-controls label {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 .scene-controls select {
   font: inherit;
@@ -547,4 +531,464 @@ main.wide {
     animation-name: kot-float-still;
     animation-duration: 1.2s;
   }
+}
+
+/* ── 遊戲 HUD（M4.5）：3D 區內的玩家、骰子、商店、事件、規則 ───────── */
+.hud {
+  --die: 3.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg);
+  min-width: 0;
+}
+.hud.flat {
+  padding: 0;
+  margin: 0.5rem 0 1rem;
+}
+.hud-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+}
+.hud-pop {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  min-width: 0;
+}
+.hud-status {
+  flex: 1 1 auto;
+  font-size: 0.9rem;
+}
+.hud-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.hud-tabs button,
+.goal-chip,
+.rule-toggle {
+  padding: 0.3rem 0.7rem;
+  min-height: 2.25rem;
+  font-size: 0.9rem;
+  touch-action: manipulation;
+}
+.hud-tabs button.on {
+  background: var(--fg);
+  color: var(--bg);
+}
+.badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  min-width: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+.goal-chip {
+  background: #ffd23f;
+  color: #1d1b16;
+  border-color: #1d1b16;
+  font-weight: 800;
+}
+.hud details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 1.8rem;
+  list-style-position: inside;
+}
+.action-panel .prompt {
+  margin: 0 0 0.2rem;
+  font-weight: 600;
+}
+.action-panel .dice {
+  margin: 0.4rem 0;
+}
+.small {
+  font-size: 0.8rem;
+  margin: 0.2rem 0;
+}
+.dice-summary {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+.rule-toggle {
+  background: transparent;
+  border-style: dashed;
+}
+.rule-pop,
+.rule-tip {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1.5px dashed var(--muted);
+  border-radius: 8px;
+  max-height: 16rem;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+.rule-tip {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  max-height: none;
+}
+.rule-block h4 {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.9rem;
+}
+.rule-block:first-child h4 {
+  margin-top: 0;
+}
+.rule-block ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.rule-block li {
+  margin: 0.15rem 0;
+}
+
+/* 玩家清單 */
+.p-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.p-row {
+  border-left: 6px solid var(--seat, var(--line));
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+.p-row.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.p-row.me .p-name {
+  font-weight: 800;
+}
+.p-row.dead {
+  opacity: 0.45;
+}
+.p-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+}
+.p-line .tag {
+  margin-left: 0;
+}
+.p-stats {
+  display: flex;
+  gap: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.p-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+}
+.p-cards .tag {
+  margin-left: 0;
+}
+
+/* 說明提示（卡牌、勝利條件） */
+.tip-trigger {
+  cursor: help;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.tag.card-chip {
+  padding: 0.2rem 0.6rem;
+  min-height: 1.9rem;
+  font-size: 0.8rem;
+  background: var(--card);
+  color: var(--fg);
+  border: 1.5px solid var(--muted);
+}
+.tag.card-chip[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--card));
+}
+.tip-pop {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(22rem, calc(100vw - 16px));
+  padding: 0.6rem 0.75rem;
+  background: var(--card);
+  color: var(--fg);
+  border: 2.5px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 3px 4px 0 var(--line);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+/* 卡牌內容與商店 */
+.card-body-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.card-body p {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+}
+.cost {
+  padding: 0.05rem 0.55rem;
+  font-weight: 900;
+  color: #1d1b16;
+  background: #ffd23f;
+  border: 2.5px solid #1d1b16;
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 #1d1b16;
+}
+.shop-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.shop-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+.shop-card button {
+  min-height: 2.25rem;
+}
+
+/* 事件與規則面板 */
+.log-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  max-height: 18rem;
+  overflow: auto;
+}
+.progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.progress li {
+  display: grid;
+  grid-template-columns: 5rem 1fr 3.2rem;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.progress li.dead {
+  opacity: 0.45;
+}
+.progress meter {
+  width: 100%;
+}
+
+/* 寬螢幕／橫向：地圖在左、操作面板在右，互不遮蓋 */
+@media (min-width: 640px) and (min-aspect-ratio: 1 / 1) {
+  .scene-wrap.has-hud {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(20rem, 30vw, 26rem);
+    height: clamp(17rem, calc(100vh - 5rem), 64rem);
+    overflow: hidden;
+  }
+  .scene-wrap.has-hud .scene-view {
+    position: relative;
+    height: auto;
+    border-radius: 0;
+    border-bottom: 0;
+    border-right: 3px solid var(--line);
+  }
+  .hud:not(.flat) {
+    --die: 2.7rem;
+    height: 100%;
+    overflow: auto;
+  }
+}
+.scene-skip {
+  top: 8px;
+  bottom: auto;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+main.wide > h1 {
+  display: none;
+}
+main.wide {
+  padding-top: 0.6rem;
+}
+
+/* 全螢幕：場景＋HUD 一起放大 */
+.scene-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: auto;
+}
+@media (min-width: 640px) and (min-aspect-ratio: 1 / 1) {
+  .scene-wrap.has-hud:fullscreen {
+    overflow: hidden;
+  }
+}
+
+.hud-info-body {
+  margin-top: 0.5rem;
+}
+.tokyo-line {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+}
+.hud-tabs button {
+  padding: 0.3rem 0.55rem;
+}
+.hud .dice {
+  gap: 0.35rem;
+}
+
+/* 小畫面：名牌縮小，少擋怪獸 */
+@media (max-width: 520px) {
+  .kot-tag {
+    min-width: 70px;
+    padding: 2px 5px 3px;
+    font-size: 10px;
+    border-width: 2px;
+  }
+  .kot-tag-stats {
+    font-size: 9.5px;
+  }
+}
+.scene-wrap:not(.has-hud) .scene-view {
+  position: relative;
+  height: min(72vh, 42rem);
+  border-bottom: 0;
+  border-radius: 11px;
+}
+
+/* 提示（toast） */
+.toast-host {
+  position: fixed;
+  z-index: 900;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  width: min(26rem, calc(100vw - 1.5rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border: 2.5px solid #1d1b16;
+  border-radius: 12px;
+  box-shadow: 3px 4px 0 #1d1b16;
+  background: var(--card);
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 0.95rem;
+  animation: toast-in 0.22s ease-out;
+}
+.toast.good {
+  background: #d9f2c4;
+  color: #1d1b16;
+}
+.toast.warn {
+  background: #ffe29a;
+  color: #1d1b16;
+}
+.toast.danger {
+  background: #ffb3a1;
+  color: #1d1b16;
+}
+.toast-icon {
+  font-size: 1.3rem;
+}
+.toast-text {
+  flex: 1;
+}
+.toast button {
+  min-height: 2rem;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.85rem;
+  color: #1d1b16;
+}
+.toast-action {
+  background: #fff;
+  font-weight: 800;
+}
+.toast-close {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+.hud-info {
+  scroll-margin-top: calc(42vh + 1rem);
+}
+
+/* 商店還能買時的「離開商店」與鏡頭跟隨開關 */
+.leave-shop {
+  background: #ffb02e;
+  color: #1d1b16;
+  border-color: #1d1b16;
+  font-weight: 800;
+}
+.map-controls .follow-btn.on {
+  background: #8fdc6b;
+  color: #1d1b16;
+}
+.map-controls .follow-btn.paused {
+  background: #c9c4b8;
+  color: #1d1b16;
+  outline: 3px dashed #4f9a2f;
+  outline-offset: -3px;
+}
+.map-controls .follow-btn.off {
+  background: #c9c4b8;
+  color: #6b665b;
+  filter: grayscale(1);
+}
+
+.monster-tag {
+  font-size: 0.72rem;
+  opacity: 0.85;
 }

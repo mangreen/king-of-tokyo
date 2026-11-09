@@ -1,9 +1,8 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-import type { Action, CardDef, Monster } from '@kot/rules';
+import type { Action, CardDef } from '@kot/rules';
 import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
-import { envOf, groupActions, labelAction, myActions, toIntent } from '../actions.js';
-import { Countdown } from './Countdown.js';
-import { Die3D } from '../scene/Die3D.js';
+import { envOf, groupActions, myActions } from '../actions.js';
+import { GameHud } from '../hud/GameHud.js';
 import { nextSpins } from '../scene/dice.js';
 import { loadPrefs, savePrefs, seedFromCode, webglAvailable } from '../scene/prefs.js';
 import { toSnapshot } from '../scene/snapshot.js';
@@ -63,7 +62,6 @@ export function GameView({
   const mySeat = room.players.find((p) => p.id === selfId)?.seat ?? null;
   const nameOf = (seat: number): string =>
     room.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
-  const infoOf = (seat: number) => room.players.find((p) => p.seat === seat);
 
   const env = envOf(cards);
   const cardName = (id: string): string => env.cards[id]?.name ?? id;
@@ -75,7 +73,6 @@ export function GameView({
     a.type === 'buy' && a.from === undefined;
   const marketBuys = actions.filter(isMarketBuy);
   const otherActions = actions.filter((a) => !isMarketBuy(a));
-  const groups = groupActions(otherActions, labelCtx);
   // 保留的骰子只對「同一個狀態版本」有效：有新的擲骰結果（版本改變）就自動視為沒有保留
   const [keptState, setKeptState] = useState<{ version: number; indexes: Set<number> }>({
     version: state.version,
@@ -99,22 +96,43 @@ export function GameView({
     setKeptState({ version: state.version, indexes: next });
   }
 
-  const city = state.monsters.find((m) => m.alive && m.location === 'city');
-  const bay = state.monsters.find((m) => m.alive && m.location === 'bay');
-  const showBay = state.config.playerCount >= 5;
+  const sweep = otherActions.find((x) => x.type === 'sweep');
+  const hudGroups = groupActions(
+    otherActions.filter((x) => x.type !== 'sweep'),
+    labelCtx,
+  );
+  const prompt = promptText(state);
 
-  const describeMonster = (m: Monster | undefined): string =>
-    m ? `${nameOf(m.seat)}（HP ${String(m.hp)}）` : '空';
+  const renderHud = (mode: 'overlay' | 'flat') => (
+    <GameHud
+      mode={mode}
+      room={room}
+      state={state}
+      actorSeat={game.actorSeat}
+      mySeat={mySeat}
+      myTurn={myTurn}
+      deadlineAt={deadlineAt}
+      env={env}
+      nameOf={nameOf}
+      labelCtx={labelCtx}
+      prompt={prompt}
+      log={log}
+      feed={feed}
+      kept={kept}
+      spins={spins.counts}
+      canToggle={canToggle}
+      canRoll={canRoll}
+      canStop={canStop}
+      onToggle={toggle}
+      marketBuys={marketBuys}
+      sweep={sweep}
+      groups={hudGroups}
+      onAct={onAct}
+    />
+  );
 
   return (
     <div className="game">
-      <header className="game-head">
-        <span>
-          房間 <span className="room-code">{room.code}</span> · 第 {state.round} 輪
-        </span>
-        <Countdown deadlineAt={deadlineAt} />
-      </header>
-
       {state.phase === 'over' && state.outcome && (
         <div className="banner" role="status">
           🏆{' '}
@@ -126,227 +144,43 @@ export function GameView({
       )}
 
       {canGL && prefs.enabled ? (
-        <Suspense fallback={<p className="muted scene-loading">載入 3D 場景…</p>}>
-          <Scene3D snapshot={snapshot} feed={feed} prefs={prefs} onPrefs={setPrefs} seed={seed} />
+        <Suspense
+          fallback={
+            <>
+              <p className="muted scene-loading">載入 3D 場景…（操作可先使用）</p>
+              {renderHud('flat')}
+            </>
+          }
+        >
+          <Scene3D
+            snapshot={snapshot}
+            feed={feed}
+            prefs={prefs}
+            onPrefs={setPrefs}
+            seed={seed}
+            hud={renderHud('overlay')}
+          />
         </Suspense>
       ) : (
-        <p className="muted">
-          {canGL ? '3D 場景已關閉。' : '這個瀏覽器不支援 WebGL，已使用純文字介面。'}{' '}
-          {canGL && (
-            <button
-              className="link"
-              onClick={() => {
-                const next = { ...prefs, enabled: true };
-                savePrefs(next);
-                setPrefs(next);
-              }}
-            >
-              開啟 3D
-            </button>
-          )}
-        </p>
-      )}
-
-      <section className="tokyo">
-        <div className="slot">
-          <h3>東京市</h3>
-          <p>{describeMonster(city)}</p>
-        </div>
-        {showBay && (
-          <div className="slot">
-            <h3>東京灣</h3>
-            <p>{describeMonster(bay)}</p>
-          </div>
-        )}
-      </section>
-
-      <table className="monsters">
-        <thead>
-          <tr>
-            <th>玩家</th>
-            <th>HP</th>
-            <th>VP</th>
-            <th>能量</th>
-            <th>位置</th>
-            <th>卡牌</th>
-          </tr>
-        </thead>
-        <tbody>
-          {state.monsters.map((m) => {
-            const info = infoOf(m.seat);
-            return (
-              <tr
-                key={m.seat}
-                className={[
-                  m.alive ? '' : 'dead',
-                  game.actorSeat === m.seat ? 'active' : '',
-                  m.seat === mySeat ? 'me' : '',
-                ].join(' ')}
+        <>
+          <p className="muted">
+            {canGL ? '3D 場景已關閉。' : '這個瀏覽器不支援 WebGL，已使用純文字介面。'}{' '}
+            {canGL && (
+              <button
+                className="link"
+                onClick={() => {
+                  const next = { ...prefs, enabled: true };
+                  savePrefs(next);
+                  setPrefs(next);
+                }}
               >
-                <td>
-                  {nameOf(m.seat)}
-                  {m.seat === mySeat && '（你）'}
-                  {info && !info.connected && <span className="tag warn">離線</span>}
-                  {info?.away && <span className="tag warn">代打中</span>}
-                  {!m.alive && <span className="tag">淘汰</span>}
-                </td>
-                <td>{m.hp}</td>
-                <td>{m.vp}</td>
-                <td>{m.energy}</td>
-                <td>{m.location === 'city' ? '東京市' : m.location === 'bay' ? '東京灣' : '—'}</td>
-                <td className="owned">
-                  {m.cards.length === 0 && m.tokens.poison + m.tokens.shrink === 0 && '—'}
-                  {m.cards.map((id) => (
-                    <span key={id} className="tag" title={env.cards[id]?.text ?? ''}>
-                      {cardName(id)}
-                    </span>
-                  ))}
-                  {m.tokens.poison > 0 && <span className="tag warn">毒 ×{m.tokens.poison}</span>}
-                  {m.tokens.shrink > 0 && <span className="tag warn">縮小 ×{m.tokens.shrink}</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-
-      {state.market && (
-        <section className="card market" aria-label="商店">
-          <h3>
-            商店 <span className="muted">（牌庫 {state.market.deck.length} 張）</span>
-          </h3>
-          <div className="market-cards">
-            {state.market.faceUp.map((id) => {
-              const def = env.cards[id];
-              const buys = marketBuys.filter((a) => a.cardId === id);
-              return (
-                <div key={id} className="market-card">
-                  <strong>{def?.name ?? id}</strong>
-                  <span className="cost">⚡{def?.cost ?? '?'}</span>
-                  <span className="muted">{def?.kind === 'discard' ? '一次性' : '持續'}</span>
-                  <p>{def?.text ?? ''}</p>
-                  {buys.map((a) => (
-                    <button
-                      key={labelAction(a, labelCtx)}
-                      className="primary"
-                      onClick={() => {
-                        onAct(toIntent(a));
-                      }}
-                    >
-                      {labelAction(a, labelCtx)}
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {state.phase !== 'over' && (
-        <section className="card">
-          <p>
-            {game.actorSeat === null
-              ? ''
-              : myTurn
-                ? promptText(state)
-                : `等待 ${nameOf(game.actorSeat)}…`}
+                開啟 3D
+              </button>
+            )}
           </p>
-          <div className="dice" aria-label="骰子">
-            {dice.length === 0 ? (
-              <span className="muted">尚未擲骰</span>
-            ) : (
-              dice.map((face, i) => (
-                <button
-                  key={i}
-                  className={kept.has(i) ? 'die kept' : 'die'}
-                  disabled={!canToggle}
-                  onClick={() => {
-                    toggle(i);
-                  }}
-                  aria-pressed={kept.has(i)}
-                >
-                  <Die3D face={face} spin={spins.counts[i] ?? 0} />
-                </button>
-              ))
-            )}
-          </div>
-          {state.phase === 'roll' && (
-            <p className="muted">
-              已擲 {rollsUsed} / {maxRolls} 次{canToggle && '；點骰子可「保留」，其餘會重擲'}
-            </p>
-          )}
-          <div className="row">
-            {state.phase === 'roll' && (
-              <>
-                <button
-                  className="primary"
-                  disabled={!canRoll}
-                  onClick={() => {
-                    onAct({ type: 'roll', keep: rollsUsed === 0 ? [] : [...kept] });
-                  }}
-                >
-                  {rollsUsed === 0 ? '擲骰' : '重擲'}
-                </button>
-                <button
-                  disabled={!canStop}
-                  onClick={() => {
-                    onAct({ type: 'endRolling' });
-                  }}
-                >
-                  結算
-                </button>
-              </>
-            )}
-          </div>
-          {groups.length > 0 && (
-            <div className="actions">
-              {groups.map((g) =>
-                g.title === null ? (
-                  g.actions.map((a) => (
-                    <button
-                      key={g.key}
-                      className={
-                        a.type === 'endTurn' || a.type === 'yieldDecision' ? 'primary' : undefined
-                      }
-                      onClick={() => {
-                        onAct(toIntent(a));
-                      }}
-                    >
-                      {labelAction(a, labelCtx)}
-                    </button>
-                  ))
-                ) : (
-                  <details key={g.key} className="use-group">
-                    <summary>使用 {g.title}</summary>
-                    <div className="row">
-                      {g.actions.map((a) => (
-                        <button
-                          key={labelAction(a, labelCtx)}
-                          onClick={() => {
-                            onAct(toIntent(a));
-                          }}
-                        >
-                          {labelAction(a, labelCtx).replace(/^使用 [^：]+：?/, '') || '使用'}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
-                ),
-              )}
-            </div>
-          )}
-        </section>
+          {renderHud('flat')}
+        </>
       )}
-
-      <section className="card log">
-        <h3>事件</h3>
-        <ol>
-          {log.slice(-40).map((line, i) => (
-            <li key={`${String(i)}-${line}`}>{line}</li>
-          ))}
-        </ol>
-      </section>
 
       <p>
         <button onClick={onLeave}>{state.phase === 'over' ? '返回大廳' : '離開對局'}</button>

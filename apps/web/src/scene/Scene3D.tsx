@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { latestVersion, takeNew, type FeedBatch } from './feed.js';
 import { prefersReducedMotion, savePrefs, watchReducedMotion, type ScenePrefs } from './prefs.js';
+import { followClick, followTitle, followUi } from './followState.js';
 import { SceneRenderer, type SceneSnapshot } from './SceneRenderer.js';
 import type { QualitySetting, QualityTier } from './quality.js';
 
@@ -11,6 +12,8 @@ interface Props {
   onPrefs: (prefs: ScenePrefs) => void;
   /** 城市外觀種子（房間代碼）。 */
   seed: number;
+  /** 疊在場景上的遊戲 HUD（玩家、骰子、商店、事件、規則…）。 */
+  hud?: ReactNode;
   /** 讓 demo／測試拿到渲染器。 */
   onReady?: (renderer: SceneRenderer | null) => void;
 }
@@ -26,9 +29,12 @@ const QUALITY_LABEL: Record<QualitySetting, string> = {
  * 3D 場景（Three.js）。動態載入，所以不會拖慢大廳；遊戲邏輯與操作仍在 DOM 裡，
  * 場景只是把伺服器事件「演出來」。場景壞掉或沒有 WebGL 時整個遊戲仍可玩。
  */
-export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, onReady }: Props) {
+export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onReady }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [customView, setCustomView] = useState(false);
   const rendererRef = useRef<SceneRenderer | null>(null);
   const snapshotRef = useRef(snapshot);
   const feedRef = useRef(feed);
@@ -40,6 +46,9 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, onReady 
   const [reduced, setReduced] = useState(prefersReducedMotion);
   // 系統要求減少動態時一律不做鏡頭運動／震動／停頓（即使偏好勾選了）
   const motion = prefs.cameraMotion && !reduced;
+  const follow = prefs.follow && motion;
+  // 手動拖曳／縮放後自動鏡頭暫停：UI 要反映「實際」狀態
+  const followState = followUi(prefs.follow, motion, customView);
 
   useEffect(() => watchReducedMotion(setReduced), []);
 
@@ -61,11 +70,14 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, onReady 
         overlay,
         quality: prefs.quality,
         cameraMotion: motion,
+        follow,
+        attackFx: prefs.attackFx,
         seed,
         onTierChange: setTier,
         onFatal: (reason) => {
           setFatal(reason);
         },
+        onViewChange: setCustomView,
       });
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'init-failed';
@@ -94,6 +106,14 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, onReady 
     rendererRef.current?.setCameraMotion(motion);
   }, [motion]);
 
+  useEffect(() => {
+    rendererRef.current?.setFollow(follow);
+  }, [follow]);
+
+  useEffect(() => {
+    rendererRef.current?.setAttackFx(prefs.attackFx);
+  }, [prefs.attackFx]);
+
   // 先登記新事件（play 會加上 hold），再套用快照：這樣快照裡「結算後」的狀態
   // 會被 hold 擋住，等對應的演出播到才更新畫面。
   useEffect(() => {
@@ -105,6 +125,27 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, onReady 
     for (const b of batches) r.play(b.events);
     r.setSnapshot(snapshot);
   }, [snapshot, feed]);
+
+  useEffect(() => {
+    const onChange = (): void => {
+      setFullscreen(document.fullscreenElement === wrapRef.current);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+    };
+  }, []);
+
+  const toggleFullscreen = (): void => {
+    const el = wrapRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen();
+      else void el.requestFullscreen();
+    } catch {
+      // 不支援就算了
+    }
+  };
 
   // 「跳過動畫」按鈕只在有演出時顯示
   useEffect(() => {
@@ -122,38 +163,96 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, onReady 
     onPrefs(next);
   };
 
+  const toggleFollow = (): void => {
+    const c = followClick(prefs.follow, customView);
+    if (c.resetView) rendererRef.current?.resetView();
+    if (c.pref !== prefs.follow) update({ follow: c.pref });
+  };
+
   return (
-    <section className="scene" aria-label="3D 戰場（輔助視覺，遊戲操作在下方）">
-      <div className="scene-wrap">
-        <canvas
-          key={`${String(attempt)}-${prefs.quality}-${String(seed)}`}
-          ref={canvasRef}
-          className="scene-canvas"
-        />
-        <div ref={overlayRef} className="kot-overlay" aria-hidden="true" />
-        {fatal !== null && (
-          <div className="scene-fallback" role="alert">
-            <p>3D 場景無法顯示（{fatal}）。不影響遊戲，下方仍可正常操作。</p>
+    <section className="scene" aria-label="3D 戰場與遊戲操作">
+      <div
+        className={`scene-wrap${hud ? ' has-hud' : ''}${fullscreen ? ' is-fullscreen' : ''}`}
+        ref={wrapRef}
+      >
+        <div className="scene-view">
+          <canvas
+            key={`${String(attempt)}-${prefs.quality}-${String(seed)}`}
+            ref={canvasRef}
+            className="scene-canvas"
+            tabIndex={0}
+            aria-label="3D 地圖。拖曳移動，滾輪或雙指縮放，方向鍵移動、加減號縮放、0 重置"
+          />
+          <div ref={overlayRef} className="kot-overlay" aria-hidden="true" />
+          {fatal !== null && (
+            <div className="scene-fallback" role="alert">
+              <p>3D 場景無法顯示（{fatal}）。不影響遊戲，操作與資訊仍可正常使用。</p>
+              <button
+                onClick={() => {
+                  setFatal(null);
+                  setAttempt((n) => n + 1);
+                }}
+              >
+                重試
+              </button>
+            </div>
+          )}
+          <div className="map-controls" role="group" aria-label="地圖視角">
             <button
+              aria-label="放大"
               onClick={() => {
-                setFatal(null);
-                setAttempt((n) => n + 1);
+                rendererRef.current?.zoomBy(1.35);
               }}
             >
-              重試
+              ＋
             </button>
+            <button
+              aria-label="縮小"
+              onClick={() => {
+                rendererRef.current?.zoomBy(1 / 1.35);
+              }}
+            >
+              －
+            </button>
+            <button
+              aria-label="鏡頭跟隨行動中的怪獸"
+              title={followTitle(followState)}
+              aria-pressed={followState.active}
+              disabled={!motion}
+              className={`follow-btn ${followState.active ? 'on' : followState.paused ? 'paused' : 'off'}`}
+              onClick={() => {
+                toggleFollow();
+              }}
+            >
+              🎥
+            </button>
+            {customView && (
+              <button
+                className="reset"
+                aria-label="重置視角並恢復自動鏡頭"
+                onClick={() => {
+                  rendererRef.current?.resetView();
+                }}
+              >
+                ↺
+              </button>
+            )}
           </div>
-        )}
-        {busy && (
-          <button
-            className="scene-skip"
-            onClick={() => {
-              rendererRef.current?.skip();
-            }}
-          >
-            跳過動畫 ⏭
-          </button>
-        )}
+          <p className="map-hint" aria-hidden="true">
+            拖曳移動 · 滾輪／雙指縮放
+          </p>
+          {busy && (
+            <button
+              className="scene-skip"
+              onClick={() => {
+                rendererRef.current?.skip();
+              }}
+            >
+              跳過動畫 ⏭
+            </button>
+          )}
+        </div>
+        {hud}
       </div>
       <div className="scene-controls">
         <label>
@@ -185,6 +284,32 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, onReady 
           />{' '}
           鏡頭動態與震動{reduced ? '（系統已要求減少動態）' : ''}
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={followState.active}
+            disabled={!motion}
+            onChange={() => {
+              toggleFollow();
+            }}
+          />{' '}
+          鏡頭跟隨行動中的怪獸
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={prefs.attackFx}
+            onChange={(e) => {
+              update({ attackFx: e.target.checked });
+            }}
+          />{' '}
+          怪獸招式特效（吐息、雷射、噴火…）
+        </label>
+        {typeof document !== 'undefined' && document.fullscreenEnabled && (
+          <button className="link" onClick={toggleFullscreen}>
+            {fullscreen ? '離開全螢幕' : '全螢幕'}
+          </button>
+        )}
         <button
           className="link"
           onClick={() => {

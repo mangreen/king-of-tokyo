@@ -1,6 +1,7 @@
 import type { GameState } from '@kot/rules';
 import type { RoomSnapshot } from '@kot/protocol';
 import type { SceneSnapshot } from './SceneRenderer.js';
+import { monsterKindOf } from './roster.js';
 
 /** 把房間與遊戲狀態轉成場景需要的最小快照（純函式）。 */
 export function toSnapshot(
@@ -11,6 +12,8 @@ export function toSnapshot(
 ): SceneSnapshot {
   const nameOf = (seat: number): string =>
     room.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
+  const kindOf = (seat: number): number =>
+    monsterKindOf(seat, room.players.find((p) => p.seat === seat)?.monster);
   return {
     playerCount: state.config.playerCount,
     activeSeat: actorSeat,
@@ -18,6 +21,7 @@ export function toSnapshot(
     monsters: state.monsters.map((m) => ({
       seat: m.seat,
       name: nameOf(m.seat),
+      kind: kindOf(m.seat),
       alive: m.alive,
       hp: m.hp,
       maxHp: m.maxHp,

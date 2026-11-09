@@ -6,12 +6,23 @@ export interface ScenePrefs {
   quality: QualitySetting;
   /** 鏡頭運動、震動與命中停頓。 */
   cameraMotion: boolean;
+  /** 輪到哪隻怪獸行動，鏡頭就自動跟過去（需要鏡頭運動開啟）。 */
+  follow: boolean;
+  /** 怪獸各自的攻擊特效（吐息、雷射、噴火…）。 */
+  attackFx: boolean;
 }
 
 const KEY = 'kot.scene.prefs.v1';
 
 export function defaultPrefs(reducedMotion: boolean): ScenePrefs {
-  return { enabled: true, quality: 'auto', cameraMotion: !reducedMotion };
+  return {
+    enabled: true,
+    quality: 'auto',
+    cameraMotion: !reducedMotion,
+    follow: true,
+    // 系統要求減少動態時，閃爍的光柱特效預設關閉（仍可手動開啟）
+    attackFx: !reducedMotion,
+  };
 }
 
 /** 解析儲存的偏好；任何壞資料都退回預設（不信任 localStorage 的內容）。 */
@@ -26,6 +37,8 @@ export function parsePrefs(raw: string | null, reducedMotion: boolean): ScenePre
       enabled: typeof o['enabled'] === 'boolean' ? o['enabled'] : base.enabled,
       quality: parseQualitySetting(o['quality']),
       cameraMotion: typeof o['cameraMotion'] === 'boolean' ? o['cameraMotion'] : base.cameraMotion,
+      follow: typeof o['follow'] === 'boolean' ? o['follow'] : base.follow,
+      attackFx: typeof o['attackFx'] === 'boolean' ? o['attackFx'] : base.attackFx,
     };
   } catch {
     return base;

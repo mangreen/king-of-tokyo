@@ -20,6 +20,7 @@ import type { GameEvent } from '@kot/rules';
 import { MonsterActor } from './actor.js';
 import { buildCity, type CityBuild } from './city.js';
 import { directEvents, type Cue } from './director.js';
+import { AttackFxSystem, attackStyleOf } from './attackFx.js';
 import { CrackSystem, DebrisSystem, DustSystem, ShieldSystem, ShockwaveSystem } from './effects.js';
 import { Holds } from './holds.js';
 import {
@@ -48,10 +49,21 @@ import {
   type ShotSpec,
 } from './shots.js';
 import { makeSoftDotTexture } from './textures.js';
+import {
+  DEFAULT_VIEW,
+  applyView,
+  clampView,
+  isDefaultView,
+  followView,
+  zoomAt,
+  type UserView,
+} from './view.js';
 
 export interface SceneMonster {
   seat: number;
   name: string;
+  /** 怪獸造型（0..11，見 roster.ts）；每場由伺服器隨機分配。 */
+  kind: number;
   alive: boolean;
   hp: number;
   maxHp: number;
@@ -75,9 +87,15 @@ export interface RendererOptions {
   quality: QualitySetting;
   /** 鏡頭運動與震動（無障礙：prefers-reduced-motion 時預設關閉）。 */
   cameraMotion: boolean;
+  /** 鏡頭跟隨行動中的怪獸（預設開）。 */
+  follow?: boolean;
+  /** 怪獸各自的攻擊特效（預設開）。 */
+  attackFx?: boolean;
   seed: number;
   onTierChange?: (tier: QualityTier) => void;
   onFatal?: (reason: string) => void;
+  /** 玩家自己調整地圖視角（平移／縮放）時通知；true 表示目前不是預設視角。 */
+  onViewChange?: (custom: boolean) => void;
 }
 
 export interface SceneStats {
@@ -122,6 +140,7 @@ export class SceneRenderer {
   private debris: DebrisSystem;
   private waves: ShockwaveSystem;
   private cracks: CrackSystem;
+  private attackFx!: AttackFxSystem;
   private shields: ShieldSystem;
   private readonly blobTex: Texture = makeSoftDotTexture();
   private readonly blobs = new Map<number, Mesh>();
@@ -146,6 +165,12 @@ export class SceneRenderer {
   private shotSpec: { spec: ShotSpec; start: number; dur: number } | null = null;
   private pose: CameraPose = structuredClone(OVERVIEW_POSE);
   private shake = 0;
+  /** 玩家自己調的視角（平移／縮放）；非預設時暫停自動鏡頭，由玩家掌控。 */
+  private view: UserView = DEFAULT_VIEW;
+  private viewCustom = false;
+  private readonly pointers = new Map<number, { x: number; y: number }>();
+  private interacting = false;
+  private follow = true;
   private disposed = false;
   private lost = false;
   private frames = 0;
@@ -159,6 +184,121 @@ export class SceneRenderer {
     // 分頁在背景時時間不前進；回來時把積壓的演出直接收尾，不要讓畫面落後狀態
     if (!document.hidden && this.playing.length > 0) this.skip();
   };
+  private ndcOf(clientX: number, clientY: number): { x: number; y: number } {
+    const r = this.opts.canvas.getBoundingClientRect();
+    return {
+      x: ((clientX - r.left) / Math.max(1, r.width)) * 2 - 1,
+      y: -(((clientY - r.top) / Math.max(1, r.height)) * 2 - 1),
+    };
+  }
+  private gesture(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    factor: number,
+  ): void {
+    this.view = zoomAt(this.overviewPose(), this.view, this.camera.aspect, from, to, factor);
+    this.notifyView();
+  }
+  private notifyView(): void {
+    const custom = !isDefaultView(this.view);
+    if (custom !== this.viewCustom) {
+      this.viewCustom = custom;
+      this.opts.onViewChange?.(custom);
+    }
+  }
+  private readonly onPointerDown = (e: PointerEvent): void => {
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+    try {
+      this.opts.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // 合成事件沒有可捕捉的指標
+    }
+    this.pointers.set(e.pointerId, this.ndcOf(e.clientX, e.clientY));
+    this.interacting = true;
+  };
+  private readonly onPointerMove = (e: PointerEvent): void => {
+    const prev = this.pointers.get(e.pointerId);
+    if (!prev) return;
+    const now = this.ndcOf(e.clientX, e.clientY);
+    if (this.pointers.size === 1) {
+      this.gesture(prev, now, 1);
+    } else if (this.pointers.size === 2) {
+      // 雙指：縮放比例 = 兩指距離變化；中心點的移動 = 平移
+      const [a, b] = [...this.pointers.entries()];
+      if (!a || !b) return;
+      const other = a[0] === e.pointerId ? b[1] : a[1];
+      const aspect = Math.max(0.1, this.camera.aspect);
+      const dist = (p: { x: number; y: number }, q: { x: number; y: number }): number =>
+        Math.hypot((p.x - q.x) * aspect, p.y - q.y);
+      const before = dist(prev, other);
+      const after = dist(now, other);
+      const mid = (p: { x: number; y: number }): { x: number; y: number } => ({
+        x: (p.x + other.x) / 2,
+        y: (p.y + other.y) / 2,
+      });
+      this.gesture(mid(prev), mid(now), before > 1e-4 ? after / before : 1);
+    }
+    this.pointers.set(e.pointerId, now);
+  };
+  private readonly onPointerEnd = (e: PointerEvent): void => {
+    this.pointers.delete(e.pointerId);
+    if (this.pointers.size === 0) this.interacting = false;
+  };
+  private readonly onWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const at = this.ndcOf(e.clientX, e.clientY);
+    this.gesture(at, at, Math.exp(-e.deltaY * unit * 0.0015));
+  };
+  private readonly onDblClick = (): void => {
+    this.resetView();
+  };
+  private readonly onKey = (e: KeyboardEvent): void => {
+    const step = 0.12 / this.view.zoom;
+    const c = { x: 0, y: 0 };
+    const move = (dx: number, dy: number): void => {
+      // 方向鍵：把地圖往按的方向「推」（內容跟著移動）
+      this.gesture(c, { x: dx * step * 2, y: dy * step * 2 }, 1);
+    };
+    switch (e.key) {
+      case 'ArrowLeft':
+        move(-1, 0);
+        break;
+      case 'ArrowRight':
+        move(1, 0);
+        break;
+      case 'ArrowUp':
+        move(0, 1);
+        break;
+      case 'ArrowDown':
+        move(0, -1);
+        break;
+      case '+':
+      case '=':
+        this.gesture(c, c, 1.25);
+        break;
+      case '-':
+      case '_':
+        this.gesture(c, c, 0.8);
+        break;
+      case '0':
+      case 'Home':
+        this.resetView();
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+  };
+  /** 按鈕縮放（以畫面中心）。 */
+  zoomBy(factor: number): void {
+    this.gesture({ x: 0, y: 0 }, { x: 0, y: 0 }, factor);
+  }
+  /** 回到預設總覽並恢復自動鏡頭。 */
+  resetView(): void {
+    this.view = DEFAULT_VIEW;
+    this.notifyView();
+  }
   private readonly onContextLost = (e: Event): void => {
     e.preventDefault();
     // 內容已失效：停掉繪製迴圈，交給 UI 顯示「重試」（重試會重建整個渲染器與 canvas）
@@ -171,6 +311,7 @@ export class SceneRenderer {
     this.setting = opts.quality;
     this.tier = startTier(opts.quality);
     this.cameraMotion = opts.cameraMotion;
+    this.follow = opts.follow ?? true;
     const q = QUALITY[this.tier];
 
     try {
@@ -186,6 +327,14 @@ export class SceneRenderer {
     }
     this.renderer.shadowMap.type = PCFShadowMap;
     opts.canvas.addEventListener('webglcontextlost', this.onContextLost);
+    opts.canvas.addEventListener('pointerdown', this.onPointerDown);
+    opts.canvas.addEventListener('pointermove', this.onPointerMove);
+    opts.canvas.addEventListener('pointerup', this.onPointerEnd);
+    opts.canvas.addEventListener('pointercancel', this.onPointerEnd);
+    opts.canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    opts.canvas.addEventListener('dblclick', this.onDblClick);
+    opts.canvas.addEventListener('keydown', this.onKey);
+    this.opts.onViewChange?.(false);
 
     this.scene.add(this.world, this.fx);
     this.scene.add(this.hemi, new AmbientLight('#ffffff', 0.15));
@@ -207,6 +356,20 @@ export class SceneRenderer {
     this.waves = new ShockwaveSystem(this.fx);
     this.cracks = new CrackSystem(this.fx);
     this.shields = new ShieldSystem(this.fx);
+    this.attackFx = new AttackFxSystem(
+      this.fx,
+      {
+        dust: this.dust,
+        debris: this.debris,
+        waves: this.waves,
+        cracks: this.cracks,
+        dustScale: () => QUALITY[this.tier].dust / QUALITY.high.dust,
+        shake: (amount) => {
+          if (this.cameraMotion) this.shake = Math.max(this.shake, amount);
+        },
+      },
+      opts.attackFx ?? true,
+    );
     this.fx.add(this.dust.points, this.debris.mesh);
 
     const markerGeo = new RingGeometry(1.9, 2.3, 40);
@@ -248,6 +411,16 @@ export class SceneRenderer {
 
   // ── 對外介面 ─────────────────────────────────────
 
+  /** 鏡頭是否跟隨行動中的怪獸（還需要鏡頭運動開啟）。 */
+  setFollow(on: boolean): void {
+    this.follow = on;
+  }
+
+  /** 開關怪獸各自的攻擊特效。 */
+  setAttackFx(on: boolean): void {
+    this.attackFx.setEnabled(on);
+  }
+
   setCameraMotion(on: boolean): void {
     this.cameraMotion = on;
     if (!on) {
@@ -259,7 +432,12 @@ export class SceneRenderer {
   /** 以最新的遊戲狀態更新場景；演出中的事件會延後套用（見 holds.ts）。 */
   setSnapshot(snap: SceneSnapshot): void {
     const first = this.snapshot === null;
-    const rebuild = !this.snapshot || this.snapshot.playerCount !== snap.playerCount;
+    // 人數改變，或同座位換了造型（新的一場）→ 整個場景重建
+    const kindChanged = snap.monsters.some((m) => {
+      const a = this.actors.get(m.seat);
+      return a !== undefined && a.rig.archetype !== m.kind;
+    });
+    const rebuild = !this.snapshot || this.snapshot.playerCount !== snap.playerCount || kindChanged;
     this.snapshot = snap;
     if (rebuild) this.rebuildWorld(snap.playerCount);
     for (const m of snap.monsters) {
@@ -294,6 +472,7 @@ export class SceneRenderer {
       }
     }
     this.shotSpec = null;
+    this.attackFx.clear();
     this.holds.clear();
     if (this.snapshot) for (const m of this.snapshot.monsters) this.syncSeat(m.seat, true);
     this.refreshTags();
@@ -328,6 +507,13 @@ export class SceneRenderer {
     this.io?.disconnect();
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.opts.canvas.removeEventListener('webglcontextlost', this.onContextLost);
+    this.opts.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.opts.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.opts.canvas.removeEventListener('pointerup', this.onPointerEnd);
+    this.opts.canvas.removeEventListener('pointercancel', this.onPointerEnd);
+    this.opts.canvas.removeEventListener('wheel', this.onWheel);
+    this.opts.canvas.removeEventListener('dblclick', this.onDblClick);
+    this.opts.canvas.removeEventListener('keydown', this.onKey);
     for (const a of this.actors.values()) a.dispose();
     this.actors.clear();
     this.city?.dispose();
@@ -335,6 +521,7 @@ export class SceneRenderer {
     this.debris.dispose();
     this.waves.dispose();
     this.cracks.dispose();
+    this.attackFx.dispose();
     this.shields.dispose();
     this.blobTex.dispose();
     this.marker.geometry.dispose();
@@ -386,7 +573,7 @@ export class SceneRenderer {
   }
 
   private spawnActor(m: SceneMonster, playerCount: number): void {
-    const rig = buildMonster(m.seat, QUALITY[this.tier].segments);
+    const rig = buildMonster(m.kind, m.seat, QUALITY[this.tier].segments);
     const spot = monsterSpot(m.seat, playerCount, m.location);
     const actor = new MonsterActor(m.seat, rig, spot);
     actor.onLand = (a, s) => {
@@ -503,6 +690,12 @@ export class SceneRenderer {
         const cx = ts.reduce((s, t) => s + t.x, 0) / ts.length;
         const cz = ts.reduce((s, t) => s + t.z, 0) / ts.length;
         a.lunge(cx, cz, cue.power);
+        this.attackFx.play(
+          attackStyleOf(a.rig.archetype),
+          { x: a.x, z: a.z },
+          ts.map((t) => ({ x: t.x, z: t.z })),
+          cue.power,
+        );
         break;
       }
       case 'hit': {
@@ -736,6 +929,7 @@ export class SceneRenderer {
     this.debris.update(sdt);
     this.waves.update(sdt);
     this.cracks.update(sdt);
+    this.attackFx.update(sdt, this.camera);
     this.shields.update(sdt);
     this.updateMarker(time);
     this.updateCamera(dt);
@@ -799,10 +993,22 @@ export class SceneRenderer {
     };
     let desired = this.overviewPose();
     let rate = 2.2;
-    if (this.shotSpec && this.cameraMotion) {
+    if (this.viewCustom) {
+      // 玩家掌控視角：不播自動鏡頭；拖曳中幾乎即時跟手
+      desired = applyView(desired, clampView(this.view));
+      rate = this.interacting ? 22 : 9;
+    } else if (this.shotSpec && this.cameraMotion) {
       const t = (this.simMs - this.shotSpec.start) / this.shotSpec.dur;
       desired = poseFor(this.shotSpec.spec, spotOf, smoothstep(t));
       rate = 6;
+    } else if (this.follow && this.cameraMotion) {
+      // 沒有演出鏡頭時，跟著輪到行動的怪獸（它跳進東京、移動時鏡頭也跟著）
+      const seat = this.snapshot?.activeSeat ?? null;
+      const a = seat === null ? undefined : this.actors.get(seat);
+      if (a?.alive === true) {
+        desired = applyView(desired, followView({ x: a.x, z: a.z }, OVERVIEW_POSE.lookAt));
+        rate = 2.6;
+      }
     }
     const k = 1 - Math.exp(-dt * rate);
     this.pose = blendPose(this.pose, desired, k);

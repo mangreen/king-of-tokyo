@@ -53,6 +53,39 @@ function actorId(ctx: ReturnType<typeof setup>): string {
   return player.id;
 }
 
+describe('怪獸造型分配', () => {
+  it('大廳階段沒有造型；開局後每位玩家拿到不同的造型，並隨房間狀態廣播', () => {
+    const ctx = twoPlayers();
+    expect(ctx.room.snapshot().players.every((p) => p.monster === null)).toBe(true);
+    ctx.room.start('host');
+    const players = ctx.publisher.lastRoom('p2')?.players ?? [];
+    const looks = players.map((p) => p.monster);
+    expect(looks.every((m) => typeof m === 'number')).toBe(true);
+    expect(new Set(looks).size).toBe(players.length);
+  });
+
+  it('可注入分配方式（測試與重現用），依座位順序套用', () => {
+    const scheduler = new FakeScheduler();
+    const publisher = new RecordingPublisher();
+    const room = new Room('ABCDE', { id: 'host', nickname: '房主' }, testCardSet(), {
+      scheduler,
+      publisher,
+      newSeed: () => 1,
+      pickMonsters: (n) => Array.from({ length: n }, (_, i) => 11 - i),
+      timings: TIMINGS,
+      onClose: () => undefined,
+      onMemberRemoved: () => undefined,
+    });
+    room.join({ id: 'p2', nickname: 'B' });
+    room.setReady('p2', true);
+    room.start('host');
+    expect(room.snapshot().players.map((p) => [p.seat, p.monster])).toEqual([
+      [0, 11],
+      [1, 10],
+    ]);
+  });
+});
+
 describe('大廳', () => {
   it('建立後房主在房間裡，且視為已準備', () => {
     const { room, publisher } = setup();
