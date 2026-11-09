@@ -1,149 +1,18 @@
 import type { BufferGeometry } from 'three';
-import {
-  Color,
-  ConeGeometry,
-  CylinderGeometry,
-  Float32BufferAttribute,
-  Group,
-  Mesh,
-  MeshLambertMaterial,
-  Quaternion,
-  SphereGeometry,
-  BoxGeometry,
-  Vector3,
-} from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MAX_SEATS, seatColor } from './layout.js';
+import { Group, Mesh, MeshLambertMaterial } from 'three';
+import { seatColor } from './layout.js';
+import type { Builder } from './monsterBuilder.js';
+import { newSpec, type Palette, type Spec, type V3 } from './monsterBuilder.js';
+import { cyclops, EXTRA_PALETTES, golem, mantis, mushroom, turtle, yeti } from './monstersExtra.js';
 import { MONSTER_HEIGHT, MONSTER_SCALE } from './shots.js';
 
 /**
- * 原創的程序化怪獸（沒有任何第三方模型）。六種造型，依座位固定：
- * 蜥蜴、巨猿、機甲、章魚外星人、巨蟹、飛龍。
+ * 原創的程序化怪獸（沒有任何第三方模型）。十二種造型（名字見 roster.ts），
+ * 每場開局由伺服器隨機分配給玩家：前六種（蜥蜴、巨猿、機甲、章魚人、巨蟹、飛龍）在這裡，
+ * 後六種（巨龜、螳螂、雪怪、石魔、蘑菇怪、獨眼怪）在 monstersExtra.ts。
  * 每隻怪獸合併成 5 個 mesh（身體、頭、左右臂、尾），共用一個頂點色材質，
  * 約 3–6k 三角形，遠低於 ADR-0003 的 15–25k 預算；各部位以樞軸分開，方便程序動畫。
  */
-
-type V3 = [number, number, number];
-
-interface Palette {
-  main: string;
-  dark: string;
-  light: string;
-  accent: string;
-  eye: string;
-}
-
-interface Part {
-  geo: BufferGeometry;
-}
-
-export class Builder {
-  readonly parts: Part[] = [];
-  constructor(private readonly seg: number) {}
-
-  private add(geo: BufferGeometry, color: string, pos: V3, scale?: V3, rot?: V3): void {
-    if (scale) geo.scale(...scale);
-    if (rot) {
-      geo.rotateX(rot[0]);
-      geo.rotateY(rot[1]);
-      geo.rotateZ(rot[2]);
-    }
-    geo.translate(...pos);
-    const c = new Color(color);
-    const n = geo.getAttribute('position').count;
-    const colors = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      colors[i * 3] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
-    }
-    geo.setAttribute('color', new Float32BufferAttribute(colors, 3));
-    this.parts.push({ geo });
-  }
-
-  ball(r: number, color: string, pos: V3, scale: V3 = [1, 1, 1]): this {
-    this.add(new SphereGeometry(r, this.seg, Math.max(6, this.seg - 4)), color, pos, scale);
-    return this;
-  }
-
-  box(size: V3, color: string, pos: V3, rot?: V3): this {
-    this.add(new BoxGeometry(...size), color, pos, undefined, rot);
-    return this;
-  }
-
-  /** 從 a 到 b 的錐形圓柱（rA 在 a 端、rB 在 b 端）。 */
-  limb(a: V3, b: V3, rA: number, rB: number, color: string): this {
-    const dir = new Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-    const len = Math.max(0.001, dir.length());
-    const geo = new CylinderGeometry(rB, rA, len, Math.max(6, this.seg - 2), 1);
-    const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dir.normalize());
-    geo.applyQuaternion(q);
-    geo.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
-    this.paint(geo, color);
-    this.parts.push({ geo });
-    return this;
-  }
-
-  /** 從 a（底）指向 b（尖）的圓錐。 */
-  spike(a: V3, b: V3, r: number, color: string): this {
-    const dir = new Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-    const len = Math.max(0.001, dir.length());
-    const geo = new ConeGeometry(r, len, Math.max(5, this.seg - 4), 1);
-    const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dir.normalize());
-    geo.applyQuaternion(q);
-    geo.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
-    this.paint(geo, color);
-    this.parts.push({ geo });
-    return this;
-  }
-
-  private paint(geo: BufferGeometry, color: string): void {
-    const c = new Color(color);
-    const n = geo.getAttribute('position').count;
-    const colors = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      colors[i * 3] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
-    }
-    geo.setAttribute('color', new Float32BufferAttribute(colors, 3));
-  }
-
-  /** 把部位移到以 pivot 為原點，合併成單一幾何。 */
-  merge(pivot: V3): BufferGeometry | null {
-    if (this.parts.length === 0) return null;
-    const geos = this.parts.map((p) => {
-      const g = p.geo.clone();
-      g.translate(-pivot[0], -pivot[1], -pivot[2]);
-      return g;
-    });
-    const merged = mergeGeometries(geos, false);
-    for (const g of geos) g.dispose();
-    for (const p of this.parts) p.geo.dispose();
-    return merged;
-  }
-}
-
-interface Spec {
-  body: Builder;
-  head: Builder;
-  armL: Builder;
-  armR: Builder;
-  tail: Builder;
-  pivots: { head: V3; armL: V3; armR: V3; tail: V3 };
-}
-
-const newSpec = (seg: number): Spec => ({
-  body: new Builder(seg),
-  head: new Builder(seg),
-  armL: new Builder(seg),
-  armR: new Builder(seg),
-  tail: new Builder(seg),
-  pivots: { head: [0, 3.5, 0.5], armL: [1, 3, 0], armR: [-1, 3, 0], tail: [0, 1.6, -0.7] },
-});
-
-/** 每種怪獸的名字（只是描述造型，不是任何既有角色）。 */
-export const ARCHETYPE_NAMES = ['蜥蜴', '巨猿', '機甲', '章魚人', '巨蟹', '飛龍'] as const;
 
 const PALETTES: Palette[] = [
   { main: '#4f9d5a', dark: '#2f6b3b', light: '#d6e8a8', accent: '#e4572e', eye: '#ffe14a' },
@@ -152,6 +21,7 @@ const PALETTES: Palette[] = [
   { main: '#8e5bc4', dark: '#58308c', light: '#e3c7f5', accent: '#ffbe0b', eye: '#fff7a8' },
   { main: '#d4533b', dark: '#8f2f20', light: '#f6c9a8', accent: '#b565e6', eye: '#ffffff' },
   { main: '#3d7fd0', dark: '#23508f', light: '#bfe0ff', accent: '#ff6fb5', eye: '#ffe14a' },
+  ...EXTRA_PALETTES,
 ];
 
 function lizard(s: Spec, p: Palette, accent: string): void {
@@ -408,7 +278,20 @@ function dragon(s: Spec, p: Palette, accent: string): void {
   tail.spike([0, 1.0, -4.1], [0, 1.0, -5.0], 0.22, accent);
 }
 
-const BUILDERS = [lizard, ape, mech, octopus, crab, dragon] as const;
+export const BUILDERS = [
+  lizard,
+  ape,
+  mech,
+  octopus,
+  crab,
+  dragon,
+  turtle,
+  mantis,
+  yeti,
+  golem,
+  mushroom,
+  cyclops,
+] as const;
 
 export interface MonsterRig {
   root: Group;
@@ -425,13 +308,9 @@ export interface MonsterRig {
   dispose: () => void;
 }
 
-export function archetypeOf(seat: number): number {
-  return ((seat % MAX_SEATS) + MAX_SEATS) % MAX_SEATS;
-}
-
-/** 依座位建出一隻怪獸（造型固定，強調色是座位顏色）。 */
-export function buildMonster(seat: number, segments: number): MonsterRig {
-  const archetype = archetypeOf(seat);
+/** 依造型（kind）與座位建出一隻怪獸：造型由伺服器每場隨機分配，強調色是座位顏色。 */
+export function buildMonster(kind: number, seat: number, segments: number): MonsterRig {
+  const archetype = ((kind % BUILDERS.length) + BUILDERS.length) % BUILDERS.length;
   const palette = PALETTES[archetype] ?? PALETTES[0]!;
   const accent = seatColor(seat);
   const spec = newSpec(segments);

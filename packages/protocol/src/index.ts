@@ -17,6 +17,7 @@ export {
   EmptyPayloadSchema,
   GameActionSchema,
   MAX_PLAYERS,
+  MONSTER_COUNT,
   MIN_PLAYERS,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,

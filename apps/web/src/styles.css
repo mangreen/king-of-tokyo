@@ -987,3 +987,8 @@ main.wide {
   color: #6b665b;
   filter: grayscale(1);
 }
+
+.monster-tag {
+  font-size: 0.72rem;
+  opacity: 0.85;
+}

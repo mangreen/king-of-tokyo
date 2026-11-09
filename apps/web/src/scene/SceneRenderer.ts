@@ -62,6 +62,8 @@ import {
 export interface SceneMonster {
   seat: number;
   name: string;
+  /** 怪獸造型（0..11，見 roster.ts）；每場由伺服器隨機分配。 */
+  kind: number;
   alive: boolean;
   hp: number;
   maxHp: number;
@@ -430,7 +432,12 @@ export class SceneRenderer {
   /** 以最新的遊戲狀態更新場景；演出中的事件會延後套用（見 holds.ts）。 */
   setSnapshot(snap: SceneSnapshot): void {
     const first = this.snapshot === null;
-    const rebuild = !this.snapshot || this.snapshot.playerCount !== snap.playerCount;
+    // 人數改變，或同座位換了造型（新的一場）→ 整個場景重建
+    const kindChanged = snap.monsters.some((m) => {
+      const a = this.actors.get(m.seat);
+      return a !== undefined && a.rig.archetype !== m.kind;
+    });
+    const rebuild = !this.snapshot || this.snapshot.playerCount !== snap.playerCount || kindChanged;
     this.snapshot = snap;
     if (rebuild) this.rebuildWorld(snap.playerCount);
     for (const m of snap.monsters) {
@@ -566,7 +573,7 @@ export class SceneRenderer {
   }
 
   private spawnActor(m: SceneMonster, playerCount: number): void {
-    const rig = buildMonster(m.seat, QUALITY[this.tier].segments);
+    const rig = buildMonster(m.kind, m.seat, QUALITY[this.tier].segments);
     const spot = monsterSpot(m.seat, playerCount, m.location);
     const actor = new MonsterActor(m.seat, rig, spot);
     actor.onLand = (a, s) => {
@@ -684,7 +691,7 @@ export class SceneRenderer {
         const cz = ts.reduce((s, t) => s + t.z, 0) / ts.length;
         a.lunge(cx, cz, cue.power);
         this.attackFx.play(
-          attackStyleOf(cue.seat),
+          attackStyleOf(a.rig.archetype),
           { x: a.x, z: a.z },
           ts.map((t) => ({ x: t.x, z: t.z })),
           cue.power,

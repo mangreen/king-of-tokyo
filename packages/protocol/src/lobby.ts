@@ -8,6 +8,8 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const ROOM_CODE_LENGTH = 5;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
+/** 怪獸造型的種類數；每場開局時由伺服器隨機分配（0..MONSTER_COUNT-1）。 */
+export const MONSTER_COUNT = 12;
 
 export const RoomCodeSchema = z
   .string()
@@ -138,6 +140,8 @@ export interface PlayerInfo {
   nickname: string;
   /** 開局後的座位；大廳階段為 null。 */
   seat: number | null;
+  /** 這場分配到的怪獸造型（0..MONSTER_COUNT-1）；大廳階段為 null。純外觀，不影響規則。 */
+  monster: number | null;
   ready: boolean;
   connected: boolean;
   /** 逾時未操作而由系統代打。玩家再操作一次就會解除。 */

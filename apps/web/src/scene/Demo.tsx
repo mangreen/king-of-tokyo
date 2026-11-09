@@ -18,7 +18,7 @@ declare global {
 
 const NAMES = ['小蜥', '大猿', '機甲', '章魚', '巨蟹', '飛龍'];
 
-function initial(players: number): SceneSnapshot {
+function initial(players: number, kinds: number[]): SceneSnapshot {
   return {
     playerCount: players,
     activeSeat: 0,
@@ -26,6 +26,7 @@ function initial(players: number): SceneSnapshot {
     monsters: Array.from({ length: players }, (_, seat) => ({
       seat,
       name: NAMES[seat] ?? `座位 ${String(seat)}`,
+      kind: kinds[seat] ?? seat,
       alive: true,
       hp: 10,
       maxHp: 10,
@@ -40,7 +41,15 @@ function initial(players: number): SceneSnapshot {
 export default function Demo() {
   const params = new URLSearchParams(window.location.search);
   const players = Math.max(2, Math.min(6, Number(params.get('players') ?? 6)));
-  const [snap, setSnap] = useState<SceneSnapshot>(() => initial(players));
+  const [snap, setSnap] = useState<SceneSnapshot>(() =>
+    initial(
+      players,
+      (params.get('kinds') ?? '')
+        .split(',')
+        .filter((x) => x !== '')
+        .map(Number),
+    ),
+  );
   const [feed, setFeed] = useState<FeedBatch[]>([]);
   const [prefs, setPrefs] = useState<ScenePrefs>(() => ({
     ...defaultPrefs(prefersReducedMotion()),
@@ -171,7 +180,12 @@ export default function Demo() {
     [
       '重置',
       () => {
-        setSnap(initial(players));
+        setSnap(
+          initial(
+            players,
+            snapRef.current.monsters.map((m) => m.kind),
+          ),
+        );
         setFeed([]);
         version.current = 1;
       },
