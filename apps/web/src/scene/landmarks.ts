@@ -9,7 +9,7 @@ import {
   TOKYO_TOWER,
   TOKYO_TOWER_HEIGHT,
 } from './layout.js';
-import { Builder } from './monsters.js';
+import { Builder } from './monsterBuilder.js';
 
 /**
  * 東京的地標（程序化原創幾何，每個合併成一個 mesh，頂點色上色）：

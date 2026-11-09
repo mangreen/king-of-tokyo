@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { archetypeOf } from './monsters.js';
-import { attackStyleOf, planAttack, STYLE_BY_ARCHETYPE, type AttackStyle } from './attackFx.js';
+import { MONSTER_COUNT } from '@kot/protocol';
+import { attackStyleOf, planAttack, STYLE_BY_KIND, type AttackStyle } from './attackFx.js';
 
-const STYLES: AttackStyle[] = ['breath', 'slam', 'laser', 'ink', 'claw', 'fire'];
+const STYLES: readonly AttackStyle[] = STYLE_BY_KIND;
 
 describe('attackFx', () => {
-  it('六種造型各有不同的招式', () => {
-    expect(new Set(STYLE_BY_ARCHETYPE).size).toBe(6);
-    const seen = new Set<AttackStyle>();
-    for (let seat = 0; seat < 6; seat++) seen.add(attackStyleOf(seat));
-    expect(seen.size).toBe(6);
-    expect(attackStyleOf(2)).toBe(STYLE_BY_ARCHETYPE[archetypeOf(2)]);
+  it('每種怪獸造型各有不同的招式，且與造型數量一致', () => {
+    expect(STYLE_BY_KIND).toHaveLength(MONSTER_COUNT);
+    expect(new Set(STYLE_BY_KIND).size).toBe(MONSTER_COUNT);
+    for (let kind = 0; kind < MONSTER_COUNT; kind++) {
+      expect(attackStyleOf(kind)).toBe(STYLE_BY_KIND[kind]);
+    }
+    expect(attackStyleOf(99)).toBe('slam');
   });
 
   it('光柱型招式有顏色與時間；搥地／爪擊沒有光柱', () => {
@@ -18,14 +19,16 @@ describe('attackFx', () => {
       const p = planAttack(s, 'medium');
       expect(p.impactDelay).toBeGreaterThan(0);
       expect(p.impactDelay).toBeLessThan(0.5);
-      if (s === 'slam' || s === 'claw') expect(p.beam).toBeNull();
+      if (['slam', 'claw', 'scythe', 'quake'].includes(s)) expect(p.beam).toBeNull();
       else {
         expect(p.beam?.dur).toBeGreaterThan(0.2);
         expect(p.beam?.color).toMatch(/^#[0-9a-f]{6}$/i);
       }
     }
     expect(planAttack('claw', 'medium').burst.slash).toBe(true);
+    expect(planAttack('scythe', 'medium').burst.slashColor).toMatch(/^#/);
     expect(planAttack('slam', 'medium').burst.crack).toBe(true);
+    expect(planAttack('quake', 'medium').burst.crack).toBe(true);
   });
 
   it('越重的攻擊越強（粒子數、衝擊波、震動）', () => {

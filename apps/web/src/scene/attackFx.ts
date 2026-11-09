@@ -12,28 +12,46 @@ import {
   type Camera,
 } from 'three';
 import type { Power } from './director.js';
-import { archetypeOf } from './monsters.js';
 import type { DebrisSystem, DustSystem, ShockwaveSystem, CrackSystem } from './effects.js';
 
 /**
  * 每種怪獸造型各自的攻擊特效（原創）：
- * 蜥蜴＝能量吐息、猿＝搥地、機械＝雷射、章魚＝墨汁鞭、螃蟹＝爪擊、龍＝噴火。
+ * 蜥蜴＝能量吐息、猿＝搥地、機械＝雷射、章魚＝墨汁鞭、螃蟹＝爪擊、龍＝噴火、
+ * 巨龜＝水柱、螳螂＝鐮刀斬、雪怪＝冰霜、石魔＝震地、蘑菇怪＝孢子、獨眼怪＝凝視光束。
  * 純視覺：伺服器已決定傷害，這裡只在 lunge 時多播一段招式；可在設定關閉。
  */
-export type AttackStyle = 'breath' | 'slam' | 'laser' | 'ink' | 'claw' | 'fire';
+export type AttackStyle =
+  | 'breath'
+  | 'slam'
+  | 'laser'
+  | 'ink'
+  | 'claw'
+  | 'fire'
+  | 'water'
+  | 'scythe'
+  | 'ice'
+  | 'quake'
+  | 'spore'
+  | 'gaze';
 
-/** 順序對應 monsters.ts 的 BUILDERS（蜥蜴、猿、機械、章魚、螃蟹、龍）。 */
-export const STYLE_BY_ARCHETYPE: readonly AttackStyle[] = [
+/** 順序對應 monsters.ts 的 BUILDERS 與 roster.ts 的名冊。 */
+export const STYLE_BY_KIND: readonly AttackStyle[] = [
   'breath',
   'slam',
   'laser',
   'ink',
   'claw',
   'fire',
+  'water',
+  'scythe',
+  'ice',
+  'quake',
+  'spore',
+  'gaze',
 ];
 
-export function attackStyleOf(seat: number): AttackStyle {
-  return STYLE_BY_ARCHETYPE[archetypeOf(seat)] ?? 'slam';
+export function attackStyleOf(kind: number): AttackStyle {
+  return STYLE_BY_KIND[kind] ?? 'slam';
 }
 
 export const STYLE_LABEL: Record<AttackStyle, string> = {
@@ -43,6 +61,12 @@ export const STYLE_LABEL: Record<AttackStyle, string> = {
   ink: '墨汁鞭',
   claw: '爪擊',
   fire: '噴火',
+  water: '水柱',
+  scythe: '鐮刀斬',
+  ice: '冰霜',
+  quake: '震地',
+  spore: '孢子',
+  gaze: '凝視光束',
 };
 
 export interface BeamSpec {
@@ -66,6 +90,8 @@ export interface BurstSpec {
   selfWave: { color: string; radius: number } | null;
   crack: boolean;
   slash: boolean;
+  /** 爪痕／斬擊的顏色（預設白）。 */
+  slashColor?: string;
   shake: number;
 }
 
@@ -202,6 +228,138 @@ export function planAttack(style: AttackStyle, power: Power): AttackPlan {
         },
         beamDelay: 0,
         impactDelay: 0.32,
+      };
+    case 'water':
+      return {
+        style,
+        beam: {
+          color: '#2f8cff',
+          core: '#e6f6ff',
+          w0: 0.45 * k,
+          w1: 0.9 * k,
+          dur: 0.6 * k,
+          flicker: 0.15,
+          blend: 'add',
+        },
+        burst: {
+          dust: [{ color: '#cfeeff', count: n(16), size: 2.6, up: 2.8, spread: 3.4, life: 1 }],
+          debris: { colors: ['#7cc8ff', '#ffffff'], count: n(10), speed: 6 },
+          wave: { color: '#4aa8ff', radius: 3.4 * k, dur: 0.6 },
+          selfWave: null,
+          crack: false,
+          slash: false,
+          shake: 0.35 * k,
+        },
+        beamDelay: 0.08,
+        impactDelay: 0.24,
+      };
+    case 'ice':
+      return {
+        style,
+        beam: {
+          color: '#9fdcff',
+          core: '#ffffff',
+          w0: 0.3 * k,
+          w1: 1.2 * k,
+          dur: 0.5 * k,
+          flicker: 0.1,
+          blend: 'add',
+        },
+        burst: {
+          dust: [{ color: '#f2fbff', count: n(18), size: 2.4, up: 2.2, spread: 3.2, life: 1.2 }],
+          debris: { colors: ['#d9f3ff', '#8fd3ff', '#ffffff'], count: n(12), speed: 8 },
+          wave: { color: '#cdefff', radius: 3.2 * k, dur: 0.6 },
+          selfWave: null,
+          crack: false,
+          slash: false,
+          shake: 0.4 * k,
+        },
+        beamDelay: 0.1,
+        impactDelay: 0.22,
+      };
+    case 'spore':
+      return {
+        style,
+        beam: {
+          color: '#5aa33a',
+          core: '#c8f27a',
+          w0: 0.5 * k,
+          w1: 0.2,
+          dur: 0.5,
+          flicker: 0,
+          blend: 'normal',
+        },
+        burst: {
+          dust: [
+            { color: '#7fcf4a', count: n(16), size: 3, up: 2, spread: 3.4, life: 1.4 },
+            { color: '#e8ff9a', count: n(8), size: 1.8, up: 2.8, spread: 2.4, life: 1 },
+          ],
+          debris: null,
+          wave: { color: '#8fe04a', radius: 3 * k, dur: 0.6 },
+          selfWave: null,
+          crack: false,
+          slash: false,
+          shake: 0.3 * k,
+        },
+        beamDelay: 0.1,
+        impactDelay: 0.3,
+      };
+    case 'gaze':
+      return {
+        style,
+        beam: {
+          color: '#ff4fd8',
+          core: '#fff0ff',
+          w0: 0.26 * k,
+          w1: 0.26 * k,
+          dur: 0.4,
+          flicker: 0.7,
+          blend: 'add',
+        },
+        burst: {
+          dust: [{ color: '#ffb3f0', count: n(10), size: 2, up: 2, spread: 2.6, life: 0.9 }],
+          debris: { colors: ['#ff4fd8', '#ffe14a', '#ffffff'], count: n(12), speed: 10 },
+          wave: { color: '#ff7de8', radius: 2.6 * k, dur: 0.45 },
+          selfWave: null,
+          crack: false,
+          slash: false,
+          shake: 0.3 * k,
+        },
+        beamDelay: 0.1,
+        impactDelay: 0.16,
+      };
+    case 'scythe':
+      return {
+        style,
+        beam: null,
+        burst: {
+          dust: [{ color: '#d5ff9a', count: n(10), size: 1.6, up: 3.2, spread: 2.2, life: 1 }],
+          debris: null,
+          wave: { color: '#b6ff6a', radius: 2.8 * k, dur: 0.5 },
+          selfWave: null,
+          crack: false,
+          slash: true,
+          slashColor: '#a6ff4d',
+          shake: 0.4 * k,
+        },
+        beamDelay: 0,
+        impactDelay: 0.3,
+      };
+    case 'quake':
+      return {
+        style,
+        beam: null,
+        burst: {
+          dust: [{ color: '#b8a58a', count: n(18), size: 3.4, up: 2.2, spread: 4.6, life: 1.5 }],
+          debris: { colors: ['#8d8a85', '#6b6862', '#b8a58a'], count: n(22), speed: 11 },
+          wave: { color: '#d2c4a8', radius: 4.4 * k, dur: 0.6 },
+          selfWave: { color: '#c8b89a', radius: 3 * k },
+          crack: true,
+          slash: false,
+          shake: 1.0 * k,
+        },
+        beamDelay: 0,
+        impactDelay: 0.3,
       };
     case 'slam':
       return {
@@ -506,6 +664,7 @@ export class AttackFxSystem {
           s.mesh.position.set(t.x, TARGET_HEIGHT + 0.6, t.z);
           s.mesh.rotation.set(0, 0, (Math.random() - 0.5) * 0.7);
           s.size = 5.4 * POWER_SCALE[power];
+          s.mat.color.set(b.slashColor ?? '#ffffff');
           s.t = 0;
           s.delay = 0;
           s.dur = 0.42;

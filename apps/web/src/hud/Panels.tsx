@@ -1,3 +1,4 @@
+import { monsterKindOf, monsterName } from '../scene/roster.js';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Action, Face, GameState, Monster, RulesEnv } from '@kot/rules';
 import type { GameActionInput, RoomSnapshot } from '@kot/protocol';
@@ -76,6 +77,9 @@ export function PlayersPanel({ state, room, actorSeat, mySeat, nameOf, env }: Pl
                 <span className="p-name">
                   {nameOf(m.seat)}
                   {m.seat === mySeat && '（你）'}
+                </span>
+                <span className="tag monster-tag">
+                  {monsterName(monsterKindOf(m.seat, info?.monster))}
                 </span>
                 {info && !info.connected && <span className="tag warn">離線</span>}
                 {info?.away && <span className="tag warn">代打中</span>}
