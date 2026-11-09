@@ -15,9 +15,10 @@ import {
 } from './Panels.js';
 import { endRules } from './rulesText.js';
 
-export type HudTab = 'shop' | 'log' | 'rules' | 'mine';
+export type HudTab = 'players' | 'shop' | 'log' | 'rules' | 'mine';
 
 const TABS: { key: HudTab; label: string }[] = [
+  { key: 'players', label: '👥 玩家' },
   { key: 'shop', label: '🛒 商店' },
   { key: 'log', label: '📜 事件' },
   { key: 'rules', label: '📖 規則' },
@@ -61,7 +62,7 @@ export interface HudProps {
  */
 export function GameHud(p: HudProps) {
   const { state } = p;
-  const [tab, setTab] = useState<HudTab | null>(null);
+  const [tab, setTab] = useState<HudTab>('players');
   // 輪到我買牌時自動打開商店一次；離開買牌階段時若是自動打開的就收起來
   const [auto, setAuto] = useState<{ key: string | null; opened: boolean }>({
     key: null,
@@ -74,7 +75,7 @@ export function GameHud(p: HudProps) {
     setTab('shop');
   } else if (buyKey === null && auto.opened) {
     setAuto({ key: auto.key, opened: false });
-    if (tab === 'shop') setTab(null);
+    if (tab === 'shop') setTab('players');
   }
 
   const me: Monster | undefined = state.monsters.find((m) => m.seat === p.mySeat);
@@ -82,8 +83,10 @@ export function GameHud(p: HudProps) {
   const goal = rules.victoryPoints;
   const actor = p.actorSeat === null ? null : p.nameOf(p.actorSeat);
 
+  const tabLabel = TABS.find((t) => t.key === tab)?.label;
+
   return (
-    <div className={`hud ${p.mode}${tab ? ' drawer-open' : ''}`}>
+    <div className={`hud ${p.mode}`}>
       <div className="hud-top hud-pop">
         <span className="hud-status">
           房間 <span className="room-code">{p.room.code}</span> · 第 {state.round} 輪
@@ -115,35 +118,6 @@ export function GameHud(p: HudProps) {
         >
           🏁 {goal} VP
         </Tip>
-        <nav className="hud-tabs" aria-label="遊戲資訊">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              className={tab === t.key ? 'on' : undefined}
-              aria-pressed={tab === t.key}
-              onClick={() => {
-                setTab(tab === t.key ? null : t.key);
-              }}
-            >
-              {t.label}
-              {t.key === 'shop' && p.marketBuys.length > 0 && (
-                <span className="badge">{p.marketBuys.length}</span>
-              )}
-            </button>
-          ))}
-          {p.tools}
-        </nav>
-      </div>
-
-      <div className="hud-players hud-pop">
-        <PlayersPanel
-          state={state}
-          room={p.room}
-          actorSeat={p.actorSeat}
-          mySeat={p.mySeat}
-          nameOf={p.nameOf}
-          env={p.env}
-        />
       </div>
 
       {state.phase !== 'over' && (
@@ -168,37 +142,51 @@ export function GameHud(p: HudProps) {
         </div>
       )}
 
-      {tab && (
-        <aside className="hud-drawer hud-pop" aria-label={TABS.find((t) => t.key === tab)?.label}>
-          <header>
-            <strong>{TABS.find((t) => t.key === tab)?.label}</strong>
+      <div className="hud-info hud-pop">
+        <nav className="hud-tabs" aria-label="遊戲資訊">
+          {TABS.map((t) => (
             <button
-              className="close"
-              aria-label="關閉"
+              key={t.key}
+              className={tab === t.key ? 'on' : undefined}
+              aria-pressed={tab === t.key}
               onClick={() => {
-                setTab(null);
+                setTab(t.key);
               }}
             >
-              ✕
+              {t.label}
+              {t.key === 'shop' && p.marketBuys.length > 0 && (
+                <span className="badge">{p.marketBuys.length}</span>
+              )}
             </button>
-          </header>
-          <div className="hud-drawer-body">
-            {tab === 'shop' && (
-              <ShopPanel
-                state={state}
-                env={p.env}
-                buys={p.marketBuys}
-                sweep={p.sweep}
-                labelCtx={p.labelCtx}
-                onAct={p.onAct}
-              />
-            )}
-            {tab === 'log' && <LogPanel log={p.log} rules={rules} />}
-            {tab === 'rules' && <RulesPanel state={state} nameOf={p.nameOf} />}
-            {tab === 'mine' && <MyCardsPanel monster={me} env={p.env} />}
-          </div>
-        </aside>
-      )}
+          ))}
+        </nav>
+        <div className="hud-info-body" role="region" aria-label={tabLabel}>
+          {tab === 'players' && (
+            <PlayersPanel
+              state={state}
+              room={p.room}
+              actorSeat={p.actorSeat}
+              mySeat={p.mySeat}
+              nameOf={p.nameOf}
+              env={p.env}
+            />
+          )}
+          {tab === 'shop' && (
+            <ShopPanel
+              state={state}
+              env={p.env}
+              buys={p.marketBuys}
+              sweep={p.sweep}
+              labelCtx={p.labelCtx}
+              onAct={p.onAct}
+            />
+          )}
+          {tab === 'log' && <LogPanel log={p.log} rules={rules} />}
+          {tab === 'rules' && <RulesPanel state={state} nameOf={p.nameOf} />}
+          {tab === 'mine' && <MyCardsPanel monster={me} env={p.env} />}
+        </div>
+      </div>
+      {p.tools}
     </div>
   );
 }

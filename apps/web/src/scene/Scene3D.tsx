@@ -33,6 +33,7 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
   const overlayRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [customView, setCustomView] = useState(false);
   const rendererRef = useRef<SceneRenderer | null>(null);
   const snapshotRef = useRef(snapshot);
   const feedRef = useRef(feed);
@@ -70,6 +71,7 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
         onFatal: (reason) => {
           setFatal(reason);
         },
+        onViewChange: setCustomView,
       });
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'init-failed';
@@ -149,12 +151,17 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
 
   return (
     <section className="scene" aria-label="3D 戰場與遊戲操作">
-      <div className={`scene-wrap${fullscreen ? ' is-fullscreen' : ''}`} ref={wrapRef}>
+      <div
+        className={`scene-wrap${hud ? ' has-hud' : ''}${fullscreen ? ' is-fullscreen' : ''}`}
+        ref={wrapRef}
+      >
         <div className="scene-view">
           <canvas
             key={`${String(attempt)}-${prefs.quality}-${String(seed)}`}
             ref={canvasRef}
             className="scene-canvas"
+            tabIndex={0}
+            aria-label="3D 地圖。拖曳移動，滾輪或雙指縮放，方向鍵移動、加減號縮放、0 重置"
           />
           <div ref={overlayRef} className="kot-overlay" aria-hidden="true" />
           {fatal !== null && (
@@ -170,6 +177,38 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
               </button>
             </div>
           )}
+          <div className="map-controls" role="group" aria-label="地圖視角">
+            <button
+              aria-label="放大"
+              onClick={() => {
+                rendererRef.current?.zoomBy(1.35);
+              }}
+            >
+              ＋
+            </button>
+            <button
+              aria-label="縮小"
+              onClick={() => {
+                rendererRef.current?.zoomBy(1 / 1.35);
+              }}
+            >
+              －
+            </button>
+            {customView && (
+              <button
+                className="reset"
+                aria-label="重置視角並恢復自動鏡頭"
+                onClick={() => {
+                  rendererRef.current?.resetView();
+                }}
+              >
+                ↺
+              </button>
+            )}
+          </div>
+          <p className="map-hint" aria-hidden="true">
+            拖曳移動 · 滾輪／雙指縮放
+          </p>
           {busy && (
             <button
               className="scene-skip"

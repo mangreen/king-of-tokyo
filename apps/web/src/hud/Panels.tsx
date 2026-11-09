@@ -54,15 +54,11 @@ export function PlayersPanel({ state, room, actorSeat, mySeat, nameOf, env }: Pl
   const bay = state.monsters.find((m) => m.alive && m.location === 'bay');
   const where = (m: Monster | undefined): string => (m ? nameOf(m.seat) : '空');
   return (
-    <details className="hud-card players-panel" open>
-      <summary>
-        玩家
-        <span className="muted">
-          {' '}
-          · 東京市 {where(city)}
-          {state.config.playerCount >= 5 && ` · 東京灣 ${where(bay)}`}
-        </span>
-      </summary>
+    <div className="players-panel">
+      <p className="muted tokyo-line">
+        東京市：{where(city)}
+        {state.config.playerCount >= 5 && ` · 東京灣：${where(bay)}`}
+      </p>
       <ul className="p-list">
         {state.monsters.map((m) => {
           const info = room.players.find((p) => p.seat === m.seat);
@@ -106,7 +102,7 @@ export function PlayersPanel({ state, room, actorSeat, mySeat, nameOf, env }: Pl
           );
         })}
       </ul>
-    </details>
+    </div>
   );
 }
 

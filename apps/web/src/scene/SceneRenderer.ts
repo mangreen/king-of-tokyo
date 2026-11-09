@@ -48,6 +48,14 @@ import {
   type ShotSpec,
 } from './shots.js';
 import { makeSoftDotTexture } from './textures.js';
+import {
+  DEFAULT_VIEW,
+  applyView,
+  clampView,
+  isDefaultView,
+  zoomAt,
+  type UserView,
+} from './view.js';
 
 export interface SceneMonster {
   seat: number;
@@ -78,6 +86,8 @@ export interface RendererOptions {
   seed: number;
   onTierChange?: (tier: QualityTier) => void;
   onFatal?: (reason: string) => void;
+  /** 玩家自己調整地圖視角（平移／縮放）時通知；true 表示目前不是預設視角。 */
+  onViewChange?: (custom: boolean) => void;
 }
 
 export interface SceneStats {
@@ -146,6 +156,11 @@ export class SceneRenderer {
   private shotSpec: { spec: ShotSpec; start: number; dur: number } | null = null;
   private pose: CameraPose = structuredClone(OVERVIEW_POSE);
   private shake = 0;
+  /** 玩家自己調的視角（平移／縮放）；非預設時暫停自動鏡頭，由玩家掌控。 */
+  private view: UserView = DEFAULT_VIEW;
+  private viewCustom = false;
+  private readonly pointers = new Map<number, { x: number; y: number }>();
+  private interacting = false;
   private disposed = false;
   private lost = false;
   private frames = 0;
@@ -159,6 +174,121 @@ export class SceneRenderer {
     // 分頁在背景時時間不前進；回來時把積壓的演出直接收尾，不要讓畫面落後狀態
     if (!document.hidden && this.playing.length > 0) this.skip();
   };
+  private ndcOf(clientX: number, clientY: number): { x: number; y: number } {
+    const r = this.opts.canvas.getBoundingClientRect();
+    return {
+      x: ((clientX - r.left) / Math.max(1, r.width)) * 2 - 1,
+      y: -(((clientY - r.top) / Math.max(1, r.height)) * 2 - 1),
+    };
+  }
+  private gesture(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    factor: number,
+  ): void {
+    this.view = zoomAt(this.overviewPose(), this.view, this.camera.aspect, from, to, factor);
+    this.notifyView();
+  }
+  private notifyView(): void {
+    const custom = !isDefaultView(this.view);
+    if (custom !== this.viewCustom) {
+      this.viewCustom = custom;
+      this.opts.onViewChange?.(custom);
+    }
+  }
+  private readonly onPointerDown = (e: PointerEvent): void => {
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+    try {
+      this.opts.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // 合成事件沒有可捕捉的指標
+    }
+    this.pointers.set(e.pointerId, this.ndcOf(e.clientX, e.clientY));
+    this.interacting = true;
+  };
+  private readonly onPointerMove = (e: PointerEvent): void => {
+    const prev = this.pointers.get(e.pointerId);
+    if (!prev) return;
+    const now = this.ndcOf(e.clientX, e.clientY);
+    if (this.pointers.size === 1) {
+      this.gesture(prev, now, 1);
+    } else if (this.pointers.size === 2) {
+      // 雙指：縮放比例 = 兩指距離變化；中心點的移動 = 平移
+      const [a, b] = [...this.pointers.entries()];
+      if (!a || !b) return;
+      const other = a[0] === e.pointerId ? b[1] : a[1];
+      const aspect = Math.max(0.1, this.camera.aspect);
+      const dist = (p: { x: number; y: number }, q: { x: number; y: number }): number =>
+        Math.hypot((p.x - q.x) * aspect, p.y - q.y);
+      const before = dist(prev, other);
+      const after = dist(now, other);
+      const mid = (p: { x: number; y: number }): { x: number; y: number } => ({
+        x: (p.x + other.x) / 2,
+        y: (p.y + other.y) / 2,
+      });
+      this.gesture(mid(prev), mid(now), before > 1e-4 ? after / before : 1);
+    }
+    this.pointers.set(e.pointerId, now);
+  };
+  private readonly onPointerEnd = (e: PointerEvent): void => {
+    this.pointers.delete(e.pointerId);
+    if (this.pointers.size === 0) this.interacting = false;
+  };
+  private readonly onWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const at = this.ndcOf(e.clientX, e.clientY);
+    this.gesture(at, at, Math.exp(-e.deltaY * unit * 0.0015));
+  };
+  private readonly onDblClick = (): void => {
+    this.resetView();
+  };
+  private readonly onKey = (e: KeyboardEvent): void => {
+    const step = 0.12 / this.view.zoom;
+    const c = { x: 0, y: 0 };
+    const move = (dx: number, dy: number): void => {
+      // 方向鍵：把地圖往按的方向「推」（內容跟著移動）
+      this.gesture(c, { x: dx * step * 2, y: dy * step * 2 }, 1);
+    };
+    switch (e.key) {
+      case 'ArrowLeft':
+        move(-1, 0);
+        break;
+      case 'ArrowRight':
+        move(1, 0);
+        break;
+      case 'ArrowUp':
+        move(0, 1);
+        break;
+      case 'ArrowDown':
+        move(0, -1);
+        break;
+      case '+':
+      case '=':
+        this.gesture(c, c, 1.25);
+        break;
+      case '-':
+      case '_':
+        this.gesture(c, c, 0.8);
+        break;
+      case '0':
+      case 'Home':
+        this.resetView();
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+  };
+  /** 按鈕縮放（以畫面中心）。 */
+  zoomBy(factor: number): void {
+    this.gesture({ x: 0, y: 0 }, { x: 0, y: 0 }, factor);
+  }
+  /** 回到預設總覽並恢復自動鏡頭。 */
+  resetView(): void {
+    this.view = DEFAULT_VIEW;
+    this.notifyView();
+  }
   private readonly onContextLost = (e: Event): void => {
     e.preventDefault();
     // 內容已失效：停掉繪製迴圈，交給 UI 顯示「重試」（重試會重建整個渲染器與 canvas）
@@ -186,6 +316,14 @@ export class SceneRenderer {
     }
     this.renderer.shadowMap.type = PCFShadowMap;
     opts.canvas.addEventListener('webglcontextlost', this.onContextLost);
+    opts.canvas.addEventListener('pointerdown', this.onPointerDown);
+    opts.canvas.addEventListener('pointermove', this.onPointerMove);
+    opts.canvas.addEventListener('pointerup', this.onPointerEnd);
+    opts.canvas.addEventListener('pointercancel', this.onPointerEnd);
+    opts.canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    opts.canvas.addEventListener('dblclick', this.onDblClick);
+    opts.canvas.addEventListener('keydown', this.onKey);
+    this.opts.onViewChange?.(false);
 
     this.scene.add(this.world, this.fx);
     this.scene.add(this.hemi, new AmbientLight('#ffffff', 0.15));
@@ -328,6 +466,13 @@ export class SceneRenderer {
     this.io?.disconnect();
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.opts.canvas.removeEventListener('webglcontextlost', this.onContextLost);
+    this.opts.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.opts.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.opts.canvas.removeEventListener('pointerup', this.onPointerEnd);
+    this.opts.canvas.removeEventListener('pointercancel', this.onPointerEnd);
+    this.opts.canvas.removeEventListener('wheel', this.onWheel);
+    this.opts.canvas.removeEventListener('dblclick', this.onDblClick);
+    this.opts.canvas.removeEventListener('keydown', this.onKey);
     for (const a of this.actors.values()) a.dispose();
     this.actors.clear();
     this.city?.dispose();
@@ -799,7 +944,11 @@ export class SceneRenderer {
     };
     let desired = this.overviewPose();
     let rate = 2.2;
-    if (this.shotSpec && this.cameraMotion) {
+    if (this.viewCustom) {
+      // 玩家掌控視角：不播自動鏡頭；拖曳中幾乎即時跟手
+      desired = applyView(desired, clampView(this.view));
+      rate = this.interacting ? 22 : 9;
+    } else if (this.shotSpec && this.cameraMotion) {
       const t = (this.simMs - this.shotSpec.start) / this.shotSpec.dur;
       desired = poseFor(this.shotSpec.spec, spotOf, smoothstep(t));
       rate = 6;
