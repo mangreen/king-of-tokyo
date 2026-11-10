@@ -424,6 +424,7 @@ function zeroHp(g: G, v: Monster, killer: number | null): void {
     v.vp = 0;
     v.hp = Math.min(hp, v.maxHp);
     g.ev.push({ type: 'revived', seat: v.seat, hp: v.hp, partner: null });
+    checkLastStanding(g); // 其他人可能已在等這次結算（見 checkLastStanding）
     return;
   }
   const partner = owned.find((o) => effectOf(o.def)?.revive === 'partner');
@@ -434,6 +435,7 @@ function zeroHp(g: G, v: Monster, killer: number | null): void {
     v.sidekickOf = killer;
     v.sidekickUsed = true;
     g.ev.push({ type: 'revived', seat: v.seat, hp: v.hp, partner: killer });
+    checkLastStanding(g);
     return;
   }
   eliminate(g, v, killer);
@@ -464,6 +466,10 @@ export function checkLastStanding(g: G): void {
     return;
   }
   const alive = aliveMonsters(g.s);
+  // 還有人 HP 歸零、正等著結算（可能復活或同時淘汰，例如反射傷害）：等他結算完再判定
+  if (alive.some((m) => m.hp <= 0)) {
+    return;
+  }
   if (alive.length <= 1) {
     endGame(
       g,
