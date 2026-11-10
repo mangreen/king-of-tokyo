@@ -98,6 +98,7 @@ ENV NODE_ENV=production \
     ALLOW_SAME_ORIGIN=true \
     MAX_ROOMS=5 \
     MAX_CONNECTIONS=30 \
+    IDLE_KICK_MS=300000 \
     PORT=8080
 USER node
 WORKDIR /app/apps/server

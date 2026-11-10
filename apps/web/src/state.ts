@@ -15,6 +15,8 @@ export type Connection =
   | { status: 'online'; playerId: string; nickname: string }
   /** 已登入過、目前斷線並自動重連中：畫面保留原本的內容。 */
   | { status: 'reconnecting'; playerId: string; nickname: string }
+  /** 閒置太久被伺服器中斷：身分與座位還在，使用者按「重新連線」才會接回（不自動重連，否則踢除就沒意義）。 */
+  | { status: 'timed-out'; message: string }
   | { status: 'error'; message: string };
 
 /** 一次 game:update 帶來的事件，供 3D 場景重播（不影響狀態）。 */
@@ -136,6 +138,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'server-error': {
       const parsed = ServerErrorSchema.safeParse(action.payload);
+      if (parsed.success && parsed.data.code === 'idle_timeout') {
+        return { ...state, connection: { status: 'timed-out', message: parsed.data.message } };
+      }
       return {
         ...state,
         connection: {
@@ -159,7 +164,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         const { playerId, nickname } = state.connection;
         return { ...state, connection: { status: 'reconnecting', playerId, nickname } };
       }
-      return state.connection.status === 'error'
+      return state.connection.status === 'error' || state.connection.status === 'timed-out'
         ? state
         : { ...state, connection: { status: 'connecting' } };
 
@@ -227,6 +232,7 @@ export function selfPlayer(state: AppState): RoomSnapshot['players'][number] | u
   if (
     connection.status === 'idle' ||
     connection.status === 'connecting' ||
+    connection.status === 'timed-out' ||
     connection.status === 'error'
   ) {
     return undefined;

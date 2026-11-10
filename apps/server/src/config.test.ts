@@ -13,6 +13,7 @@ describe('loadConfig', () => {
       maxConnections: 10_000,
       webDir: null,
       allowSameOrigin: false,
+      idleKickMs: 600_000,
     });
   });
 
