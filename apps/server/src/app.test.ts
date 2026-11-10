@@ -20,6 +20,9 @@ const config: ServerConfig = {
   allowedOrigins: [ALLOWED_ORIGIN],
   maxRooms: 50,
   cardSetsDir: 'card-sets',
+  maxConnections: 100,
+  webDir: null,
+  allowSameOrigin: false,
 };
 
 let app: App;

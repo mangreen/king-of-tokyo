@@ -8,11 +8,14 @@ import {
   type GameActionInput,
 } from '@kot/protocol';
 import { ackMessage } from './messages.js';
+import { resolveServerUrl } from './serverUrl.js';
 import { session } from './session.js';
 import { appReducer, initialAppState, type AppState } from './state.js';
 
-const SERVER_URL: string =
-  (import.meta.env.VITE_SERVER_URL as string | undefined) ?? 'http://localhost:3001';
+const SERVER_URL: string = resolveServerUrl(
+  import.meta.env.VITE_SERVER_URL as string | undefined,
+  window.location.origin,
+);
 const ACK_TIMEOUT_MS = 5_000;
 
 export interface GameClient {

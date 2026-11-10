@@ -12,7 +12,8 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    sourcemap: true,
+    // 試玩 image 不帶 sourcemap（VITE_NO_SOURCEMAP=1），縮小體積
+    sourcemap: process.env['VITE_NO_SOURCEMAP'] !== '1',
     // 3D 場景（Three.js）是動態載入的獨立 chunk，約 150KB gzip；預算見 ADR-0003
     chunkSizeWarningLimit: 700,
   },
