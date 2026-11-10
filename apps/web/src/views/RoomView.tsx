@@ -1,5 +1,6 @@
 import type { RoomSnapshot } from '@kot/protocol';
 import { MIN_PLAYERS } from '@kot/protocol';
+import { ShareLink } from './ShareLink.js';
 
 interface Props {
   room: RoomSnapshot;
@@ -24,7 +25,7 @@ export function RoomView({ room, selfId, onReady, onStart, onLeave }: Props) {
       <p>
         卡牌組：<strong>{room.cardSet.name}</strong>（{room.cardSet.cardCount} 張）
       </p>
-      <p className="muted">把房號傳給朋友，讓他們從大廳輸入加入（2–6 人）。</p>
+      <ShareLink code={room.code} />
       <ul className="players">
         {room.players.map((p) => (
           <li key={p.id}>

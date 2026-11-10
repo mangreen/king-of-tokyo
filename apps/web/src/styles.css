@@ -992,3 +992,26 @@ main.wide {
   font-size: 0.72rem;
   opacity: 0.85;
 }
+
+.share-link {
+  margin: 0.75rem 0;
+}
+.share-link label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+.share-link .row {
+  flex-wrap: wrap;
+}
+.share-link input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+.invite-banner {
+  background: #fff4c2;
+  border: 2px solid #1d1b16;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+}
