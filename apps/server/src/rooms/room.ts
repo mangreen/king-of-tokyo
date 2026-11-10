@@ -5,6 +5,7 @@ import {
   defaultConfig,
   defaultAction,
   greedyBot,
+  smartBot,
   legalActions,
   redactEvent,
   redactState,
@@ -59,6 +60,8 @@ export interface Timings {
   lobbyOfflineMs: number;
   /** 對局結束後，房間最多保留多久（玩家都還在線也會關閉）。 */
   overRoomMs: number;
+  /** 電腦玩家每一步的思考／出手間隔（讓 3D 演出跟得上，也讓人看得懂）。 */
+  botMs: number;
 }
 
 export const DEFAULT_TIMINGS: Timings = {
@@ -69,6 +72,7 @@ export const DEFAULT_TIMINGS: Timings = {
   emptyRoomMs: 5 * 60_000,
   lobbyOfflineMs: 60_000,
   overRoomMs: 10 * 60_000,
+  botMs: 1_400,
 };
 
 export interface RoomDeps {
@@ -95,6 +99,8 @@ interface Member {
   seat: number | null;
   /** 這場的怪獸造型（開局時隨機分配）。 */
   monster: number | null;
+  /** 電腦玩家：永遠在線、永遠已準備、由伺服器用 smartBot 出手，不受代管與逾時限制。 */
+  bot: boolean;
 }
 
 /**
@@ -112,6 +118,7 @@ export class Room {
   private config: RulesConfig | null = null;
   private readonly env: RulesEnv;
   private readonly cardsMessage: GameCardsMessage;
+  private botSerial = 0;
   private cancelTurnTimer: (() => void) | null = null;
   private cancelCloseTimer: (() => void) | null = null;
   private cancelOverTimer: (() => void) | null = null;
@@ -139,6 +146,7 @@ export class Room {
       left: false,
       seat: null,
       monster: null,
+      bot: false,
     });
     this.broadcastRoom();
   }
@@ -146,11 +154,17 @@ export class Room {
   // ── 查詢 ───────────────────────────────────────────────
 
   has(playerId: string): boolean {
-    return this.members.some((m) => m.id === playerId && !m.left);
+    return this.find(playerId) !== undefined;
   }
 
+  /** 房內的座位數（真人 + 電腦）。 */
   get activeCount(): number {
     return this.members.filter((m) => !m.left).length;
+  }
+
+  /** 還在房間裡的真人數。電腦不算：沒有真人的房間沒有存在的意義。 */
+  private get humanCount(): number {
+    return this.members.filter((m) => !m.left && !m.bot).length;
   }
 
   get isClosed(): boolean {
@@ -159,7 +173,7 @@ export class Room {
 
   /** 目前還在房間裡的玩家 id。 */
   memberIds(): string[] {
-    return this.members.filter((m) => !m.left).map((m) => m.id);
+    return this.members.filter((m) => !m.left && !m.bot).map((m) => m.id);
   }
 
   /** 重放所需的全部資料：設定、seed、卡牌組（id 與內容雜湊）與動作日誌。 */
@@ -194,6 +208,7 @@ export class Room {
       nickname: m.nickname,
       seat: m.seat,
       monster: m.monster,
+      bot: m.bot,
       ready: m.ready,
       connected: m.connected,
       away: m.away,
@@ -229,6 +244,7 @@ export class Room {
       left: false,
       seat: null,
       monster: null,
+      bot: false,
     });
     this.cancelClose();
     this.broadcastRoom();
@@ -242,6 +258,42 @@ export class Room {
     if (playerId !== this.hostId) {
       member.ready = ready; // 房主視為永遠已準備
     }
+    this.broadcastRoom();
+    return OK;
+  }
+
+  /** 房主在大廳加入一位電腦玩家（佔一個座位，用 smartBot 出手）。 */
+  addBot(playerId: string): Result {
+    if (!this.find(playerId)) return fail('not_in_room');
+    if (playerId !== this.hostId) return fail('not_host');
+    if (this.phase !== 'lobby') return fail('wrong_state');
+    if (this.activeCount >= MAX_PLAYERS) return fail('room_full');
+    this.botSerial += 1;
+    const used = new Set(this.members.filter((m) => m.bot).map((m) => m.nickname));
+    let n = 1;
+    while (used.has(`電腦 ${String(n)}`)) n += 1;
+    this.members.push({
+      id: `bot-${String(this.botSerial)}`,
+      nickname: `電腦 ${String(n)}`,
+      ready: true,
+      connected: true,
+      away: false,
+      left: false,
+      seat: null,
+      monster: null,
+      bot: true,
+    });
+    this.broadcastRoom();
+    return OK;
+  }
+
+  removeBot(playerId: string, botId: string): Result {
+    if (!this.find(playerId)) return fail('not_in_room');
+    if (playerId !== this.hostId) return fail('not_host');
+    if (this.phase !== 'lobby') return fail('wrong_state');
+    const index = this.members.findIndex((m) => m.bot && m.id === botId);
+    if (index < 0) return fail('wrong_state');
+    this.members.splice(index, 1);
     this.broadcastRoom();
     return OK;
   }
@@ -282,7 +334,7 @@ export class Room {
 
     if (this.phase === 'lobby') {
       this.members.splice(this.members.indexOf(member), 1);
-      if (this.members.length === 0) {
+      if (this.humanCount === 0) {
         this.close();
         return OK;
       }
@@ -291,7 +343,7 @@ export class Room {
       member.left = true;
       member.connected = false;
       member.away = this.phase === 'playing';
-      if (this.activeCount === 0) {
+      if (this.humanCount === 0) {
         this.close();
         return OK;
       }
@@ -322,7 +374,7 @@ export class Room {
 
   /** 房主離開時，把房主交給在線的下一位（沒有人在線就交給第一位）。 */
   private transferHost(): void {
-    const candidates = this.members.filter((m) => !m.left);
+    const candidates = this.members.filter((m) => !m.left && !m.bot);
     const next = candidates.find((m) => m.connected) ?? candidates[0];
     if (next) {
       this.hostId = next.id;
@@ -394,7 +446,7 @@ export class Room {
   // ── 內部 ───────────────────────────────────────────────
 
   private find(playerId: string): Member | undefined {
-    return this.members.find((m) => m.id === playerId && !m.left);
+    return this.members.find((m) => m.id === playerId && !m.left && !m.bot);
   }
 
   private toAction(input: GameActionInput, seat: number): Action {
@@ -506,13 +558,15 @@ export class Room {
     }
     const { timings } = this.deps;
     const offline = actor.left || !actor.connected;
-    const delay = offline
-      ? timings.awayOfflineMs
-      : actor.away
-        ? timings.awayConnectedMs
-        : state.phase === 'prompt'
-          ? timings.yieldMs
-          : timings.decisionMs;
+    const delay = actor.bot
+      ? timings.botMs
+      : offline
+        ? timings.awayOfflineMs
+        : actor.away
+          ? timings.awayConnectedMs
+          : state.phase === 'prompt'
+            ? timings.yieldMs
+            : timings.decisionMs;
     this.scheduleTurnTimer(delay);
   }
 
@@ -543,9 +597,10 @@ export class Room {
     const actor = this.actorMember();
     if (!actor) return;
 
-    const becameAway = !actor.away;
-    actor.away = true;
-    const picked = this.pickTimeoutAction(state);
+    // 電腦玩家的「逾時」就是輪到它出手：用 smartBot，且不會被標成代管
+    const becameAway = !actor.bot && !actor.away;
+    if (!actor.bot) actor.away = true;
+    const picked = this.pickTimeoutAction(state, actor.bot);
     if (!picked) {
       // 沒有任何可接受的動作（不應發生）：記錄並以完整時限重試，避免卡死也避免緊迴圈
       console.error('代打找不到可接受的動作', this.code);
@@ -562,8 +617,10 @@ export class Room {
    */
   private pickTimeoutAction(
     state: GameState,
+    bot = false,
   ): { action: Action; result: Extract<ReturnType<typeof applyAction>, { ok: true }> } | null {
     const candidates: (() => Action | null)[] = [
+      ...(bot ? [() => smartBot(state, this.env)] : []),
       () => greedyBot(state, this.env),
       () => defaultAction(state),
     ];
@@ -603,7 +660,7 @@ export class Room {
   }
 
   private afterPresenceChange(): void {
-    const anyOnline = this.members.some((m) => !m.left && m.connected);
+    const anyOnline = this.members.some((m) => !m.left && !m.bot && m.connected);
     if (anyOnline) {
       this.cancelClose();
     } else if (!this.cancelCloseTimer && !this.closed) {
@@ -635,19 +692,23 @@ export class Room {
   private broadcastRoom(): void {
     const snapshot = this.snapshot();
     for (const member of this.members) {
-      if (!member.left) this.deps.publisher.roomState(member.id, snapshot);
+      if (!member.left && !member.bot) this.deps.publisher.roomState(member.id, snapshot);
     }
   }
 
   private broadcastCards(): void {
     for (const member of this.members) {
-      if (!member.left) this.deps.publisher.gameCards(member.id, this.cardsMessage);
+      if (!member.left && !member.bot) {
+        this.deps.publisher.gameCards(member.id, this.cardsMessage);
+      }
     }
   }
 
   private broadcastGame(events: GameEvent[]): void {
     for (const member of this.members) {
-      if (!member.left) this.deps.publisher.gameUpdate(member.id, this.buildUpdate(member, events));
+      if (!member.left && !member.bot) {
+        this.deps.publisher.gameUpdate(member.id, this.buildUpdate(member, events));
+      }
     }
   }
 
@@ -660,8 +721,11 @@ export class Room {
       // 依視角遮蔽：牌庫內容、亂數狀態、別人窺看到的牌都不外洩
       state: redactState(state, viewer.seat),
       events: events.map((event) => redactEvent(event, viewer.seat)),
+      // 輪到電腦時沒有倒數（它只是在「想」，不是在等人）
       remainingMs:
-        this.deadline === null ? null : Math.max(0, this.deadline - this.deps.scheduler.now()),
+        this.deadline === null || this.actorMember()?.bot
+          ? null
+          : Math.max(0, this.deadline - this.deps.scheduler.now()),
       actorSeat: actor,
     };
   }

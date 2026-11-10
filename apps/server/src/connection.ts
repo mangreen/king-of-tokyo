@@ -10,6 +10,7 @@ import {
   RoomCreateSchema,
   RoomJoinSchema,
   RoomReadySchema,
+  RoomRemoveBotSchema,
   type Ack,
   type CardSetInfo,
   type GameCardsMessage,
@@ -31,6 +32,8 @@ export interface ClientToServerEvents {
   [EVENTS.roomJoin]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.roomLeave]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.roomReady]: (payload: unknown, ack?: unknown) => void;
+  [EVENTS.roomAddBot]: (payload: unknown, ack?: unknown) => void;
+  [EVENTS.roomRemoveBot]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.roomStart]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.gameAction]: (payload: unknown, ack?: unknown) => void;
 }
@@ -167,6 +170,8 @@ function registerHandlers(socket: GameSocket, session: Session, ctx: ConnectionC
       | typeof EVENTS.roomLeave
       | typeof EVENTS.roomReady
       | typeof EVENTS.roomStart
+      | typeof EVENTS.roomAddBot
+      | typeof EVENTS.roomRemoveBot
       | typeof EVENTS.gameAction,
     schema: ZodType<T>,
     handler: (input: T) => Ack,
@@ -215,6 +220,16 @@ function registerHandlers(socket: GameSocket, session: Session, ctx: ConnectionC
   on(EVENTS.roomStart, EmptyPayloadSchema, () => {
     const room = ctx.rooms.roomOf(session.playerId);
     return room ? room.start(session.playerId) : { ok: false, code: 'not_in_room' };
+  });
+
+  on(EVENTS.roomAddBot, EmptyPayloadSchema, () => {
+    const room = ctx.rooms.roomOf(session.playerId);
+    return room ? room.addBot(session.playerId) : { ok: false, code: 'not_in_room' };
+  });
+
+  on(EVENTS.roomRemoveBot, RoomRemoveBotSchema, ({ id }) => {
+    const room = ctx.rooms.roomOf(session.playerId);
+    return room ? room.removeBot(session.playerId, id) : { ok: false, code: 'not_in_room' };
   });
 
   on(EVENTS.gameAction, GameActionSchema, (input) => {

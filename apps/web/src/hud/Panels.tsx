@@ -81,7 +81,8 @@ export function PlayersPanel({ state, room, actorSeat, mySeat, nameOf, env }: Pl
                 <span className="tag monster-tag">
                   {monsterName(monsterKindOf(m.seat, info?.monster))}
                 </span>
-                {info && !info.connected && <span className="tag warn">離線</span>}
+                {info?.bot && <span className="tag bot-tag">🤖 電腦</span>}
+                {info && !info.bot && !info.connected && <span className="tag warn">離線</span>}
                 {info?.away && <span className="tag warn">代打中</span>}
                 {!m.alive && <span className="tag">淘汰</span>}
                 {m.alive && m.location && (

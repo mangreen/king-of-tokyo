@@ -61,6 +61,8 @@ export function App() {
         selfId={connection.playerId}
         onReady={client.setReady}
         onStart={client.startGame}
+        onAddBot={client.addBot}
+        onRemoveBot={client.removeBot}
         onLeave={client.leaveRoom}
       />
     );

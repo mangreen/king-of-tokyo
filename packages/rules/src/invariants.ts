@@ -73,7 +73,12 @@ export function checkInvariants(state: GameState): string[] {
       problems.push('東京灣已關閉卻仍有怪獸');
     }
     const actor = state.monsters[state.turn.seat];
-    if (!actor?.alive) {
+    // 例外：買「傷害全體」的牌把自己也打死，而其他人還在決定要不要反應時，回合要等傷害處理完才結束
+    const settlingOwnCard =
+      state.phase === 'prompt' &&
+      state.pending?.kind === 'react' &&
+      state.pending.resume === 'market';
+    if (!actor?.alive && !settlingOwnCard) {
       problems.push('目前回合的怪獸不是存活狀態');
     }
     if (state.turn.dice.length !== 0 && state.turn.dice.length !== state.turn.diceCount) {

@@ -28,6 +28,9 @@ export interface GameClient {
   leaveRoom(): void;
   setReady(ready: boolean): void;
   startGame(): void;
+  /** 房主在大廳加入／移除電腦玩家。 */
+  addBot(): void;
+  removeBot(id: string): void;
   act(action: GameActionInput): void;
   dismissNotice(): void;
 }
@@ -133,6 +136,12 @@ export function useGameClient(): GameClient {
     },
     startGame: () => {
       request(EVENTS.roomStart, {});
+    },
+    addBot: () => {
+      request(EVENTS.roomAddBot, {});
+    },
+    removeBot: (id) => {
+      request(EVENTS.roomRemoveBot, { id });
     },
     act: (action) => {
       request(EVENTS.gameAction, action);

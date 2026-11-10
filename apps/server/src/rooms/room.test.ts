@@ -11,6 +11,7 @@ const TIMINGS: Timings = {
   emptyRoomMs: 10_000,
   lobbyOfflineMs: 2_000,
   overRoomMs: 30_000,
+  botMs: 500,
 };
 
 function testEnv(): RulesEnv {

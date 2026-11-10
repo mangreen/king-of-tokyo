@@ -148,7 +148,7 @@ function cardsValue(m: Monster, env: RulesEnv, w: AiWeights): number {
 let W: AiWeights = DEFAULT_WEIGHTS;
 
 /** 從 me 的角度替局面打分：越高越好。 */
-function evaluate(s: GameState, me: number, env: RulesEnv): number {
+export function evaluate(s: GameState, me: number, env: RulesEnv): number {
   if (s.outcome) {
     const { winners } = s.outcome;
     if (!winners.includes(me)) {
@@ -171,10 +171,12 @@ function evaluate(s: GameState, me: number, env: RulesEnv): number {
     score -= 2;
   }
   if (mine.location !== null) {
-    // 預期每輪會挨的傷害：東京外的每位對手約 1.2 點
+    // 東京內：預期每輪會挨的傷害約是「東京外的對手數 × 1.2」。血量不夠撐就有可能在下個回合前死掉，
+    // 死掉等於失去目前的一切，所以按死亡機率打折；撐得住才拿得到待在東京的好處。
     const risk = 1.2 * outside;
-    const margin = mine.hp - risk;
-    score += margin >= 2 ? W.tokyo : margin >= 0 ? W.tokyo / 3 : (margin * 0.9 - 0.4) * 1;
+    const pDeath = 1 / (1 + Math.exp(-(risk - mine.hp + 0.3) / 1.3));
+    score -= pDeath * (Math.max(score, 0) + 6);
+    score += W.tokyo * (1 - pDeath);
   }
 
   const maxOppVp = Math.max(0, ...opps.map((m) => m.vp));

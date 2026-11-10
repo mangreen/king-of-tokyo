@@ -25,6 +25,7 @@ export {
   RoomCreateSchema,
   RoomJoinSchema,
   RoomReadySchema,
+  RoomRemoveBotSchema,
 } from './lobby.js';
 export type {
   Ack,
