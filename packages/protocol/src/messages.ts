@@ -6,8 +6,9 @@ import { z } from 'zod';
  *
  * v2（M2）：握手加入重連用的 sessionToken；新增房間與對局訊息。
  * v3（M3）：卡牌——完整動作集、建房可選卡牌組、握手回傳可用卡牌組、game:cards 推送。
+ * v4（M4.13）：電腦玩家——房主可在大廳加入／移除電腦（room:addBot／room:removeBot），PlayerInfo.bot。
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** Socket.IO 事件名稱（client → server 與 server → client）。 */
 export const EVENTS = {
@@ -19,6 +20,8 @@ export const EVENTS = {
   roomLeave: 'room:leave',
   roomReady: 'room:ready',
   roomStart: 'room:start',
+  roomAddBot: 'room:addBot',
+  roomRemoveBot: 'room:removeBot',
   roomState: 'room:state',
   gameAction: 'game:action',
   gameUpdate: 'game:update',

@@ -117,3 +117,22 @@ describe('OQ-C3 卡牌傷害的反應詢問', () => {
     expect(applyAction(r.state, { type: 'endTurn', seat: 0 }, env).ok).toBe(false);
   });
 });
+
+describe('買牌的傷害把自己也打死', () => {
+  it('其他人還在決定反應時回合先保留；處理完立刻換下一位存活者，不卡在死者的回合', () => {
+    const { env, state } = shop([BOMB, card('w', 'wings')], 3, {
+      0: { energy: 5, hp: 1 },
+      1: { cards: ['w'], energy: 5 },
+    });
+    let r = must(state, { type: 'buy', seat: 0, cardId: 'blast' }, env);
+    expect(mon(r.state, 0).alive).toBe(false);
+    expect(r.state.phase).toBe('prompt');
+    expect(r.state.pending).toMatchObject({ kind: 'react', seat: 1 });
+    expect(checkInvariants(r.state)).toEqual([]);
+    r = must(r.state, { type: 'reactDecision', seat: 1, cardId: null }, env);
+    expect(checkInvariants(r.state)).toEqual([]);
+    expect(r.state.turn.seat).not.toBe(0);
+    expect(mon(r.state, r.state.turn.seat).alive).toBe(true);
+    expect(r.state.phase).toBe('roll');
+  });
+});

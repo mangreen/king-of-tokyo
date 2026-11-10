@@ -6,86 +6,10 @@ import { currentActor, defaultAction } from './legal.js';
 import { replay } from './replay.js';
 import { seedToState } from './rng.js';
 import { createGame, defaultConfig } from './state.js';
-import { card, makeEnv } from './test-utils.js';
+import { fullEnv } from './test-utils.js';
 import type { RulesEnv } from './cards/types.js';
 import type { Action, GameEvent, GameState } from './types.js';
 import { redactState } from './view.js';
-
-/** 每種效果各一張（部分有兩張不同參數），用來讓機器人把所有路徑都跑過。 */
-function fullEnv(): RulesEnv {
-  const ins = (id: string, cost: number, ...ops: object[]) =>
-    card(id, 'instant', { cost, params: { ops: ops as never } });
-  return makeEnv(
-    ins('i-vp', 4, { op: 'vp', n: 4 }),
-    ins('i-vp2', 2, { op: 'vp', n: 1 }),
-    ins('i-energy', 6, { op: 'energy', n: 9 }),
-    ins('i-heal', 3, { op: 'heal', n: 2 }),
-    ins('i-blast', 3, { op: 'damageOthers', n: 2 }),
-    ins('i-bomb', 4, { op: 'damageAll', n: 3 }),
-    ins('i-jet', 5, { op: 'vp', n: 5 }, { op: 'selfDamage', n: 4 }),
-    ins('i-evac', 7, { op: 'othersLoseVp', n: 5 }),
-    ins('i-storm', 6, { op: 'vp', n: 2 }, { op: 'othersLoseEnergyPer', per: 2 }),
-    ins('i-drop', 5, { op: 'vp', n: 2 }, { op: 'takeTokyo' }),
-    ins('i-extra-turn', 7, { op: 'extraTurn' }),
-    ins('i-army', 2, { op: 'perCard', vp: 1, damage: 1 }),
-    card('extra-dice', 'extra_dice', { cost: 7 }),
-    card('extra-rolls', 'extra_rolls', { cost: 5 }),
-    card('discount', 'cost_discount', { cost: 3 }),
-    card('k-energy-bonus', 'energy_bonus', { cost: 3 }),
-    card('regen', 'heal_bonus', { cost: 4 }),
-    card('bigger', 'max_hp', { cost: 4, params: { n: 2 } }),
-    card('threes', 'reroll_threes', { cost: 4 }),
-    card('plot', 'die_change', { cost: 3, params: { cost: 0, to: 'any', discard: true } }),
-    card('stretchy', 'die_change', { cost: 3, params: { cost: 2, to: 'any' } }),
-    card('culler', 'die_change', { cost: 3, params: { cost: 0, to: 1, once: true } }),
-    card('k-reroll-energy', 'reroll_energy', { cost: 4, params: { cost: 1 } }),
-    card('smoke', 'reroll_charges', { cost: 4, params: { charges: 3 } }),
-    card('probe', 'probe', { cost: 3 }),
-    card('quills', 'triple_bonus', { cost: 3, params: { face: 2, damage: 2 } }),
-    card('gourmet', 'triple_bonus', { cost: 4, params: { face: 1, vp: 2 } }),
-    card('destruction', 'complete_set', { cost: 3, params: { vp: 9 } }),
-    card('omni', 'straight_vp', { cost: 4, params: { vp: 2 } }),
-    card('alpha', 'attack_vp', { cost: 5, params: { vp: 1 } }),
-    card('tail', 'attack_bonus', { cost: 5, params: { n: 1 } }),
-    card('acid', 'attack_bonus', { cost: 6, params: { n: 1, always: true } }),
-    card('burrow', 'tokyo_target_bonus', { cost: 5, params: { n: 1, yieldDamage: 1 } }),
-    card('k-tokyo-attacker', 'tokyo_attacker', { cost: 4 }),
-    card('breath', 'neighbor_damage', { cost: 4 }),
-    card('nova', 'nova', { cost: 7 }),
-    card('roar', 'forced_yield', { cost: 3 }),
-    card('armor', 'armor', { cost: 4 }),
-    card('camo', 'camouflage', { cost: 3 }),
-    card('hide', 'reflect', { cost: 6 }),
-    card('stronger', 'lose_hp_energy', { cost: 3 }),
-    card('wings', 'wings', { cost: 6 }),
-    card('jump', 'super_jump', { cost: 4 }),
-    card('jets', 'jets', { cost: 5 }),
-    card('dna', 'swap_on_yield', { cost: 3 }),
-    card('poison', 'counter_attack', { cost: 4, params: { counter: 'poison' } }),
-    card('shrink', 'counter_attack', { cost: 6, params: { counter: 'shrink' } }),
-    card('cannibal', 'lifesteal', { cost: 5 }),
-    card('eater', 'death_vp', { cost: 4, params: { vp: 3 } }),
-    card('child', 'revive_self', { cost: 7, params: { hp: 10 } }),
-    card('sidekick', 'revive_partner', { cost: 4, params: { hp: 10 } }),
-    card('news', 'vp_on_buy', { cost: 3 }),
-    card('hoarder', 'end_energy_vp', { cost: 3, params: { per: 6, vp: 1 } }),
-    card('solar', 'end_empty_energy', { cost: 2 }),
-    card('k-peaceful', 'end_peaceful_vp', { cost: 5 }),
-    card('tanker', 'big_hit_vp', { cost: 4, params: { min: 3, vp: 2 } }),
-    card('k-underdog', 'end_underdog', { cost: 3 }),
-    card('stomp', 'stomp', { cost: 3, params: { min: 4 } }),
-    card('batteries', 'batteries', { cost: 2 }),
-    card('mimic', 'mimic', { cost: 8 }),
-    card('parasite', 'buy_from_others', { cost: 4 }),
-    card('lab', 'peek_buy', { cost: 2 }),
-    card('opportunist', 'opportunist', { cost: 3 }),
-    card('ray', 'heal_others', { cost: 4 }),
-    card('metamorph', 'metamorph', { cost: 3 }),
-    card('freeze', 'extra_turn_triple', { cost: 5, params: { penalty: 1 } }),
-    card('rapid', 'rapid_heal', { cost: 3, params: { cost: 2, heal: 1 } }),
-    card('sleep', 'energy_to_vp', { cost: 3, params: { cost: 3, vp: 1 } }),
-  );
-}
 
 type Player = (s: GameState, step: number) => Action;
 

@@ -73,6 +73,7 @@ describe('協定涵蓋規則引擎的所有合法動作', () => {
         emptyRoomMs: 10_000,
         lobbyOfflineMs: 2_000,
         overRoomMs: 30_000,
+        botMs: 500,
       },
       onClose: () => undefined,
       onMemberRemoved: () => undefined,

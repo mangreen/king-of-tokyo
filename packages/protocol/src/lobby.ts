@@ -20,6 +20,8 @@ export const RoomCodeSchema = z
 export const EmptyPayloadSchema = z.object({}).strict();
 export const RoomJoinSchema = z.object({ code: RoomCodeSchema });
 export const RoomReadySchema = z.object({ ready: z.boolean() });
+/** 移除電腦玩家：id 是 PlayerInfo.id（伺服器產生，長度有上限即可）。 */
+export const RoomRemoveBotSchema = z.object({ id: z.string().min(1).max(40) }).strict();
 
 /** 卡牌組 id：小寫英數與連字號（與 set.json 一致）。 */
 export const CardSetIdSchema = z
@@ -142,6 +144,8 @@ export interface PlayerInfo {
   seat: number | null;
   /** 這場分配到的怪獸造型（0..MONSTER_COUNT-1）；大廳階段為 null。純外觀，不影響規則。 */
   monster: number | null;
+  /** 電腦玩家（由房主加入，永遠在線、不受代管限制）。 */
+  bot: boolean;
   ready: boolean;
   connected: boolean;
   /** 逾時未操作而由系統代打。玩家再操作一次就會解除。 */

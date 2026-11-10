@@ -28,6 +28,8 @@ export type {
 export { describeEvent } from './format.js';
 export { countFaces, numberVp, rollDie } from './dice.js';
 export { applyAction, pendingSeat, SWEEP_COST } from './engine.js';
+export { DEFAULT_WEIGHTS, smartBot } from './ai.js';
+export type { AiWeights } from './ai.js';
 export { greedyBot, randomBot } from './bot.js';
 export { checkInvariants } from './invariants.js';
 export { currentActor, defaultAction, legalActions } from './legal.js';

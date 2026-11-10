@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { NicknameSchema } from '@kot/protocol';
 
-export function Login({ onLogin }: { onLogin: (nickname: string) => void }) {
+export function Login({
+  onLogin,
+  inviteCode,
+}: {
+  onLogin: (nickname: string) => void;
+  /** 從邀請連結帶進來的房號；有的話登入後會自動加入。 */
+  inviteCode?: string | null;
+}) {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -18,6 +25,11 @@ export function Login({ onLogin }: { onLogin: (nickname: string) => void }) {
   return (
     <form className="card" onSubmit={submit}>
       <h2>輸入暱稱</h2>
+      {inviteCode && (
+        <p className="invite-banner" role="status">
+          你被邀請加入房間 <span className="room-code">{inviteCode}</span>，輸入暱稱就會自動加入。
+        </p>
+      )}
       <p className="muted">不需要註冊。暱稱只用於這次遊玩，其他玩家看得到。</p>
       <input
         value={value}
@@ -32,7 +44,7 @@ export function Login({ onLogin }: { onLogin: (nickname: string) => void }) {
       />
       {error && <p className="error">{error}</p>}
       <button type="submit" className="primary">
-        進入大廳
+        {inviteCode ? '加入房間' : '進入大廳'}
       </button>
     </form>
   );

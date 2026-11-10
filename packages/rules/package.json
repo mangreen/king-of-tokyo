@@ -10,7 +10,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p cli",
     "test": "vitest run",
-    "play": "tsx cli/play.ts"
+    "play": "tsx cli/play.ts",
+    "arena": "tsx cli/arena.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

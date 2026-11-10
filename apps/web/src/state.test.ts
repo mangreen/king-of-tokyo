@@ -32,6 +32,7 @@ const room: RoomSnapshot = {
       nickname: 'Mang',
       seat: null,
       monster: null,
+      bot: false,
       ready: true,
       connected: true,
       away: false,

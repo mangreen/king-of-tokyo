@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+import { parseInvite, withoutInvite } from './invite.js';
 import { GameView } from './views/GameView.js';
 import { Lobby } from './views/Lobby.js';
 import { Login } from './views/Login.js';
@@ -9,9 +11,19 @@ export function App() {
   const { state } = client;
   const { connection, room, game } = state;
 
+  // 邀請連結：登入完成後自動加入一次，然後把網址上的邀請參數拿掉
+  const [invite] = useState(() => parseInvite(window.location.search));
+  const inviteHandled = useRef(false);
+  useEffect(() => {
+    if (invite === null || inviteHandled.current || connection.status !== 'online') return;
+    inviteHandled.current = true;
+    if (room === null) client.joinRoom(invite);
+    window.history.replaceState(null, '', withoutInvite(window.location.href));
+  }, [invite, connection.status, room, client]);
+
   let body;
   if (connection.status === 'idle') {
-    body = <Login onLogin={client.login} />;
+    body = <Login onLogin={client.login} inviteCode={invite} />;
   } else if (connection.status === 'error') {
     body = (
       <div className="card">
@@ -49,6 +61,8 @@ export function App() {
         selfId={connection.playerId}
         onReady={client.setReady}
         onStart={client.startGame}
+        onAddBot={client.addBot}
+        onRemoveBot={client.removeBot}
         onLeave={client.leaveRoom}
       />
     );
