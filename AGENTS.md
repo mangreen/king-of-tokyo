@@ -16,8 +16,9 @@ King of Tokyo 桌遊的網頁多人連線 3D 版，私人與朋友遊玩。伺�
 ```
 packages/rules      純規則引擎（無 I/O、可重現、前後端共用）
 packages/protocol   WebSocket 訊息型別與 zod 驗證、協定版本
-packages/cardsets   卡牌組 schema 驗證、載入、內容雜湊、官方 CSV 匯入
-apps/server         Fastify + Socket.IO，房間與計時，呼叫 rules
+packages/cardsets   卡牌組 schema 驗證、載入、內容雜湊、官方 CSV 匯入（`./pure` 子路徑無 node 依賴，瀏覽器可用）
+packages/room       房間、連線閘道、計時、電腦、代管（不依賴 node:* 與任何傳輸；src 以 types: [] 檢查，不可引入 node 或 DOM API）
+apps/server         Fastify + Socket.IO 轉接，把連線接到 @kot/room
 apps/web            Vite + React；src/scene/ 為 Three.js 場景（動態載入，事件回放，見 ADR-0003）
 card-sets/          卡牌組資料（original 提交；local 不提交，見 ADR-0004）
 ```
@@ -62,7 +63,7 @@ make demo-image             # 單一容器的試玩版 image（Cloud Run；只�
 
 ## Git 與授權
 
-- 工作流程：GitHub Flow。每個里程碑一個分支（`m0/skeleton`、`m1/rules-engine`…），透過 PR 合併至 `main`。
+- 工作流程：GitHub Flow。每個里程碑一個分支（`m0/skeleton`、`m1/rules-engine`、`m4/bots`…），透過 PR 合併至 `main`。
 - **使用者已授權（2026-11-05）：** 推送各里程碑分支到 `origin`。
 - **使用者已授權（2026-11-06）：** 建立 `main`。遠端原本沒有 `main`（使用者找不到），因此以初始 commit（只含 README）建立，作為 PR 的基準分支。**之後對 `main` 的推送與合併仍須先詢問。**
 - **未授權，須先詢問：** 推送或修改 `main`、合併 PR、建立 release/tag、部署、刪除分支或資料、變更權限與機密設定。

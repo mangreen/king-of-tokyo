@@ -17,7 +17,7 @@ import {
   type RulesEnv,
   type Seed,
 } from '@kot/rules';
-import type { LoadedCardSet } from '@kot/cardsets';
+import type { LoadedCardSet } from '@kot/cardsets/pure';
 import { pickMonsters } from './monsters.js';
 import {
   MAX_PLAYERS,

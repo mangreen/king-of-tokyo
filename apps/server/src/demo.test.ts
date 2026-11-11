@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EVENTS, PROTOCOL_VERSION, ServerErrorSchema } from '@kot/protocol';
 import { buildApp, type App } from './app.js';
 import type { ServerConfig } from './config.js';
-import { testCardSets } from './rooms/testing.js';
+import { testCardSets } from '@kot/room/testing-fs';
 
 /** 單一容器試玩版：靜態網頁、SPA 回退、安全標頭、同來源檢查、連線數上限。 */
 

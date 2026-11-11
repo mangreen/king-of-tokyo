@@ -89,3 +89,36 @@ export function stringToBytes(text: string): number[] {
   }
   return out;
 }
+
+/** 字串 → UTF-8 位元組（標準編碼；與 stringToBytes 不同，結果可與其他實作互相比對）。 */
+export function utf8Bytes(text: string): number[] {
+  const out: number[] = [];
+  for (const char of text) {
+    const code = char.codePointAt(0) as number;
+    if (code < 0x80) {
+      out.push(code);
+    } else if (code < 0x800) {
+      out.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+    } else if (code < 0x10000) {
+      out.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+    } else {
+      out.push(
+        0xf0 | (code >> 18),
+        0x80 | ((code >> 12) & 0x3f),
+        0x80 | ((code >> 6) & 0x3f),
+        0x80 | (code & 0x3f),
+      );
+    }
+  }
+  return out;
+}
+
+/**
+ * 字串（UTF-8）的標準 SHA-256，十六進位。與 Node crypto／Web Crypto 的結果相同，
+ * 但不依賴任何執行環境（瀏覽器不在安全連線時沒有 crypto.subtle）。用於卡牌組內容雜湊與重連 token 雜湊。
+ */
+export function sha256Hex(text: string): string {
+  return sha256Words(utf8Bytes(text))
+    .map((w) => w.toString(16).padStart(8, '0'))
+    .join('');
+}

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { replay, defaultConfig, redactState, type RulesEnv } from '@kot/rules';
 import { DEFAULT_TIMINGS, Room, type Timings } from './room.js';
-import { FakeScheduler, RecordingPublisher, testCardSet } from './testing.js';
+import { FakeScheduler, RecordingPublisher } from './testing.js';
+import { testCardSet } from './testing-fs.js';
 
 const TIMINGS: Timings = {
   decisionMs: 1000,

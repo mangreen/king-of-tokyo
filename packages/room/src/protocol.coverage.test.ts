@@ -16,7 +16,8 @@ import {
 } from '@kot/rules';
 import { GameActionSchema, type GameActionInput } from '@kot/protocol';
 import { Room } from './room.js';
-import { FakeScheduler, RecordingPublisher, testCardSet } from './testing.js';
+import { FakeScheduler, RecordingPublisher } from './testing.js';
+import { testCardSet } from './testing-fs.js';
 
 function env(): RulesEnv {
   return { cards: Object.fromEntries(testCardSet().set.cards.map((c) => [c.id, c])) };

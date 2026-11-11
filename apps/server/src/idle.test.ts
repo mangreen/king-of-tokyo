@@ -11,7 +11,7 @@ import {
 } from '@kot/protocol';
 import { buildApp, type App } from './app.js';
 import type { ServerConfig } from './config.js';
-import { testCardSets } from './rooms/testing.js';
+import { testCardSets } from '@kot/room/testing-fs';
 
 const ORIGIN = 'http://localhost:5173';
 const IDLE_MS = 300;

@@ -21,6 +21,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/rules/package.json packages/rules/
 COPY packages/protocol/package.json packages/protocol/
 COPY packages/cardsets/package.json packages/cardsets/
+COPY packages/room/package.json packages/room/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 

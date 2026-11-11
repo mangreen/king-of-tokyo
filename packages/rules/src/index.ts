@@ -1,5 +1,6 @@
 export { nextInt, nextUint32, seedToRng, seedToState } from './rng.js';
 export type { GameRng, KeyedRng, RngState, Seed } from './rng.js';
+export { sha256Hex } from './sha256.js';
 
 export { FACES } from './types.js';
 export type {

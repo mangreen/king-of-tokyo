@@ -5,7 +5,8 @@ import { TokenBucket } from './rateLimit.js';
 import { DEFAULT_TIMINGS } from './room.js';
 import { generateRoomCode } from './roomCode.js';
 import { SessionStore } from './sessions.js';
-import { FakeScheduler, RecordingPublisher, testCardSets } from './testing.js';
+import { FakeScheduler, RecordingPublisher } from './testing.js';
+import { testCardSets } from './testing-fs.js';
 
 describe('generateRoomCode', () => {
   it('產生 5 碼、字元都在字元集內，且通過協定的房號驗證', () => {

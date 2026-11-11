@@ -12,7 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@kot/cardsets": "workspace:*",
     "@kot/protocol": "workspace:*",
+    "@kot/room": "workspace:*",
     "@kot/rules": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

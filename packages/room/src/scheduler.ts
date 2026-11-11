@@ -13,7 +13,8 @@ export const realScheduler: Scheduler = {
   now: () => Date.now(),
   after(ms, fn) {
     const handle = setTimeout(fn, ms);
-    handle.unref();
+    // Node 的計時器預設會擋住行程結束；瀏覽器的計時器是數字，沒有 unref。
+    (handle as { unref?: () => void }).unref?.();
     return () => {
       clearTimeout(handle);
     };

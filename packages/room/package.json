@@ -1,0 +1,27 @@
+{
+  "name": "@kot/room",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "房間與連線閘道（大廳、對局、計時、電腦、代管）。不依賴 node:* 與任何傳輸；同一份程式跑在 Node 伺服器與瀏覽器 Worker（見 ADR-0007）",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts",
+    "./testing-fs": "./src/testing-fs.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kot/cardsets": "workspace:*",
+    "@kot/protocol": "workspace:*",
+    "@kot/rules": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

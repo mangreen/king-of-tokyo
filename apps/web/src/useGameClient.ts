@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { io, type Socket } from 'socket.io-client';
 import {
   EVENTS,
   PROTOCOL_VERSION,
@@ -9,14 +8,10 @@ import {
 } from '@kot/protocol';
 import { ACTIVITY_EVENTS, createActivityPing } from './activity.js';
 import { ackMessage } from './messages.js';
-import { resolveServerUrl } from './serverUrl.js';
+import type { ClientLink, LinkFactory } from './net/link.js';
 import { session } from './session.js';
 import { appReducer, initialAppState, type AppState } from './state.js';
 
-const SERVER_URL: string = resolveServerUrl(
-  import.meta.env.VITE_SERVER_URL as string | undefined,
-  window.location.origin,
-);
 const ACK_TIMEOUT_MS = 5_000;
 /** 使用者有操作時，最多每隔這麼久通知伺服器一次（伺服器的閒置上限是分鐘等級）。 */
 const ACTIVITY_INTERVAL_MS = 20_000;
@@ -40,57 +35,71 @@ export interface GameClient {
   dismissNotice(): void;
 }
 
-export function useGameClient(): GameClient {
+export interface GameClientOptions {
+  /** 怎麼連到遊戲主機：伺服器（Socket.IO）或本機離線主機（Worker）。 */
+  link: LinkFactory;
+  /** 是否把身分存在分頁（用於重新整理後接回）。離線主機重新整理就消失，所以不存。 */
+  persistSession: boolean;
+}
+
+export function useGameClient({ link, persistSession }: GameClientOptions): GameClient {
   const [state, dispatch] = useReducer(appReducer, initialAppState);
-  const socketRef = useRef<Socket | null>(null);
+  const linkRef = useRef<ClientLink | null>(null);
 
   const disconnect = useCallback(() => {
-    socketRef.current?.removeAllListeners();
-    socketRef.current?.disconnect();
-    socketRef.current = null;
+    linkRef.current?.close();
+    linkRef.current = null;
   }, []);
 
   const login = useCallback(
     (nickname: string) => {
       disconnect();
       dispatch({ type: 'connecting' });
-      const socket = io(SERVER_URL, { transports: ['websocket'] });
-      socketRef.current = socket;
-
-      // 每次（重新）連線都重送握手，帶上 token 就會接回原身分與座位
-      socket.on('connect', () => {
-        const token = session.token();
-        socket.emit(EVENTS.clientHello, {
-          protocolVersion: PROTOCOL_VERSION,
-          nickname,
-          ...(token === null ? {} : { sessionToken: token }),
-        });
+      // 先建立連線再指派：handlers 只會在非同步事件裡被呼叫，不會在 link() 回傳前觸發
+      const connection: ClientLink = link({
+        // 每次（重新）連線都重送握手，帶上 token 就會接回原身分與座位
+        onOpen: () => {
+          const token = persistSession ? session.token() : null;
+          connection.emit(EVENTS.clientHello, {
+            protocolVersion: PROTOCOL_VERSION,
+            nickname,
+            ...(token === null ? {} : { sessionToken: token }),
+          });
+        },
+        onEvent: (event, payload) => {
+          switch (event) {
+            case EVENTS.serverHello: {
+              const parsed = ServerHelloSchema.safeParse(payload);
+              if (parsed.success && persistSession) {
+                session.save(parsed.data.nickname, parsed.data.sessionToken);
+              }
+              dispatch({ type: 'hello', payload });
+              break;
+            }
+            case EVENTS.serverError:
+              dispatch({ type: 'server-error', payload });
+              break;
+            case EVENTS.roomState:
+              dispatch({ type: 'room-state', payload });
+              break;
+            case EVENTS.gameCards:
+              dispatch({ type: 'game-cards', payload });
+              break;
+            case EVENTS.gameUpdate:
+              dispatch({ type: 'game-update', payload, at: Date.now() });
+              break;
+          }
+        },
+        onError: () => {
+          dispatch({ type: 'transport-error' });
+        },
+        onClose: () => {
+          dispatch({ type: 'disconnected' });
+        },
       });
-      socket.on(EVENTS.serverHello, (payload: unknown) => {
-        const parsed = ServerHelloSchema.safeParse(payload);
-        if (parsed.success) session.save(parsed.data.nickname, parsed.data.sessionToken);
-        dispatch({ type: 'hello', payload });
-      });
-      socket.on(EVENTS.serverError, (payload: unknown) => {
-        dispatch({ type: 'server-error', payload });
-      });
-      socket.on(EVENTS.roomState, (payload: unknown) => {
-        dispatch({ type: 'room-state', payload });
-      });
-      socket.on(EVENTS.gameCards, (payload: unknown) => {
-        dispatch({ type: 'game-cards', payload });
-      });
-      socket.on(EVENTS.gameUpdate, (payload: unknown) => {
-        dispatch({ type: 'game-update', payload, at: Date.now() });
-      });
-      socket.on('connect_error', () => {
-        dispatch({ type: 'transport-error' });
-      });
-      socket.on('disconnect', () => {
-        dispatch({ type: 'disconnected' });
-      });
+      linkRef.current = connection;
     },
-    [disconnect],
+    [disconnect, link, persistSession],
   );
 
   const logout = useCallback(() => {
@@ -100,22 +109,22 @@ export function useGameClient(): GameClient {
   }, [disconnect]);
 
   const reconnect = useCallback(() => {
-    const nickname = session.nickname();
+    const nickname = persistSession ? session.nickname() : null;
     if (nickname === null) {
       dispatch({ type: 'reset' });
       return;
     }
     login(nickname);
-  }, [login]);
+  }, [login, persistSession]);
 
   // 使用者有操作就通知伺服器「我還在」；沒有操作（丟著不管、分頁在背景）就不送，
   // 伺服器會在閒置一段時間後中斷連線，不再佔用執行個體的計費時間。
   useEffect(() => {
     const ping = createActivityPing(
       () => {
-        const socket = socketRef.current;
-        if (!socket?.connected) return false;
-        socket.emit(EVENTS.clientActive);
+        const connection = linkRef.current;
+        if (!connection?.connected) return false;
+        connection.emit(EVENTS.clientActive);
         return true;
       },
       () => Date.now(),
@@ -133,14 +142,13 @@ export function useGameClient(): GameClient {
   }, []);
 
   const request = useCallback((event: string, payload: unknown) => {
-    const socket = socketRef.current;
-    if (!socket?.connected) {
+    const connection = linkRef.current;
+    if (!connection?.connected) {
       dispatch({ type: 'notice', message: '尚未連線到伺服器' });
       return;
     }
-    socket
-      .timeout(ACK_TIMEOUT_MS)
-      .emitWithAck(event, payload)
+    connection
+      .request(event, payload, ACK_TIMEOUT_MS)
       .then((ack: Ack) => {
         if (!ack.ok) dispatch({ type: 'notice', message: ackMessage(ack.code) });
       })
@@ -151,10 +159,10 @@ export function useGameClient(): GameClient {
 
   // 重新整理頁面後，用同一分頁保存的身分自動接回
   useEffect(() => {
-    const nickname = session.nickname();
+    const nickname = persistSession ? session.nickname() : null;
     if (nickname !== null && session.token() !== null) login(nickname);
     return disconnect;
-  }, [login, disconnect]);
+  }, [login, disconnect, persistSession]);
 
   return {
     state,

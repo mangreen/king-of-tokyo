@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@kot/rules';
 import type { CardSet } from './schema.js';
 
 /** 穩定排序 key 的 JSON，使雜湊不受欄位順序影響。 */
@@ -17,5 +17,5 @@ function canonical(value: unknown): string {
 
 /** 卡牌組內容的 SHA-256（十六進位）。記錄進對局日誌，重放時用來確認卡表沒被改過。 */
 export function hashCardSet(set: CardSet): string {
-  return createHash('sha256').update(canonical(set)).digest('hex');
+  return sha256Hex(canonical(set));
 }
