@@ -21,6 +21,12 @@ const EnvSchema = z.object({
   MAX_ROOMS: z.coerce.number().int().min(1).max(100_000).default(2_000),
   /** 同時連線數上限（含大廳）；試玩版用它保護免費額度。 */
   MAX_CONNECTIONS: z.coerce.number().int().min(1).max(100_000).default(10_000),
+  /**
+   * 閒置多久（毫秒）沒有任何訊息就中斷連線；0＝不踢。
+   * 開著網頁卻離開座位的連線會一直佔著 Cloud Run 執行個體（計費時間），所以要踢；
+   * 玩家的身分與座位保留，回來按「重新連線」就接回。
+   */
+  IDLE_KICK_MS: z.coerce.number().int().min(0).max(86_400_000).default(600_000),
   /** 設定後，由伺服器直接提供建置好的網頁（單一容器的試玩版）。 */
   WEB_DIR: z
     .string()
@@ -44,6 +50,8 @@ export interface ServerConfig {
   cardSetsDir: string;
   /** 同時連線數上限（含大廳）。超過的新連線會被告知名額已滿。 */
   maxConnections: number;
+  /** 連線閒置多久沒有任何訊息就中斷（毫秒）；0＝不踢。 */
+  idleKickMs: number;
   /** 建置好的網頁目錄；null＝不提供網頁（開發、前後端分開部署）。 */
   webDir: string | null;
   /** 允許 Origin 與請求 Host 相同的連線（單一容器、同網址的部署）。 */
@@ -68,6 +76,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxRooms: parsed.MAX_ROOMS,
     cardSetsDir: parsed.CARD_SETS_DIR,
     maxConnections: parsed.MAX_CONNECTIONS,
+    idleKickMs: parsed.IDLE_KICK_MS,
     webDir: parsed.WEB_DIR,
     allowSameOrigin: parsed.ALLOW_SAME_ORIGIN,
   };

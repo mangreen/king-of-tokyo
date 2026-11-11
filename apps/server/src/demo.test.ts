@@ -35,6 +35,7 @@ function config(over: Partial<ServerConfig> = {}): ServerConfig {
     maxConnections: 2,
     webDir: webRoot(),
     allowSameOrigin: true,
+    idleKickMs: 0,
     ...over,
   };
 }

@@ -7,12 +7,15 @@ import { z } from 'zod';
  * v2（M2）：握手加入重連用的 sessionToken；新增房間與對局訊息。
  * v3（M3）：卡牌——完整動作集、建房可選卡牌組、握手回傳可用卡牌組、game:cards 推送。
  * v4（M4.13）：電腦玩家——房主可在大廳加入／移除電腦（room:addBot／room:removeBot），PlayerInfo.bot。
+ * v5（M4.14）：閒置踢除——客戶端在使用者有操作時送 client:active，伺服器太久沒收到任何訊息就中斷連線（idle_timeout）。
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** Socket.IO 事件名稱（client → server 與 server → client）。 */
 export const EVENTS = {
   clientHello: 'client:hello',
+  /** 使用者還在操作（滑鼠、鍵盤、觸控）。沒有內容，只用來讓伺服器知道這個連線沒有被丟著不管。 */
+  clientActive: 'client:active',
   serverHello: 'server:hello',
   serverError: 'server:error',
   roomCreate: 'room:create',
@@ -70,6 +73,7 @@ export const ERROR_CODES = [
   'rate_limited',
   'session_replaced',
   'server_full',
+  'idle_timeout',
 ] as const;
 export const ErrorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
