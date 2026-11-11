@@ -109,6 +109,7 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
       rooms,
       scheduler,
       helloTimeoutMs,
+      idleKickMs: config.idleKickMs,
       sockets,
       cardSets: cardSetInfos,
       defaultCardSetId: defaultSetId,

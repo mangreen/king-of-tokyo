@@ -23,6 +23,7 @@ const config: ServerConfig = {
   maxConnections: 100,
   webDir: null,
   allowSameOrigin: false,
+  idleKickMs: 0,
 };
 
 let app: App;

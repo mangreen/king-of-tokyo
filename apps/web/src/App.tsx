@@ -33,6 +33,14 @@ export function App() {
         <button onClick={client.logout}>放棄並重新開始</button>
       </div>
     );
+  } else if (connection.status === 'timed-out') {
+    body = (
+      <div className="card" data-testid="idle-timeout">
+        <p aria-live="polite">{connection.message}</p>
+        <button onClick={client.reconnect}>重新連線</button>
+        <button onClick={client.logout}>登出</button>
+      </div>
+    );
   } else if (connection.status === 'connecting') {
     body = (
       <p aria-live="polite" data-testid="connection-status">

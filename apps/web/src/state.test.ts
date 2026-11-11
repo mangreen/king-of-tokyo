@@ -238,3 +238,16 @@ describe('卡牌', () => {
     expect(state.log.join('\n')).not.toContain('c1');
   });
 });
+
+describe('閒置踢除', () => {
+  it('idle_timeout 進入 timed-out 狀態；之後的 disconnected 不會把它蓋成「重連中」', () => {
+    let s = appReducer(initialAppState, { type: 'connecting' });
+    s = appReducer(s, {
+      type: 'server-error',
+      payload: { code: 'idle_timeout', message: '閒置太久' },
+    });
+    expect(s.connection).toEqual({ status: 'timed-out', message: '閒置太久' });
+    s = appReducer(s, { type: 'disconnected' });
+    expect(s.connection.status).toBe('timed-out');
+  });
+});

@@ -28,6 +28,7 @@ import type { Session, SessionStore } from './rooms/sessions.js';
 
 export interface ClientToServerEvents {
   [EVENTS.clientHello]: (payload: unknown) => void;
+  [EVENTS.clientActive]: (payload: unknown) => void;
   [EVENTS.roomCreate]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.roomJoin]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.roomLeave]: (payload: unknown, ack?: unknown) => void;
@@ -57,6 +58,8 @@ export interface ConnectionContext {
   rooms: RoomManager;
   scheduler: Scheduler;
   helloTimeoutMs: number;
+  /** 連線閒置多久沒有任何訊息就中斷（毫秒）；0＝不踢。 */
+  idleKickMs: number;
   /** playerId → 目前連線。 */
   sockets: Map<string, GameSocket>;
   /** 握手時告知客戶端的可用卡牌組與預設值。 */
@@ -91,7 +94,33 @@ export function handleConnection(socket: GameSocket, ctx: ConnectionContext): vo
 
   let session: Session | null = null;
 
+  // 閒置踢除：任何客戶端訊息（含 client:active）都算「還有人」。連線建立時就開始計，
+  // 所以開了網頁卻沒登入、或登入後丟著不管的連線都會被收掉。
+  let lastActive = ctx.scheduler.now();
+  let cancelIdle: () => void = () => undefined;
+  const armIdle = (ms: number): void => {
+    cancelIdle();
+    cancelIdle = ctx.scheduler.after(ms, () => {
+      const idleFor = ctx.scheduler.now() - lastActive;
+      if (idleFor >= ctx.idleKickMs) {
+        rejectWith(socket, {
+          code: 'idle_timeout',
+          message: '閒置太久，已中斷連線。按「重新連線」就會回到原本的座位。',
+        });
+      } else {
+        armIdle(ctx.idleKickMs - idleFor);
+      }
+    });
+  };
+  if (ctx.idleKickMs > 0) {
+    armIdle(ctx.idleKickMs);
+    socket.onAny(() => {
+      lastActive = ctx.scheduler.now();
+    });
+  }
+
   socket.on('disconnect', () => {
+    cancelIdle();
     clearTimeout(timer);
     if (session && ctx.sessions.detach(session, socket.id)) {
       ctx.sockets.delete(session.playerId);
@@ -196,6 +225,9 @@ function registerHandlers(socket: GameSocket, session: Session, ctx: ConnectionC
       }
     });
   }
+
+  // 只用來讓 onAny 記錄活動；不需要回應
+  socket.on(EVENTS.clientActive, () => undefined);
 
   const identity = { id: session.playerId, nickname: session.nickname };
 

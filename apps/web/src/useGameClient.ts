@@ -7,6 +7,7 @@ import {
   type Ack,
   type GameActionInput,
 } from '@kot/protocol';
+import { ACTIVITY_EVENTS, createActivityPing } from './activity.js';
 import { ackMessage } from './messages.js';
 import { resolveServerUrl } from './serverUrl.js';
 import { session } from './session.js';
@@ -17,12 +18,16 @@ const SERVER_URL: string = resolveServerUrl(
   window.location.origin,
 );
 const ACK_TIMEOUT_MS = 5_000;
+/** 使用者有操作時，最多每隔這麼久通知伺服器一次（伺服器的閒置上限是分鐘等級）。 */
+const ACTIVITY_INTERVAL_MS = 20_000;
 
 export interface GameClient {
   state: AppState;
   /** 用暱稱登入（沒有帳號）；之後以 token 自動重連。 */
   login(nickname: string): void;
   logout(): void;
+  /** 被閒置踢除後，用原本的身分重新連線（接回座位）。 */
+  reconnect(): void;
   createRoom(cardSetId?: string): void;
   joinRoom(code: string): void;
   leaveRoom(): void;
@@ -94,6 +99,39 @@ export function useGameClient(): GameClient {
     dispatch({ type: 'reset' });
   }, [disconnect]);
 
+  const reconnect = useCallback(() => {
+    const nickname = session.nickname();
+    if (nickname === null) {
+      dispatch({ type: 'reset' });
+      return;
+    }
+    login(nickname);
+  }, [login]);
+
+  // 使用者有操作就通知伺服器「我還在」；沒有操作（丟著不管、分頁在背景）就不送，
+  // 伺服器會在閒置一段時間後中斷連線，不再佔用執行個體的計費時間。
+  useEffect(() => {
+    const ping = createActivityPing(
+      () => {
+        const socket = socketRef.current;
+        if (!socket?.connected) return false;
+        socket.emit(EVENTS.clientActive);
+        return true;
+      },
+      () => Date.now(),
+      ACTIVITY_INTERVAL_MS,
+    );
+    const touch = (): void => {
+      if (document.visibilityState === 'visible') ping.touch();
+    };
+    for (const name of ACTIVITY_EVENTS) window.addEventListener(name, touch, { passive: true });
+    document.addEventListener('visibilitychange', touch);
+    return () => {
+      for (const name of ACTIVITY_EVENTS) window.removeEventListener(name, touch);
+      document.removeEventListener('visibilitychange', touch);
+    };
+  }, []);
+
   const request = useCallback((event: string, payload: unknown) => {
     const socket = socketRef.current;
     if (!socket?.connected) {
@@ -122,6 +160,7 @@ export function useGameClient(): GameClient {
     state,
     login,
     logout,
+    reconnect,
     createRoom: (cardSetId) => {
       request(EVENTS.roomCreate, cardSetId === undefined ? {} : { cardSetId });
     },
