@@ -34,3 +34,17 @@ export function ackMessage(code: AckErrorCode): string {
 export function hasAllAckMessages(): boolean {
   return ACK_ERROR_CODES.every((code) => ACK_MESSAGES[code].length > 0);
 }
+
+/** 連線失敗的原因（房主模式經中繼加入時）→ 給玩家看的訊息。沒有原因就是單純連不上。 */
+const TRANSPORT_ERROR_MESSAGES: Record<string, string> = {
+  room_not_found: '找不到這個房間，房號可能打錯了，或房主已經離開。',
+  room_full: '房間已滿。',
+  host_offline: '房主暫時離線，請稍後再試。',
+  server_full: '伺服器目前名額已滿，請稍後再試。',
+  protocol_mismatch: '版本不符，請重新整理頁面。',
+  unreachable: '無法連線到伺服器',
+};
+
+export function transportErrorMessage(code: string | undefined): string {
+  return (code === undefined ? undefined : TRANSPORT_ERROR_MESSAGES[code]) ?? '無法連線到伺服器';
+}

@@ -1,9 +1,11 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
-import { EVENTS, type CardSetInfo } from '@kot/protocol';
+import { EVENTS, RELAY_MAX_GUESTS, RELAY_NAMESPACE, type CardSetInfo } from '@kot/protocol';
 import type { Seed } from '@kot/rules';
 import {
   createGameHost,
+  cryptoRandomInt,
+  randomHex,
   HELLO_TIMEOUT_MS,
   realScheduler,
   type Gateway,
@@ -20,15 +22,23 @@ import {
   type ServerToClientEvents,
 } from './connection.js';
 import { isOriginAllowed } from './origin.js';
+import { attachRelay } from './relay/namespace.js';
+import { RelayRegistry, type RelayOptions } from './relay/registry.js';
 import { registerWeb } from './web.js';
 
 export { HELLO_TIMEOUT_MS };
-/** 單則訊息大小上限（bytes），遠大於合法訊息，用來擋掉濫用。 */
-const MAX_MESSAGE_BYTES = 10_000;
+/**
+ * 單則訊息大小上限（bytes）：Socket.IO 是整個伺服器一個值，所以取中繼需要的上限
+ * （卡牌目錄約 10 KB，中繼的 data 另外限制 32 KB）。伺服器權威模式的訊息都有嚴格的 zod schema，不受影響。
+ */
+const MAX_MESSAGE_BYTES = 65_536;
+/** 房主斷線後保留房號的時間（毫秒）。 */
+export const RELAY_HOST_GRACE_MS = 30_000;
 
 export interface App {
   fastify: FastifyInstance;
   gateway: Gateway;
+  relay: RelayRegistry;
   io: SocketServer<ClientToServerEvents, ServerToClientEvents>;
   rooms: RoomManager;
   sessions: SessionStore;
@@ -42,6 +52,13 @@ export interface AppOptions {
   scheduler?: Scheduler;
   timings?: Timings;
   newSeed?: () => Seed;
+  /** 測試用：房主斷線後保留房號的時間（毫秒）。 */
+  relayHostGraceMs?: number;
+  /** 測試用：覆寫中繼的限流（例如用假時鐘加速對局時放寬頻率與頻寬）。 */
+  relayLimits?: Pick<
+    RelayOptions,
+    'hostBurst' | 'hostPerSecond' | 'roomBytesBurst' | 'roomBytesPerSecond'
+  >;
   /** 測試用：直接提供卡牌組，不讀檔。 */
   cardSets?: ReadonlyMap<string, LoadedCardSet>;
 }
@@ -99,6 +116,19 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     handleConnection(socket, gateway);
   });
 
+  // 中繼：房主在瀏覽器跑房間，伺服器只登記房號、轉發不透明訊息（ADR-0007）
+  const relay = new RelayRegistry({
+    scheduler,
+    maxRooms: config.maxRooms,
+    maxGuests: RELAY_MAX_GUESTS,
+    idleKickMs: config.idleKickMs,
+    hostGraceMs: options.relayHostGraceMs ?? RELAY_HOST_GRACE_MS,
+    ...options.relayLimits,
+    randomInt: cryptoRandomInt,
+    randomHex,
+  });
+  attachRelay(io.of(RELAY_NAMESPACE), relay, () => io.engine.clientsCount > config.maxConnections);
+
   // 必須在 preClose（Fastify 開始等待連線結束「之前」）就把 Socket.IO 關掉：
   // 已升級成 WebSocket 的連線不會被 Fastify 當成閒置連線關閉，若等到 onClose 才處理，
   // 只要還有玩家連著，close() 就永遠等不到結束（docker stop／Ctrl+C 會卡到被強制砍掉）。
@@ -107,5 +137,5 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     await io.close();
   });
 
-  return { fastify, io, gateway, rooms, sessions, cardSetInfos };
+  return { fastify, io, gateway, relay, rooms, sessions, cardSetInfos };
 }

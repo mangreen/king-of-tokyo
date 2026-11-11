@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { loadCardSetFromJson } from '@kot/cardsets/pure';
 import { EVENTS, PROTOCOL_VERSION, type Ack } from '@kot/protocol';
+import { createLocalHost, type ToClient } from '@kot/room';
 import { FakeScheduler } from '@kot/room/testing';
 import originalCardSet from '../../../../card-sets/original/set.json';
-import { createLocalHost } from './localHost.js';
 import { localLinkFactory, type LocalEndpoint } from './localLink.js';
-import type { ToClient } from './localProtocol.js';
 
 /** 與真實 Worker 同介面的同執行緒替身：訊息經 microtask 非同步遞送，與 postMessage 的語意一致。 */
 function inlineEndpoint(scheduler: FakeScheduler): LocalEndpoint {

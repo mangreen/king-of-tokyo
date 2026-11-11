@@ -39,3 +39,28 @@ export type {
   RoomSnapshot,
   RoomStateMessage,
 } from './lobby.js';
+
+export {
+  GuestIdSchema,
+  RELAY_ERROR_CODES,
+  RELAY_EVENTS,
+  RELAY_MAX_DATA_BYTES,
+  RELAY_MAX_GUESTS,
+  RELAY_NAMESPACE,
+  RELAY_PROTOCOL_VERSION,
+  RelayErrorCodeSchema,
+  RelayHostOpenSchema,
+  RelayJoinSchema,
+  RelayKickSchema,
+  RelayToGuestSchema,
+  RelayToHostSchema,
+} from './relay.js';
+export type {
+  RelayClosedReason,
+  RelayErrorCode,
+  RelayHostOpen,
+  RelayHostOpenAck,
+  RelayJoin,
+  RelayJoinAck,
+  RelayServerEvents,
+} from './relay.js';

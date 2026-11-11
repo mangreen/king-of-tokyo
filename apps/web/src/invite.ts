@@ -11,11 +11,16 @@ export function parseInvite(search: string): string | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** 依目前頁面網址組出邀請連結（保留網址與路徑，丟掉其他參數與 hash）。 */
+/**
+ * 依目前頁面網址組出邀請連結（保留網址與路徑，丟掉其他參數與 hash）。
+ * 房主模式（mode=p2p）要保留 mode：客人必須經中繼連到房主，而不是連伺服器的房間。
+ */
 export function inviteUrl(pageHref: string, code: string): string {
   const url = new URL(pageHref);
+  const mode = url.searchParams.get('mode');
   url.search = '';
   url.hash = '';
+  if (mode === 'p2p') url.searchParams.set('mode', 'p2p');
   url.searchParams.set(INVITE_PARAM, code);
   return url.toString();
 }

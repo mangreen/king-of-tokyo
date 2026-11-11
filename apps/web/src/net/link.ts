@@ -11,8 +11,8 @@ export interface LinkHandlers {
   onOpen(): void;
   onEvent(event: string, payload: unknown): void;
   onClose(): void;
-  /** 連線失敗（尚未建立）。 */
-  onError(): void;
+  /** 連線失敗（尚未建立）。code 是失敗原因（房主模式：找不到房間、房間已滿等）；沒有就是單純連不上。 */
+  onError(code?: string): void;
 }
 
 export interface ClientLink {

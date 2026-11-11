@@ -8,6 +8,7 @@ import {
   type RoomSnapshot,
   type RoomStateMessage,
 } from '@kot/protocol';
+import { transportErrorMessage } from './messages.js';
 
 export type Connection =
   | { status: 'idle' }
@@ -48,7 +49,7 @@ export type AppAction =
   | { type: 'connecting' }
   | { type: 'hello'; payload: unknown }
   | { type: 'server-error'; payload: unknown }
-  | { type: 'transport-error' }
+  | { type: 'transport-error'; code?: string }
   | { type: 'disconnected' }
   | { type: 'room-state'; payload: unknown }
   | { type: 'game-cards'; payload: unknown }
@@ -156,7 +157,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         const { playerId, nickname } = state.connection;
         return { ...state, connection: { status: 'reconnecting', playerId, nickname } };
       }
-      return { ...state, connection: { status: 'error', message: '無法連線到伺服器' } };
+      return {
+        ...state,
+        connection: { status: 'error', message: transportErrorMessage(action.code) },
+      };
 
     case 'disconnected':
       // 斷線後 socket.io 會自動重連，並用 token 接回身分與座位

@@ -18,7 +18,7 @@ packages/rules      純規則引擎（無 I/O、可重現、前後端共用）
 packages/protocol   WebSocket 訊息型別與 zod 驗證、協定版本
 packages/cardsets   卡牌組 schema 驗證、載入、內容雜湊、官方 CSV 匯入（`./pure` 子路徑無 node 依賴，瀏覽器可用）
 packages/room       房間、連線閘道、計時、電腦、代管（不依賴 node:* 與任何傳輸；src 以 types: [] 檢查，不可引入 node 或 DOM API）
-apps/server         Fastify + Socket.IO 轉接，把連線接到 @kot/room
+apps/server         Fastify + Socket.IO 轉接，把連線接到 @kot/room；src/relay 是房主模式的房號登記與中繼（不解析遊戲訊息）
 apps/web            Vite + React；src/scene/ 為 Three.js 場景（動態載入，事件回放，見 ADR-0003）
 card-sets/          卡牌組資料（original 提交；local 不提交，見 ADR-0004）
 ```

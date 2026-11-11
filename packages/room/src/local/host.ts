@@ -3,16 +3,11 @@
  * 與伺服器模式相同的閘道、房間、計時與電腦玩家，只是傳輸換成 postMessage。
  */
 import type { LoadedCardSet } from '@kot/cardsets/pure';
-import {
-  createGameHost,
-  realScheduler,
-  type GameHost,
-  type GatewayConn,
-  type Scheduler,
-  type ServerEventMap,
-  type Timings,
-} from '@kot/room';
-import type { ToClient, ToHost } from './localProtocol.js';
+import type { GatewayConn, ServerEventMap } from '../gateway.js';
+import { createGameHost, type GameHost } from '../host.js';
+import type { Timings } from '../room.js';
+import { realScheduler, type Scheduler } from '../scheduler.js';
+import type { ToClient, ToHost } from './protocol.js';
 
 export interface LocalHostOptions {
   cardSet: LoadedCardSet;

@@ -9,7 +9,7 @@ import { z } from 'zod';
  * v4（M4.13）：電腦玩家——房主可在大廳加入／移除電腦（room:addBot／room:removeBot），PlayerInfo.bot。
  * v5（M4.14）：閒置踢除——客戶端在使用者有操作時送 client:active，伺服器太久沒收到任何訊息就中斷連線（idle_timeout）。
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /** Socket.IO 事件名稱（client → server 與 server → client）。 */
 export const EVENTS = {
@@ -74,6 +74,8 @@ export const ERROR_CODES = [
   'session_replaced',
   'server_full',
   'idle_timeout',
+  /** 房主模式：中繼把房間關了（房主離開、逾時），無法接回。 */
+  'room_closed',
 ] as const;
 export const ErrorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;

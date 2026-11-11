@@ -1,25 +1,56 @@
+import { createGuestEndpoint } from '@kot/room';
 import { resolveServerUrl } from '../serverUrl.js';
 import type { GameClientOptions } from '../useGameClient.js';
-import { parseOffline } from './offline.js';
 import { localLinkFactory } from './localLink.js';
 import { createWorkerEndpoint } from './localWorker.js';
+import { parseMode, type Mode } from './mode.js';
+import { createRelaySocket } from './relaySocket.js';
 import { socketLinkFactory } from './socketLink.js';
 
-/** 依網址決定怎麼連：預設連伺服器；`?offline=1` 在本分頁跑一份本機主機（Worker）。 */
+export type ClientOptions = GameClientOptions & {
+  mode: Mode;
+  /**
+   * 房主模式：登入前設定要加入的房號（客人）；不設定就是自己當房主。
+   * 連線方式在登入時才決定，所以這個值要在呼叫 login 之前設好。
+   */
+  target: { code: string | null };
+};
+
+/** 依網址決定怎麼連：預設連伺服器；offline＝本分頁的本機主機；p2p＝房主模式（經中繼）。 */
 export function createClientOptions(
   location: { search: string; origin: string },
   serverUrl: string | undefined,
-): GameClientOptions & { offline: boolean } {
-  if (parseOffline(location.search)) {
+): ClientOptions {
+  const mode = parseMode(location.search);
+  const target: { code: string | null } = { code: null };
+  const url = resolveServerUrl(serverUrl, location.origin);
+
+  if (mode === 'offline') {
     return {
-      link: localLinkFactory(createWorkerEndpoint),
+      mode,
+      target,
+      link: localLinkFactory(() => createWorkerEndpoint()),
       persistSession: false,
-      offline: true,
     };
   }
-  return {
-    link: socketLinkFactory(resolveServerUrl(serverUrl, location.origin)),
-    persistSession: true,
-    offline: false,
-  };
+  if (mode === 'p2p') {
+    return {
+      mode,
+      target,
+      // 有房號＝客人（經中繼連到房主）；沒有＝自己當房主（Worker 跑房間，要開房時才向中繼登記）
+      link: (handlers) => {
+        const code = target.code;
+        const factory =
+          code === null
+            ? localLinkFactory(() => createWorkerEndpoint({ relayUrl: url }))
+            : localLinkFactory(() =>
+                createGuestEndpoint(createRelaySocket(url, { lazy: false }), code),
+              );
+        return factory(handlers);
+      },
+      // 重新整理會讓房主的房間消失，客人也無法接回（M8 才做）：不保存身分
+      persistSession: false,
+    };
+  }
+  return { mode, target, link: socketLinkFactory(url), persistSession: true };
 }

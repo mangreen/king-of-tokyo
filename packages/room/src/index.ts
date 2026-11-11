@@ -15,3 +15,14 @@ export { realScheduler } from './scheduler.js';
 export type { Scheduler } from './scheduler.js';
 export { SessionStore } from './sessions.js';
 export type { Session } from './sessions.js';
+
+export { createLocalHost } from './local/host.js';
+export type { LocalHost, LocalHostOptions } from './local/host.js';
+export { parseToHost, ToClientSchema, ToHostSchema } from './local/protocol.js';
+export type { LocalEndpoint, ToClient, ToHost } from './local/protocol.js';
+export { createGuestEndpoint } from './relay/guestEndpoint.js';
+export { HostBridge } from './relay/hostBridge.js';
+export type { BridgeStatus } from './relay/hostBridge.js';
+export { createRelayedHost } from './relay/relayedHost.js';
+export type { RelayedHost } from './relay/relayedHost.js';
+export type { RelaySocket } from './relay/socket.js';
