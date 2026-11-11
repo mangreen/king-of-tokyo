@@ -47,6 +47,13 @@ export class RoomManager {
     return code === undefined ? undefined : this.rooms.get(code);
   }
 
+  private presetRoomCode: string | null = null;
+
+  /** 指定「下一次 createRoom」使用的房號（房主模式：房號由中繼伺服器登記）。只生效一次。 */
+  presetCode(code: string): void {
+    this.presetRoomCode = code;
+  }
+
   createRoom(host: Identity, cardSetId?: string): CreateResult {
     const cardSet = this.deps.cardSets.get(cardSetId ?? this.deps.defaultCardSetId);
     if (!cardSet) return { ok: false, code: 'unknown_card_set' };
@@ -54,7 +61,14 @@ export class RoomManager {
     if (this.rooms.size >= this.deps.maxRooms) return { ok: false, code: 'too_many_rooms' };
 
     let code = '';
-    for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
+    // 房主模式：房號由中繼伺服器登記並指定（presetCode），只能用一次
+    const preset = this.presetRoomCode;
+    this.presetRoomCode = null;
+    if (preset !== null) {
+      if (this.rooms.has(preset)) return { ok: false, code: 'too_many_rooms' };
+      code = preset;
+    }
+    for (let attempt = 0; code === '' && attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
       const candidate = generateRoomCode(this.deps.randomInt);
       if (!this.rooms.has(candidate)) {
         code = candidate;

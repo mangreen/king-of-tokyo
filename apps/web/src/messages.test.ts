@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACK_ERROR_CODES } from '@kot/protocol';
-import { ACK_MESSAGES, ackMessage, hasAllAckMessages } from './messages.js';
+import { ACK_MESSAGES, ackMessage, hasAllAckMessages, transportErrorMessage } from './messages.js';
 
 describe('ackMessage', () => {
   it('每個伺服器錯誤碼都有給玩家看的訊息，且沒有多餘的項目', () => {
@@ -12,5 +12,14 @@ describe('ackMessage', () => {
     for (const code of ACK_ERROR_CODES) {
       expect(ackMessage(code)).not.toMatch(/zod|stack|node_modules|undefined/i);
     }
+  });
+});
+
+describe('連線失敗訊息', () => {
+  it('已知原因有專屬訊息；沒有原因或未知原因就是單純連不上', () => {
+    expect(transportErrorMessage('room_not_found')).toContain('找不到這個房間');
+    expect(transportErrorMessage('room_full')).toContain('已滿');
+    expect(transportErrorMessage(undefined)).toBe('無法連線到伺服器');
+    expect(transportErrorMessage('???')).toBe('無法連線到伺服器');
   });
 });

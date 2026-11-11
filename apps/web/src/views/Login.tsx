@@ -1,15 +1,19 @@
 import { useState, type FormEvent } from 'react';
-import { NicknameSchema } from '@kot/protocol';
+import { NicknameSchema, RoomCodeSchema } from '@kot/protocol';
 
 export function Login({
   onLogin,
   inviteCode,
+  hostMode = false,
 }: {
-  onLogin: (nickname: string) => void;
+  onLogin: (nickname: string, roomCode?: string) => void;
   /** 從邀請連結帶進來的房號；有的話登入後會自動加入。 */
   inviteCode?: string | null;
+  /** 房主模式：可以輸入朋友的房號加入；留空就是自己當房主。 */
+  hostMode?: boolean;
 }) {
   const [value, setValue] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   function submit(event: FormEvent): void {
@@ -19,7 +23,16 @@ export function Login({
       setError(parsed.error.issues[0]?.message ?? '暱稱不正確');
       return;
     }
-    onLogin(parsed.data);
+    if (hostMode && inviteCode === null && code.trim() !== '') {
+      const room = RoomCodeSchema.safeParse(code);
+      if (!room.success) {
+        setError('房號格式不正確（5 個字母或數字）');
+        return;
+      }
+      onLogin(parsed.data, room.data);
+      return;
+    }
+    onLogin(parsed.data, inviteCode ?? undefined);
   }
 
   return (
@@ -42,9 +55,24 @@ export function Login({
         aria-label="暱稱"
         autoFocus
       />
+      {hostMode && !inviteCode && (
+        <>
+          <input
+            value={code}
+            onChange={(e) => {
+              setCode(e.target.value);
+              setError(null);
+            }}
+            placeholder="朋友的房號（沒有就留空，自己當房主）"
+            maxLength={5}
+            aria-label="房號"
+            data-testid="room-code-input"
+          />
+        </>
+      )}
       {error && <p className="error">{error}</p>}
       <button type="submit" className="primary">
-        {inviteCode ? '加入房間' : '進入大廳'}
+        {inviteCode || code.trim() !== '' ? '加入房間' : hostMode ? '當房主' : '進入大廳'}
       </button>
     </form>
   );

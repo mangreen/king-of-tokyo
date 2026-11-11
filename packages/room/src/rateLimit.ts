@@ -12,16 +12,16 @@ export class TokenBucket {
     this.last = now();
   }
 
-  /** 嘗試取用一個；沒有額度回傳 false。 */
-  take(): boolean {
+  /** 嘗試取用 cost 個（預設 1；中繼用位元組數當成本）；額度不足回傳 false 且不扣。 */
+  take(cost = 1): boolean {
     const current = this.now();
     const elapsedSeconds = Math.max(0, current - this.last) / 1000;
     this.last = current;
     this.tokens = Math.min(this.capacity, this.tokens + elapsedSeconds * this.refillPerSecond);
-    if (this.tokens < 1) {
+    if (this.tokens < cost) {
       return false;
     }
-    this.tokens -= 1;
+    this.tokens -= cost;
     return true;
   }
 }

@@ -90,8 +90,8 @@ export function useGameClient({ link, persistSession }: GameClientOptions): Game
               break;
           }
         },
-        onError: () => {
-          dispatch({ type: 'transport-error' });
+        onError: (code) => {
+          dispatch({ type: 'transport-error', ...(code === undefined ? {} : { code }) });
         },
         onClose: () => {
           dispatch({ type: 'disconnected' });
