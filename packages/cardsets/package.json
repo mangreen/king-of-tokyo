@@ -5,7 +5,8 @@
   "type": "module",
   "description": "卡牌組：schema 驗證、載入、內容雜湊、官方 CSV 匯入（見 ADR-0004）",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./pure": "./src/pure.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

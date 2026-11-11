@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { hashToken, randomHex } from './random.js';
 import type { Scheduler } from './scheduler.js';
 
 export interface Session {
@@ -9,10 +9,6 @@ export interface Session {
   /** 目前連線的 socket id；斷線為 null。 */
   socketId: string | null;
   cancelExpiry: (() => void) | null;
-}
-
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
 }
 
 /**
@@ -32,9 +28,9 @@ export class SessionStore {
   ) {}
 
   create(nickname: string): { session: Session; token: string } {
-    const token = randomBytes(32).toString('hex');
+    const token = randomHex(32);
     const session: Session = {
-      playerId: randomBytes(8).toString('hex'),
+      playerId: randomHex(8),
       nickname,
       tokenHash: hashToken(token),
       socketId: null,

@@ -1,5 +1,5 @@
-import { randomInt } from 'node:crypto';
 import { MONSTER_COUNT } from '@kot/protocol';
+import { cryptoRandomInt } from './random.js';
 
 /**
  * 每場對局隨機、不重複地分配怪獸造型（Fisher–Yates 洗牌後取前 count 個）。
@@ -8,7 +8,7 @@ import { MONSTER_COUNT } from '@kot/protocol';
 export function pickMonsters(
   count: number,
   total: number = MONSTER_COUNT,
-  rand: (maxExclusive: number) => number = (n) => randomInt(n),
+  rand: (maxExclusive: number) => number = cryptoRandomInt,
 ): number[] {
   const pool = Array.from({ length: total }, (_, i) => i);
   const n = Math.min(count, total);

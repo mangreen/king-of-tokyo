@@ -1,34 +1,34 @@
-import { randomInt } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Server as SocketServer } from 'socket.io';
 import { EVENTS, type CardSetInfo } from '@kot/protocol';
 import type { Seed } from '@kot/rules';
+import {
+  createGameHost,
+  HELLO_TIMEOUT_MS,
+  realScheduler,
+  type Gateway,
+  type RoomManager,
+  type Scheduler,
+  type SessionStore,
+  type Timings,
+} from '@kot/room';
 import { defaultCardSetId, loadCardSets, type LoadedCardSet } from '@kot/cardsets';
 import type { ServerConfig } from './config.js';
 import {
-  createPublisher,
   handleConnection,
-  randomSeed,
   type ClientToServerEvents,
-  type GameSocket,
   type ServerToClientEvents,
 } from './connection.js';
-import { RoomManager } from './rooms/manager.js';
-import { DEFAULT_TIMINGS, type Timings } from './rooms/room.js';
-import { realScheduler, type Scheduler } from './rooms/scheduler.js';
-import { SessionStore } from './rooms/sessions.js';
 import { isOriginAllowed } from './origin.js';
 import { registerWeb } from './web.js';
 
-/** 握手逾時：連線後必須在此時間內送出 client:hello。 */
-export const HELLO_TIMEOUT_MS = 5_000;
+export { HELLO_TIMEOUT_MS };
 /** 單則訊息大小上限（bytes），遠大於合法訊息，用來擋掉濫用。 */
 const MAX_MESSAGE_BYTES = 10_000;
-/** 斷線且不在房間的身分保留時間。 */
-const SESSION_TTL_MS = 10 * 60_000;
 
 export interface App {
   fastify: FastifyInstance;
+  gateway: Gateway;
   io: SocketServer<ClientToServerEvents, ServerToClientEvents>;
   rooms: RoomManager;
   sessions: SessionStore;
@@ -74,25 +74,17 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
   });
 
   const cardSets = options.cardSets ?? loadCardSets(config.cardSetsDir);
-  const defaultSetId = defaultCardSetId(cardSets);
-  const cardSetInfos = [...cardSets.values()].map((loaded) => ({
-    id: loaded.set.id,
-    name: loaded.set.name,
-    cardCount: loaded.set.cards.length,
-  }));
-
-  const sockets = new Map<string, GameSocket>();
-  const rooms: RoomManager = new RoomManager({
+  const host = createGameHost({
     scheduler,
-    publisher: createPublisher(sockets),
-    newSeed: options.newSeed ?? randomSeed,
-    timings: options.timings ?? DEFAULT_TIMINGS,
-    randomInt: (max) => randomInt(max),
-    maxRooms: config.maxRooms,
     cardSets,
-    defaultCardSetId: defaultSetId,
+    defaultCardSetId: defaultCardSetId(cardSets),
+    maxRooms: config.maxRooms,
+    idleKickMs: config.idleKickMs,
+    helloTimeoutMs,
+    ...(options.timings === undefined ? {} : { timings: options.timings }),
+    ...(options.newSeed === undefined ? {} : { newSeed: options.newSeed }),
   });
-  const sessions = new SessionStore(scheduler, SESSION_TTL_MS, (id) => rooms.hasRoom(id));
+  const { gateway, rooms, sessions, cardSetInfos } = host;
 
   io.on('connection', (socket) => {
     // 同時連線數上限（試玩版保護免費額度）：已連線的人不受影響，新來的被告知名額已滿
@@ -104,16 +96,7 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
       socket.disconnect(true);
       return;
     }
-    handleConnection(socket, {
-      sessions,
-      rooms,
-      scheduler,
-      helloTimeoutMs,
-      idleKickMs: config.idleKickMs,
-      sockets,
-      cardSets: cardSetInfos,
-      defaultCardSetId: defaultSetId,
-    });
+    handleConnection(socket, gateway);
   });
 
   // 必須在 preClose（Fastify 開始等待連線結束「之前」）就把 Socket.IO 關掉：
@@ -124,5 +107,5 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     await io.close();
   });
 
-  return { fastify, io, rooms, sessions, cardSetInfos };
+  return { fastify, io, gateway, rooms, sessions, cardSetInfos };
 }

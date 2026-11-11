@@ -1,6 +1,6 @@
 import type { AckErrorCode } from '@kot/protocol';
 import type { Seed } from '@kot/rules';
-import type { LoadedCardSet } from '@kot/cardsets';
+import type { LoadedCardSet } from '@kot/cardsets/pure';
 import { Room, type Publisher, type Result, type RoomDeps, type Timings } from './room.js';
 import { generateRoomCode } from './roomCode.js';
 import type { Scheduler } from './scheduler.js';

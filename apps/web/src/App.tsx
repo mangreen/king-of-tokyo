@@ -4,10 +4,17 @@ import { GameView } from './views/GameView.js';
 import { Lobby } from './views/Lobby.js';
 import { Login } from './views/Login.js';
 import { RoomView } from './views/RoomView.js';
+import { createClientOptions } from './net/config.js';
 import { useGameClient } from './useGameClient.js';
 
+// 連線方式在載入時決定一次（伺服器或離線），之後不變
+const clientOptions = createClientOptions(
+  window.location,
+  import.meta.env.VITE_SERVER_URL as string | undefined,
+);
+
 export function App() {
-  const client = useGameClient();
+  const client = useGameClient(clientOptions);
   const { state } = client;
   const { connection, room, game } = state;
 
@@ -91,6 +98,11 @@ export function App() {
   return (
     <main className={inGame ? 'wide' : undefined}>
       <h1>東京之王 King of Tokyo</h1>
+      {clientOptions.offline && (
+        <div className="notice" role="status" data-testid="offline-banner">
+          離線模式：遊戲在這個分頁裡執行，不連伺服器。重新整理頁面會結束這局。可以加入電腦玩家對戰。
+        </div>
+      )}
       {connection.status === 'reconnecting' && (
         <div className="notice" role="status">
           連線中斷，重新連線中…（對局由系統暫時代打，連上後會接回你的座位）

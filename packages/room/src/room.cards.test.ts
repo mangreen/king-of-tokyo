@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { defaultAction } from '@kot/rules';
 import type { GameActionInput } from '@kot/protocol';
 import { Room, type Timings } from './room.js';
-import { FakeScheduler, RecordingPublisher, testCardSet } from './testing.js';
+import { FakeScheduler, RecordingPublisher } from './testing.js';
+import { testCardSet } from './testing-fs.js';
 
 const TIMINGS: Timings = {
   decisionMs: 1000,
@@ -142,7 +143,7 @@ describe('買牌階段的動作', () => {
 
 describe('對局 seed 是機密', () => {
   it('randomSeed 產生 128 位元的十六進位字串，每次都不同', async () => {
-    const { randomSeed } = await import('../connection.js');
+    const { randomSeed } = await import('./random.js');
     const a = randomSeed();
     expect(a).toMatch(/^[0-9a-f]{32}$/);
     expect(randomSeed()).not.toBe(a);

@@ -20,6 +20,7 @@
   "devDependencies": {
     "@kot/cardsets": "workspace:*",
     "@kot/protocol": "workspace:*",
+    "@kot/room": "workspace:*",
     "@kot/rules": "workspace:*",
     "@types/node": "^26.6.6",
     "socket.io-client": "^4.8.4",

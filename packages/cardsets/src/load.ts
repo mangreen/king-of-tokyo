@@ -2,14 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { hashCardSet } from './hash.js';
 import { parseCardSet } from './schema.js';
-import type { CardSet } from './schema.js';
-
-export interface LoadedCardSet {
-  set: CardSet;
-  hash: string;
-  /** 來源目錄名稱（original／local）。 */
-  source: string;
-}
+import type { LoadedCardSet } from './pure.js';
 
 /**
  * 載入 card-sets/ 下所有可用的卡牌組。original 一定要存在；local 不存在就略過

@@ -17,6 +17,7 @@
 - **12 種怪獸（M4.10）：** 蜥蜴、巨猿、機甲、章魚人、巨蟹、飛龍＋新增的巨龜、螳螂、雪怪、石魔、蘑菇怪、獨眼怪，各有自己的招式（巨龜水柱、螳螂鐮刀斬、雪怪冰霜、石魔震地、蘑菇怪孢子、獨眼怪凝視光束）。每場開局由伺服器隨機分配（純外觀，不影響規則，也不使用機密的對局 seed），透過房間狀態同步，所有人看到的一致；玩家列表會顯示每個人的怪獸名稱。
 - **邀請連結（M4.12）：** 房間頁有「複製連結」（手機另有系統分享）。朋友點開 `https://網址/?room=房號`，輸入暱稱就會自動加入該房間；房號不存在或已滿時回到大廳並顯示原因。
 - **電腦玩家（M4.13）：** 房主在房間頁按「🤖 加入電腦」（真人＋電腦最多 6 位，一個真人加一台電腦就能開局）。電腦由伺服器出手，不受逾時代管限制，行動前會停約 1.4 秒讓 3D 演出跟上。策略（`smartBot`）只看玩家看得到的資訊，用規則引擎本身試算每個選擇——擲骰時對所有保留方式做期望值計算、買牌與讓位時比較結算後的局面。它是啟發式策略，**不是可證明的最佳解**；對簡單機器人的實測勝率見 [architecture.md](docs/architecture.md)。
+- **離線模式（M5）：** 開 `/?offline=1`（本機開發：`http://localhost:5173/?offline=1`），不連伺服器，在這個分頁裡加入電腦玩家就能玩完整局；重新整理會結束這局。
 - **閒置踢除（M4.14）：** 連線一段時間沒有任何操作（滑鼠、鍵盤、觸控、遊戲動作）就會被伺服器中斷（預設 10 分鐘，試玩版 image 5 分鐘；`IDLE_KICK_MS`，0＝不踢）。畫面會出現「重新連線」，身分與座位保留。目的：開著網頁就離開的分頁不再一直佔著 Cloud Run 執行個體的計費時間。
 - **尚未有：** P2P 架構與其後的里程碑（M5–M12，**計畫中、待使用者同意**，見 [ADR-0007](docs/adr/0007-p2p-host-authoritative.md)）。3D 效能目前只在沙盒（軟體算圖）量過，基準機實測見 [runbook](docs/runbooks/mac-verification.md)。
 
@@ -65,7 +66,8 @@ pnpm --filter @kot/cardsets run import                   # 把 card-sets/local/ 
 ```
 packages/rules      純規則引擎（無 I/O、可重現、前後端共用）
 packages/protocol   WebSocket 訊息型別與 zod 驗證
-packages/cardsets   卡牌組驗證、載入、雜湊與 CSV 匯入（伺服器與匯入腳本使用）
+packages/cardsets   卡牌組驗證、載入、雜湊與 CSV 匯入（`@kot/cardsets/pure` 是瀏覽器可用的部分）
+packages/room       房間、連線閘道、計時、電腦玩家（不依賴 node:*，伺服器與瀏覽器 Worker 共用）
 apps/server         Fastify + Socket.IO：身分、房間、計時，呼叫 rules
 apps/web            Vite + React 前端；src/scene/ 是 Three.js 場景（動態載入）、src/hud/ 是遊戲 HUD 與說明提示
 card-sets/          卡牌組資料（original 提交；官方卡表只放 local/，不提交）

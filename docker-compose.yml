@@ -49,6 +49,7 @@ services:
       - ./packages/rules/src:/app/packages/rules/src
       - ./packages/protocol/src:/app/packages/protocol/src
       - ./packages/cardsets/src:/app/packages/cardsets/src
+      - ./packages/room/src:/app/packages/room/src
       # 卡牌組：original 一定有；card-sets/local（使用者自備，不進映像與 git）若存在就會被載入
       - ./card-sets:/app/card-sets:ro
     healthcheck:
