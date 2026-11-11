@@ -18,7 +18,7 @@
 - **邀請連結（M4.12）：** 房間頁有「複製連結」（手機另有系統分享）。朋友點開 `https://網址/?room=房號`，輸入暱稱就會自動加入該房間；房號不存在或已滿時回到大廳並顯示原因。
 - **電腦玩家（M4.13）：** 房主在房間頁按「🤖 加入電腦」（真人＋電腦最多 6 位，一個真人加一台電腦就能開局）。電腦由伺服器出手，不受逾時代管限制，行動前會停約 1.4 秒讓 3D 演出跟上。策略（`smartBot`）只看玩家看得到的資訊，用規則引擎本身試算每個選擇——擲骰時對所有保留方式做期望值計算、買牌與讓位時比較結算後的局面。它是啟發式策略，**不是可證明的最佳解**；對簡單機器人的實測勝率見 [architecture.md](docs/architecture.md)。
 - **閒置踢除（M4.14）：** 連線一段時間沒有任何操作（滑鼠、鍵盤、觸控、遊戲動作）就會被伺服器中斷（預設 10 分鐘，試玩版 image 5 分鐘；`IDLE_KICK_MS`，0＝不踢）。畫面會出現「重新連線」，身分與座位保留。目的：開著網頁就離開的分頁不再一直佔著 Cloud Run 執行個體的計費時間。
-- **尚未有：** 事件日誌持久化與負載測試（M5）。3D 效能目前只在沙盒（軟體算圖）量過，基準機實測見 [runbook](docs/runbooks/mac-verification.md)。
+- **尚未有：** P2P 架構與其後的里程碑（M5–M12，**計畫中、待使用者同意**，見 [ADR-0007](docs/adr/0007-p2p-host-authoritative.md)）。3D 效能目前只在沙盒（軟體算圖）量過，基準機實測見 [runbook](docs/runbooks/mac-verification.md)。
 
 進度、里程碑與驗證狀態見 [docs/architecture.md](docs/architecture.md)。
 
@@ -39,7 +39,7 @@ pnpm run dev:web       # 網頁 http://localhost:5173
 
 **試玩版（單一容器，可部署到 Cloud Run）：** `make demo-image` 建置、`make demo-run` 在本機試跑（http://localhost:8080）。伺服器直接提供網頁，房間全在記憶體、沒有資料庫，同時最多 5 個房間、30 個連線，只含原創卡組。只有明確執行 `make demo-image` 才會建置。部署與預算警示步驟見 [docs/runbooks/cloud-run-demo.md](docs/runbooks/cloud-run-demo.md)（**未實測**）。
 
-或用 Docker（完整開發環境，含 PostgreSQL；資料庫要到 M5 才會用到）：
+或用 Docker（完整開發環境，含 PostgreSQL；目前遊戲本身還沒用到資料庫）：
 
 ```bash
 cp .env.example .env            # 並修改 POSTGRES_PASSWORD
