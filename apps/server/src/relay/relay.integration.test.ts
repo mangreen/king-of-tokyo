@@ -90,8 +90,9 @@ function relaySocket(url: string): RelaySocket {
     onConnect: (handler) => socket.on('connect', handler),
     onDisconnect: (handler) => socket.on('disconnect', handler),
     onConnectError: (handler) => socket.on('connect_error', handler),
+    // active＝已連上或正在連線：連線中再呼叫 connect() 會多開一條連線（網頁端的轉接層同樣用 active 判斷）
     connect: () => {
-      if (!socket.connected) socket.connect();
+      if (!socket.active) socket.connect();
     },
     pause: () => socket.disconnect(),
     disconnect: () => socket.disconnect(),
