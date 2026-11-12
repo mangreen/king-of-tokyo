@@ -38,6 +38,13 @@ export class RoomManager {
     return this.rooms.size;
   }
 
+  /** 目前所有房間都處於「對局進行中、真人都連著」狀態（沒有房間時為 false）。 */
+  get allSteady(): boolean {
+    if (this.rooms.size === 0) return false;
+    for (const room of this.rooms.values()) if (!room.steady) return false;
+    return true;
+  }
+
   hasRoom(playerId: string): boolean {
     return this.playerRoom.has(playerId);
   }

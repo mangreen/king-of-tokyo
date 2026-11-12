@@ -62,5 +62,6 @@ export type {
   RelayHostOpenAck,
   RelayJoin,
   RelayJoinAck,
+  RelayParkAck,
   RelayServerEvents,
 } from './relay.js';

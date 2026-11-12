@@ -80,3 +80,6 @@ export class RecordingPublisher implements Publisher {
     return this.games.get(playerId)?.at(-1);
   }
 }
+
+export { createFakeDirectNetwork } from './direct/fake.js';
+export type { FakeDirectNetwork } from './direct/fake.js';

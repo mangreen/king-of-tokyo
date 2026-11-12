@@ -34,6 +34,8 @@ export { HELLO_TIMEOUT_MS };
 const MAX_MESSAGE_BYTES = 65_536;
 /** 房主斷線後保留房號的時間（毫秒）。 */
 export const RELAY_HOST_GRACE_MS = 30_000;
+/** 房主停泊（所有客人都已直連）後保留房號的時間：2 小時。 */
+export const RELAY_PARK_TTL_MS = 2 * 60 * 60_000;
 
 export interface App {
   fastify: FastifyInstance;
@@ -123,6 +125,7 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
     maxGuests: RELAY_MAX_GUESTS,
     idleKickMs: config.idleKickMs,
     hostGraceMs: options.relayHostGraceMs ?? RELAY_HOST_GRACE_MS,
+    parkTtlMs: RELAY_PARK_TTL_MS,
     ...options.relayLimits,
     randomInt: cryptoRandomInt,
     randomHex,

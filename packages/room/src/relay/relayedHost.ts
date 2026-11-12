@@ -5,7 +5,7 @@
 import { EVENTS, type Ack } from '@kot/protocol';
 import { createLocalHost, type LocalHost, type LocalHostOptions } from '../local/host.js';
 import type { ToClient, ToHost } from '../local/protocol.js';
-import { HostBridge, type BridgeStatus } from './hostBridge.js';
+import { HostBridge, type BridgeStatus, type HostBridgeOptions } from './hostBridge.js';
 import type { RelaySocket } from './socket.js';
 
 export interface RelayedHost {
@@ -16,10 +16,18 @@ export interface RelayedHost {
 }
 
 export function createRelayedHost(
-  options: LocalHostOptions & { socket: RelaySocket },
+  options: LocalHostOptions & {
+    socket: RelaySocket;
+    /** 直連與停泊的設定；不提供 direct 就是純中繼（M6 行為）。 */
+    bridge?: Omit<HostBridgeOptions, 'canPark'>;
+  },
 ): RelayedHost {
   const local = createLocalHost(options);
-  const bridge = new HostBridge(local, options.socket);
+  const bridge = new HostBridge(local, options.socket, {
+    ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),
+    ...options.bridge,
+    canPark: () => local.host.rooms.allSteady,
+  });
 
   return {
     local,
@@ -66,11 +74,13 @@ export function createRelayedHost(
           return;
         }
         if (message.t === 'event' && message.event === EVENTS.clientActive) {
-          // 房主自己有操作：也讓中繼知道，避免房主連線因閒置被踢
-          options.socket.emit('relay:ping');
+          // 房主自己有操作：也讓中繼知道，避免房主連線因閒置被踢（停泊中沒有連線，不用送）
+          if (options.socket.connected) options.socket.emit('relay:ping');
         }
         if (message.t === 'close') bridge.close();
         receive(message);
+        // 房主的操作（例如開始對局）可能讓房間進入「可停泊」狀態
+        bridge.evaluate();
       };
     },
   };

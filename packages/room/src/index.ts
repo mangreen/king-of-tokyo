@@ -18,11 +18,31 @@ export type { Session } from './sessions.js';
 
 export { createLocalHost } from './local/host.js';
 export type { LocalHost, LocalHostOptions } from './local/host.js';
-export { parseToHost, ToClientSchema, ToHostSchema } from './local/protocol.js';
-export type { LocalEndpoint, ToClient, ToHost } from './local/protocol.js';
+export {
+  parseToHost,
+  parseWireToClient,
+  parseWireToHost,
+  RtcSignalSchema,
+  ToClientSchema,
+  ToHostSchema,
+} from './local/protocol.js';
+export type {
+  LocalEndpoint,
+  RtcSignal,
+  ToClient,
+  ToHost,
+  WireToClient,
+  WireToHost,
+} from './local/protocol.js';
+export { FrameAssembler, FrameEncoder, FrameError } from './direct/frames.js';
+export { createProxyConnector, isProxyEvent, isProxyRequest, serveProxy } from './direct/proxy.js';
+export type { ProxyEvent, ProxyRequest } from './direct/proxy.js';
+export { DirectSession } from './direct/session.js';
+export type { DirectConnector, DirectPeer, DirectPeerEvents, DirectRole } from './direct/types.js';
 export { createGuestEndpoint } from './relay/guestEndpoint.js';
-export { HostBridge } from './relay/hostBridge.js';
-export type { BridgeStatus } from './relay/hostBridge.js';
+export type { GuestEndpointOptions, GuestPath } from './relay/guestEndpoint.js';
+export { DIRECT_TIMEOUT_MS, HostBridge, PARK_REFRESH_MS } from './relay/hostBridge.js';
+export type { BridgeStatus, HostBridgeOptions, HostPathInfo } from './relay/hostBridge.js';
 export { createRelayedHost } from './relay/relayedHost.js';
 export type { RelayedHost } from './relay/relayedHost.js';
 export type { RelaySocket } from './relay/socket.js';

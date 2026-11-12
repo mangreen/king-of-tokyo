@@ -23,7 +23,8 @@ export const ToHostSchema = z.union([
     .object({
       t: z.literal('event'),
       event: z.string().min(1).max(64),
-      payload: z.unknown(),
+      // 沒有內容的事件（例如 client:active）不帶 payload
+      payload: z.unknown().optional(),
       ackId: z.number().int().min(0).max(2_147_483_647).optional(),
     })
     .strict(),
@@ -34,7 +35,11 @@ export const ToHostSchema = z.union([
 export const ToClientSchema = z.union([
   z.object({ t: z.literal('open') }).strict(),
   z
-    .object({ t: z.literal('emit'), event: z.string().min(1).max(64), payload: z.unknown() })
+    .object({
+      t: z.literal('emit'),
+      event: z.string().min(1).max(64),
+      payload: z.unknown().optional(),
+    })
     .strict(),
   z
     .object({
@@ -69,4 +74,65 @@ export function parseToHost(data: unknown): ToHost | null {
     payload: message.payload,
     ...(message.ackId === undefined ? {} : { ackId: message.ackId }),
   };
+}
+
+// ── 直連（WebRTC）用的信封（ADR-0007 M7）──────────────────────────
+// 這些只在「房主⇄客人」之間、經中繼時出現；遊戲層（ToHost／ToClient）完全不知道。
+
+/** WebRTC 連線協商資料。來自對方，所以要驗證大小與形狀。 */
+export const RtcSignalSchema = z.union([
+  z
+    .object({
+      k: z.literal('desc'),
+      type: z.enum(['offer', 'answer']),
+      sdp: z.string().max(20_000),
+    })
+    .strict(),
+  z
+    .object({
+      k: z.literal('ice'),
+      candidate: z.string().max(2_000),
+      mid: z.string().max(64).nullable(),
+      index: z.number().int().min(0).max(255).nullable(),
+    })
+    .strict(),
+]);
+export type RtcSignal = z.infer<typeof RtcSignalSchema>;
+
+/** 協商資料。 */
+export interface WireRtc {
+  t: 'rtc';
+  d: RtcSignal;
+}
+/** 路徑切換標記：送出者宣告「這則之後我的訊息都走直連」。標記本身走舊路徑，所以接收端能分辨順序。 */
+export interface WireSwitch {
+  t: 'switch';
+}
+
+export type WireToHost = ToHost | WireRtc | WireSwitch;
+export type WireToClient = Exclude<ToClient, { t: 'error' }> | WireRtc | WireSwitch;
+
+const WireRtcSchema = z.object({ t: z.literal('rtc'), d: RtcSignalSchema }).strict();
+const WireSwitchSchema = z.object({ t: z.literal('switch') }).strict();
+
+/** 驗證來自客人的信封（遊戲訊息＋直連控制訊息）。 */
+export function parseWireToHost(data: unknown): WireToHost | null {
+  const control = parseControl(data);
+  if (control) return control;
+  return parseToHost(data);
+}
+
+/** 驗證來自房主的信封。 */
+export function parseWireToClient(data: unknown): WireToClient | null {
+  const control = parseControl(data);
+  if (control) return control;
+  const parsed = ToClientSchema.safeParse(data);
+  return parsed.success ? (parsed.data as WireToClient) : null;
+}
+
+function parseControl(data: unknown): WireRtc | WireSwitch | null {
+  const rtc = WireRtcSchema.safeParse(data);
+  if (rtc.success) return rtc.data;
+  const sw = WireSwitchSchema.safeParse(data);
+  return sw.success ? sw.data : null;
 }
