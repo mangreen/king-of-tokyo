@@ -15,5 +15,11 @@ export interface RelaySocket {
   onConnectError(handler: () => void): void;
   /** 尚未連線時開始連線（實作可以延後連線，直到真的需要）。沒有這個方法表示建立時就已在連線。 */
   connect?(): void;
+  /**
+   * 暫時中斷連線但保留所有訂閱，之後可用 connect() 再連上（不會自動重連）。
+   * 沒有這個方法就不能「停泊」：房主與客人都會一直保持中繼連線。
+   */
+  pause?(): void;
+  /** 永久關閉：清掉訂閱並中斷。 */
   disconnect(): void;
 }

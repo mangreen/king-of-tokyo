@@ -659,6 +659,14 @@ export class Room {
     return null;
   }
 
+  /**
+   * 對局進行中，而且每一位真人都連著。房主據此判斷可不可以把中繼連線「停泊」：
+   * 這時不會有人需要經中繼加入或重新加入（有人斷線就不成立，房主會回到中繼等他）。
+   */
+  get steady(): boolean {
+    return this.phase === 'playing' && this.members.every((m) => m.left || m.bot || m.connected);
+  }
+
   private afterPresenceChange(): void {
     const anyOnline = this.members.some((m) => !m.left && !m.bot && m.connected);
     if (anyOnline) {

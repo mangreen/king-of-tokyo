@@ -5,18 +5,22 @@ import {
   EVENTS,
   PROTOCOL_VERSION,
   RELAY_NAMESPACE,
+  RELAY_PROTOCOL_VERSION,
   type Ack,
   type RoomSnapshot,
 } from '@kot/protocol';
 import {
   createGuestEndpoint,
   createRelayedHost,
+  type GuestEndpointOptions,
+  type HostBridge,
+  type HostBridgeOptions,
   type LocalEndpoint,
   type RelaySocket,
   type Timings,
   type ToClient,
 } from '@kot/room';
-import { FakeScheduler } from '@kot/room/testing';
+import { createFakeDirectNetwork, FakeScheduler, type FakeDirectNetwork } from '@kot/room/testing';
 import { testCardSets, testCardSet } from '@kot/room/testing-fs';
 import { buildApp, type App } from '../app.js';
 import type { ServerConfig } from '../config.js';
@@ -86,6 +90,10 @@ function relaySocket(url: string): RelaySocket {
     onConnect: (handler) => socket.on('connect', handler),
     onDisconnect: (handler) => socket.on('disconnect', handler),
     onConnectError: (handler) => socket.on('connect_error', handler),
+    connect: () => {
+      if (!socket.connected) socket.connect();
+    },
+    pause: () => socket.disconnect(),
     disconnect: () => socket.disconnect(),
   };
 }
@@ -130,17 +138,22 @@ class TestClient {
     return undefined;
   }
 
+  countOf(event: string): number {
+    return this.events.filter((m) => m.t === 'emit' && m.event === event).length;
+  }
+
   room(): RoomSnapshot | null | undefined {
     return this.last<{ room: RoomSnapshot | null }>(EVENTS.roomState)?.room;
   }
 
   async hello(nickname: string, sessionToken?: string): Promise<Record<string, unknown>> {
+    const before = this.countOf(EVENTS.serverHello);
     this.emit(EVENTS.clientHello, {
       protocolVersion: PROTOCOL_VERSION,
       nickname,
       ...(sessionToken === undefined ? {} : { sessionToken }),
     });
-    await until(() => this.last(EVENTS.serverHello) !== undefined);
+    await until(() => this.countOf(EVENTS.serverHello) > before);
     return this.last(EVENTS.serverHello) ?? {};
   }
 }
@@ -159,12 +172,14 @@ const tick = (ms = 20): Promise<void> => new Promise((resolve) => setTimeout(res
 function startHost(
   url: string,
   scheduler: FakeScheduler,
-): { page: TestClient; code: () => string } {
+  bridge?: Omit<HostBridgeOptions, 'canPark'>,
+): { page: TestClient; code: () => string; bridge: HostBridge } {
   const host = createRelayedHost({
     cardSet: testCardSet(),
     scheduler,
     timings: TIMINGS,
     socket: relaySocket(url),
+    ...(bridge === undefined ? {} : { bridge }),
   });
   let receive: (m: Parameters<ReturnType<typeof host.connectPage>>[0]) => void = () => undefined;
   let handler: (m: ToClient) => void = () => undefined;
@@ -184,11 +199,11 @@ function startHost(
     },
     terminate: () => undefined,
   });
-  return { page, code: () => host.bridge.code ?? '' };
+  return { page, code: () => host.bridge.code ?? '', bridge: host.bridge };
 }
 
-function guestClient(url: string, code: string): TestClient {
-  return new TestClient(createGuestEndpoint(relaySocket(url), code));
+function guestClient(url: string, code: string, options?: GuestEndpointOptions): TestClient {
+  return new TestClient(createGuestEndpoint(relaySocket(url), code, options));
 }
 
 afterEach(async () => {
@@ -296,7 +311,7 @@ describe('房主模式：房主在瀏覽器跑房間，伺服器只中繼', () =
     const code = host.code();
     const raw = relaySocket(url);
     raw.onConnect(() => {
-      raw.emit('relay:join', { relayVersion: 1, code }, () => {
+      raw.emit('relay:join', { relayVersion: RELAY_PROTOCOL_VERSION, code }, () => {
         raw.emit('relay:to-host', { data: { t: 'event', event: 'x'.repeat(500), payload: 1 } });
         raw.emit('relay:to-host', { data: 'garbage' });
         raw.emit('relay:to-host', { data: { t: 'nope' } });
@@ -307,4 +322,124 @@ describe('房主模式：房主在瀏覽器跑房間，伺服器只中繼', () =
     await until(() => g.events.some((e) => e.t === 'open'));
     expect((await g.hello('正常客人'))['nickname']).toBe('正常客人');
   });
+});
+
+const relaySockets = (): number => app?.io.of('/relay').sockets.size ?? -1;
+
+/** 房主＋兩位客人都進房、準備好（還沒開始）。直連用記憶體內的假網路。 */
+async function lobbyWithDirect(
+  options: { parkRefreshMs?: number; relayCloseDelayMs?: number } = {},
+) {
+  const url = await start();
+  const scheduler = new FakeScheduler();
+  const net: FakeDirectNetwork = createFakeDirectNetwork();
+  // 橋接（直連逾時、停泊刷新）用獨立的假時鐘：對局計時前進很多時，不要連帶讓這些提早觸發
+  const bridgeClock = new FakeScheduler();
+  const host = startHost(url, scheduler, {
+    direct: net.connector,
+    scheduler: bridgeClock,
+    parkRefreshMs: options.parkRefreshMs ?? 24 * 3_600_000,
+  });
+  await until(() => host.page.events.some((e) => e.t === 'open'));
+  await host.page.hello('房主');
+  await host.page.request(EVENTS.roomCreate, {});
+  const code = host.code();
+  const guestOptions: GuestEndpointOptions = {
+    direct: net.connector,
+    relayCloseDelayMs: options.relayCloseDelayMs ?? 20,
+    joinRetryMs: 30,
+  };
+  const guests = [guestClient(url, code, guestOptions), guestClient(url, code, guestOptions)];
+  const tokens: string[] = [];
+  for (const [i, g] of guests.entries()) {
+    await until(() => g.events.some((e) => e.t === 'open'));
+    const hello = await g.hello(`客人${String(i + 1)}`);
+    tokens.push(hello['sessionToken'] as string);
+    expect(await g.request(EVENTS.roomJoin, { code })).toEqual({ ok: true });
+    expect(await g.request(EVENTS.roomReady, { ready: true })).toEqual({ ok: true });
+  }
+  await host.page.request(EVENTS.roomReady, { ready: true });
+  await until(() => host.page.room()?.players.length === 3);
+  return { url, scheduler, bridgeClock, net, host, guests, code, tokens };
+}
+
+describe('直連（M7）：中繼 → WebRTC 無縫切換與停泊', () => {
+  it('客人都改走直連、開局後房主停泊：伺服器上沒有任何連線，房號仍登記；對局照常打完', async () => {
+    const { scheduler, net, host, guests } = await lobbyWithDirect();
+    await until(() => net.pending === 2);
+    net.openAll();
+    await until(() => host.bridge.directCount === 2);
+    // 客人在切換完成後關掉自己的中繼連線；開局前房主還要等人（大廳不停泊），所以房主還連著
+    await until(() => relaySockets() === 1);
+    expect(host.bridge.isParked).toBe(false);
+
+    expect(await host.page.request(EVENTS.roomStart, {})).toEqual({ ok: true });
+    await until(() => host.bridge.isParked);
+    await until(() => relaySockets() === 0);
+    expect(app?.relay.roomCount).toBe(1);
+
+    for (let i = 0; i < 3000 && host.page.room()?.phase !== 'over'; i += 1) {
+      scheduler.advance(250);
+      await tick(2);
+    }
+    expect(host.page.room()?.phase).toBe('over');
+    await until(() => guests.every((g) => g.room()?.phase === 'over'));
+    for (const g of guests) expect(g.last(EVENTS.gameUpdate)).toBeDefined();
+    expect(relaySockets()).toBe(0); // 整局都沒有再用到伺服器連線
+  }, 60_000);
+
+  it('直連逾時沒連上：繼續走中繼，房主不停泊', async () => {
+    const { bridgeClock, net, host, guests } = await lobbyWithDirect();
+    await until(() => net.pending === 2);
+    bridgeClock.advance(16_000); // 房主端放棄（假時鐘）；客人端的 15 秒是真時鐘，之後才放棄
+    expect(await host.page.request(EVENTS.roomStart, {})).toEqual({ ok: true });
+    expect(host.bridge.isParked).toBe(false);
+    expect(host.bridge.directCount).toBe(0);
+    await until(() => guests.every((g) => g.room()?.phase === 'playing'));
+    expect(relaySockets()).toBe(3);
+  });
+
+  it('停泊後直連中斷：房主回到中繼，客人經中繼重新加入並用 token 接回原座位', async () => {
+    const { net, host, guests, tokens } = await lobbyWithDirect();
+    await until(() => net.pending === 2);
+    net.openAll();
+    await until(() => host.bridge.directCount === 2);
+    await host.page.request(EVENTS.roomStart, {});
+    await until(() => host.bridge.isParked);
+    await until(() => relaySockets() === 0);
+    const before = guests.map((g) => g.events.filter((e) => e.t === 'open').length);
+
+    net.dropAll();
+    // 房主回到中繼（回來後因為有人斷線，不會再停泊），客人重新加入
+    await until(() => !host.bridge.isParked);
+    await until(() =>
+      guests.every((g, i) => g.events.filter((e) => e.t === 'open').length > (before[i] ?? 0)),
+    );
+    for (const [i, g] of guests.entries()) {
+      const hello = await g.hello(`客人${String(i + 1)}`, tokens[i]);
+      expect(hello['resumed']).toBe(true);
+    }
+    await until(() => host.page.room()?.players.every((p) => p.connected) === true);
+    expect(host.bridge.isParked).toBe(false);
+  }, 30_000);
+
+  it('停泊期間定時回伺服器刷新房號期限，再重新停泊', async () => {
+    const { bridgeClock, net, host } = await lobbyWithDirect({ parkRefreshMs: 60_000 });
+    await until(() => net.pending === 2);
+    net.openAll();
+    await until(() => host.bridge.directCount === 2);
+    await host.page.request(EVENTS.roomStart, {});
+    await until(() => host.bridge.isParked);
+    await until(() => relaySockets() === 0);
+
+    // 房主回來刷新期限的連線很短暫（連上、接回、又停泊），用「新連線數」觀察而不是輪詢連線數
+    let reconnects = 0;
+    app?.io.of('/relay').on('connection', () => {
+      reconnects += 1;
+    });
+    bridgeClock.advance(61_000);
+    await until(() => reconnects === 1);
+    await until(() => host.bridge.isParked && relaySockets() === 0); // 又停泊
+    expect(app?.relay.roomCount).toBe(1);
+  }, 30_000);
 });

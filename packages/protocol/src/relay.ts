@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { RoomCodeSchema } from './lobby.js';
 
 /** 中繼協定版本；與遊戲協定（PROTOCOL_VERSION）獨立演進。 */
-export const RELAY_PROTOCOL_VERSION = 1;
+export const RELAY_PROTOCOL_VERSION = 2;
 
 /** 中繼用的 Socket.IO 命名空間。 */
 export const RELAY_NAMESPACE = '/relay';
@@ -20,6 +20,8 @@ export const RELAY_EVENTS = {
   toHost: 'relay:to-host',
   toGuest: 'relay:to-guest',
   kick: 'relay:kick',
+  /** 房主表示「所有客人都直連了，我先離線」：房間保留（停泊），不佔伺服器連線。 */
+  park: 'relay:park',
   ping: 'relay:ping',
   // 伺服器 → 客戶端
   guestJoined: 'relay:guest-joined',
@@ -42,6 +44,7 @@ export const RELAY_ERROR_CODES = [
   'not_host',
   'not_guest',
   'host_offline',
+  'guests_present',
   'rate_limited',
   'payload_too_large',
 ] as const;
@@ -65,6 +68,11 @@ export const RelayHostOpenSchema = z
       .string()
       .regex(/^[0-9a-f]{32}$/)
       .optional(),
+    /**
+     * 伺服器重啟、房號登記遺失時，房主（對局還在直連中進行）可以用原本的房號與金鑰重新登記。
+     * 只有在該房號目前沒有被登記時才會成功。
+     */
+    restore: z.literal(true).optional(),
   })
   .strict();
 export type RelayHostOpen = z.infer<typeof RelayHostOpenSchema>;
@@ -82,6 +90,7 @@ export const RelayKickSchema = z.object({ guestId: GuestIdSchema }).strict();
 
 export type RelayHostOpenAck =
   { ok: true; code: string; hostKey: string } | { ok: false; code: RelayErrorCode };
+export type RelayParkAck = { ok: true } | { ok: false; code: RelayErrorCode };
 export type RelayJoinAck = { ok: true } | { ok: false; code: RelayErrorCode };
 
 export type RelayClosedReason = 'host_left' | 'kicked' | 'idle_timeout' | 'room_closed';

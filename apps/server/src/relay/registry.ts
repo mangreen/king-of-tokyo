@@ -17,6 +17,7 @@ import {
   type RelayErrorCode,
   type RelayHostOpenAck,
   type RelayJoinAck,
+  type RelayParkAck,
   type RelayServerEvents,
 } from '@kot/protocol';
 import { generateRoomCode, TokenBucket, type Scheduler } from '@kot/room';
@@ -36,8 +37,10 @@ export interface RelayOptions {
   maxGuests: number;
   /** 連線閒置多久沒有任何訊息就中斷（毫秒）；0＝不踢。 */
   idleKickMs: number;
-  /** 房主斷線後保留房號多久（毫秒），期間可用房號＋金鑰接回；逾時關房並通知客人。 */
+  /** 房主意外斷線後保留房號多久（毫秒），期間可用房號＋金鑰接回；逾時關房並通知客人。 */
   hostGraceMs: number;
+  /** 房主主動「停泊」（所有客人都已直連）後保留房號多久（毫秒）；期間房主可隨時接回，逾時關房。 */
+  parkTtlMs: number;
   /** 單則訊息 data 的大小上限（序列化後位元組）。 */
   maxDataBytes?: number;
   /** 每個房間每秒可轉發的位元組，以及瞬間上限。 */
@@ -56,6 +59,8 @@ interface Room {
   code: string;
   hostKey: string;
   host: RelayConn | null;
+  /** 房主主動離線（停泊）：不是意外斷線，保留較久。 */
+  parked: boolean;
   guests: Map<string, RelayConn>;
   bytes: TokenBucket;
   cancelGrace: () => void;
@@ -117,14 +122,20 @@ export class RelayRegistry {
       };
     }
     if (peer.role) return { ok: false, code: 'invalid_message' };
-    const { code, hostKey } = parsed.data;
+    const { code, hostKey, restore } = parsed.data;
 
     if (code !== undefined || hostKey !== undefined) {
       // 接回：必須兩者都帶，且金鑰正確
-      const room = code === undefined ? undefined : this.rooms.get(code);
+      let room = code === undefined ? undefined : this.rooms.get(code);
+      if (!room && restore === true && code !== undefined && hostKey !== undefined) {
+        // 登記遺失（伺服器重啟）：用房主手上的房號與金鑰重新登記
+        if (this.rooms.size >= this.options.maxRooms) return { ok: false, code: 'server_full' };
+        room = this.registerRoom(conn, code, hostKey);
+      }
       if (!room || hostKey === undefined) return { ok: false, code: 'room_not_found' };
       if (room.hostKey !== hostKey) return { ok: false, code: 'bad_host_key' };
       room.cancelGrace();
+      room.parked = false;
       const previous = room.host;
       room.host = conn;
       peer.role = { kind: 'host', room };
@@ -147,11 +158,19 @@ export class RelayRegistry {
       newCode = generateRoomCode(this.options.randomInt);
     }
     if (this.rooms.has(newCode)) return { ok: false, code: 'server_full' };
+    const room = this.registerRoom(conn, newCode, this.options.randomHex(16));
+    peer.role = { kind: 'host', room };
+    this.promoteToHost(peer);
+    return { ok: true, code: room.code, hostKey: room.hostKey };
+  }
+
+  private registerRoom(conn: RelayConn, code: string, hostKey: string): Room {
     const { scheduler } = this.options;
     const room: Room = {
-      code: newCode,
-      hostKey: this.options.randomHex(16),
+      code,
+      hostKey,
       host: conn,
+      parked: false,
       guests: new Map(),
       bytes: new TokenBucket(
         this.options.roomBytesBurst ?? 262_144,
@@ -160,10 +179,8 @@ export class RelayRegistry {
       ),
       cancelGrace: () => undefined,
     };
-    this.rooms.set(newCode, room);
-    peer.role = { kind: 'host', room };
-    this.promoteToHost(peer);
-    return { ok: true, code: room.code, hostKey: room.hostKey };
+    this.rooms.set(code, room);
+    return room;
   }
 
   /** 客人：用房號加入；成功後房主會收到 guest-joined。 */
@@ -180,7 +197,8 @@ export class RelayRegistry {
     if (peer.role) return { ok: false, code: 'invalid_message' };
     const room = this.rooms.get(parsed.data.code);
     if (!room) return { ok: false, code: 'room_not_found' };
-    if (room.host === null) return { ok: false, code: 'host_offline' };
+    // 停泊中的房間不接新客人（房主不在中繼上，也沒人需要加入；有人斷線時房主會自己回來）
+    if (room.host === null || room.parked) return { ok: false, code: 'host_offline' };
     if (room.guests.size >= this.options.maxGuests) return { ok: false, code: 'room_full' };
     this.guestSerial += 1;
     const guestId = `g${String(this.guestSerial)}`;
@@ -213,6 +231,19 @@ export class RelayRegistry {
     const { room } = peer.role;
     if (!this.chargeBytes(conn, room, parsed.data.data)) return;
     room.guests.get(parsed.data.guestId)?.send(RELAY_EVENTS.fromHost, { data: parsed.data.data });
+  }
+
+  /**
+   * 房主停泊：所有客人都已改走直連（中繼上沒有客人），房主可以把自己的中繼連線也關掉。
+   * 房號與金鑰保留到逾期；房主隨時可用 hostOpen 接回（例如發現有客人的直連斷了）。
+   */
+  park(conn: RelayConn): RelayParkAck {
+    const peer = this.touch(conn);
+    if (!peer || peer.role?.kind !== 'host') return { ok: false, code: 'not_host' };
+    const { room } = peer.role;
+    if (room.guests.size > 0) return { ok: false, code: 'guests_present' };
+    room.parked = true;
+    return { ok: true };
   }
 
   /** 房主請伺服器把某位客人踢出中繼（遊戲層的踢人由房主自己處理）。 */
@@ -252,7 +283,9 @@ export class RelayRegistry {
     for (const guest of room.guests.values())
       guest.send(RELAY_EVENTS.hostStatus, { online: false });
     room.cancelGrace();
-    room.cancelGrace = this.options.scheduler.after(this.options.hostGraceMs, () => {
+    // 主動停泊的房間保留較久（房主在等直連的客人出狀況時才會回來）；意外斷線只給短暫寬限
+    const keepMs = room.parked ? this.options.parkTtlMs : this.options.hostGraceMs;
+    room.cancelGrace = this.options.scheduler.after(keepMs, () => {
       this.closeRoom(room, 'host_left');
     });
   }

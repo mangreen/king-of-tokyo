@@ -5,6 +5,7 @@ import { Lobby } from './views/Lobby.js';
 import { Login } from './views/Login.js';
 import { RoomView } from './views/RoomView.js';
 import { createClientOptions } from './net/config.js';
+import { describePath, usePathStatus } from './net/pathStatus.js';
 import { useGameClient } from './useGameClient.js';
 
 // 連線方式在載入時決定一次（伺服器或離線），之後不變
@@ -15,6 +16,7 @@ const clientOptions = createClientOptions(
 
 export function App() {
   const client = useGameClient(clientOptions);
+  const path = usePathStatus();
   const { state } = client;
   const { connection, room, game } = state;
 
@@ -122,7 +124,8 @@ export function App() {
       )}
       {p2p && (
         <div className="notice" role="status" data-testid="p2p-banner">
-          房主模式：房間在房主的瀏覽器裡執行，伺服器只負責轉送訊息。房主關閉或重新整理頁面，這局就會結束。
+          房主模式：房間在房主的瀏覽器裡執行，伺服器負責登記房號、協助玩家建立直連，直連不通時轉送訊息。房主關閉或重新整理頁面，這局就會結束。
+          {path !== null && <div data-testid="path-status">{describePath(path)}</div>}
         </div>
       )}
       {connection.status === 'reconnecting' && (

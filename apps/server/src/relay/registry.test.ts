@@ -35,6 +35,7 @@ function setup(overrides: Partial<RelayOptions> = {}) {
     maxGuests: 2,
     idleKickMs: 1000,
     hostGraceMs: 500,
+    parkTtlMs: 5_000,
     randomInt: cryptoRandomInt,
     randomHex,
     ...overrides,
@@ -280,6 +281,95 @@ describe('中繼：斷線、接回、關房', () => {
     expect(host.of(RELAY_EVENTS.guestLeft)).toEqual([{ guestId: 'g1' }]);
     registry.kick(guest, { guestId: 'g1' });
     expect(guest.errors()).toEqual(['not_host']);
+  });
+});
+
+describe('中繼：停泊（客人都直連後，房主不佔伺服器連線）', () => {
+  it('中繼上還有客人就不能停泊；沒有客人才行', () => {
+    const { registry, conn } = setup({ idleKickMs: 0 });
+    const host = conn();
+    const { code } = open(registry, host);
+    const guest = conn();
+    registry.join(guest, { relayVersion: V, code });
+    expect(registry.park(host)).toEqual({ ok: false, code: 'guests_present' });
+    registry.disconnected(guest);
+    expect(registry.park(host)).toEqual({ ok: true });
+    expect(registry.park(guest)).toEqual({ ok: false, code: 'not_host' });
+  });
+
+  it('停泊後房主斷線：房號保留到停泊期限（比意外斷線久），期間新客人得到 host_offline、房主可用金鑰接回', () => {
+    const { registry, conn, scheduler } = setup({ idleKickMs: 0 });
+    const host = conn();
+    const { code, hostKey } = open(registry, host);
+    registry.park(host);
+    registry.disconnected(host);
+    scheduler.advance(4_000); // 超過意外斷線的寬限（500ms），但還在停泊期限內（5s）
+    expect(registry.roomCount).toBe(1);
+    expect(registry.join(conn(), { relayVersion: V, code })).toEqual({
+      ok: false,
+      code: 'host_offline',
+    });
+    const back = conn();
+    expect(registry.hostOpen(back, { relayVersion: V, code, hostKey })).toEqual({
+      ok: true,
+      code,
+      hostKey,
+    });
+    // 接回後不再是停泊狀態：再次意外斷線只有短寬限
+    registry.disconnected(back);
+    scheduler.advance(600);
+    expect(registry.roomCount).toBe(0);
+  });
+
+  it('停泊中（房主連線還在）新客人也加入不了：得到 host_offline', () => {
+    const { registry, conn } = setup({ idleKickMs: 0 });
+    const host = conn();
+    const { code } = open(registry, host);
+    registry.park(host);
+    expect(registry.join(conn(), { relayVersion: V, code })).toEqual({
+      ok: false,
+      code: 'host_offline',
+    });
+  });
+
+  it('登記遺失後（伺服器重啟）：帶 restore 的房主可用原房號與金鑰重新登記；沒帶 restore 或房號已被占用則不行', () => {
+    const { registry, conn } = setup({ idleKickMs: 0 });
+    const hostKey = 'a'.repeat(32);
+    expect(registry.hostOpen(conn(), { relayVersion: V, code: 'ABCDE', hostKey })).toEqual({
+      ok: false,
+      code: 'room_not_found',
+    });
+    expect(
+      registry.hostOpen(conn(), { relayVersion: V, code: 'ABCDE', hostKey, restore: true }),
+    ).toEqual({
+      ok: true,
+      code: 'ABCDE',
+      hostKey,
+    });
+    expect(registry.roomCount).toBe(1);
+    // 已登記的房號：restore 不能搶（金鑰不同就是 bad_host_key）
+    expect(
+      registry.hostOpen(conn(), {
+        relayVersion: V,
+        code: 'ABCDE',
+        hostKey: 'b'.repeat(32),
+        restore: true,
+      }),
+    ).toEqual({ ok: false, code: 'bad_host_key' });
+  });
+
+  it('停泊逾期：房號釋放', () => {
+    const { registry, conn, scheduler } = setup({ idleKickMs: 0 });
+    const host = conn();
+    const { code, hostKey } = open(registry, host);
+    registry.park(host);
+    registry.disconnected(host);
+    scheduler.advance(5_100);
+    expect(registry.roomCount).toBe(0);
+    expect(registry.hostOpen(conn(), { relayVersion: V, code, hostKey })).toEqual({
+      ok: false,
+      code: 'room_not_found',
+    });
   });
 });
 

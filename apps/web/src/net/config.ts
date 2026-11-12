@@ -1,4 +1,7 @@
 import { createGuestEndpoint } from '@kot/room';
+import { parseDirectConfig, rtcSupported } from './direct.js';
+import { setPathStatus } from './pathStatus.js';
+import { createRtcConnector } from './rtcConnector.js';
 import { resolveServerUrl } from '../serverUrl.js';
 import type { GameClientOptions } from '../useGameClient.js';
 import { localLinkFactory } from './localLink.js';
@@ -34,6 +37,12 @@ export function createClientOptions(
     };
   }
   if (mode === 'p2p') {
+    const direct = parseDirectConfig(
+      location.search,
+      import.meta.env as { VITE_DIRECT?: string; VITE_ICE_SERVERS?: string },
+      rtcSupported(),
+    );
+    const connector = direct.enabled ? createRtcConnector(direct.iceServers) : undefined;
     return {
       mode,
       target,
@@ -42,9 +51,22 @@ export function createClientOptions(
         const code = target.code;
         const factory =
           code === null
-            ? localLinkFactory(() => createWorkerEndpoint({ relayUrl: url }))
+            ? localLinkFactory(() =>
+                createWorkerEndpoint({
+                  relayUrl: url,
+                  ...(connector === undefined ? {} : { direct: connector }),
+                  onPath: (info) => {
+                    setPathStatus({ role: 'host', ...info });
+                  },
+                }),
+              )
             : localLinkFactory(() =>
-                createGuestEndpoint(createRelaySocket(url, { lazy: false }), code),
+                createGuestEndpoint(createRelaySocket(url, { lazy: false }), code, {
+                  ...(connector === undefined ? {} : { direct: connector }),
+                  onPath: (path) => {
+                    setPathStatus({ role: 'guest', path });
+                  },
+                }),
               );
         return factory(handlers);
       },

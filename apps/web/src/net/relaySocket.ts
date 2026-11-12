@@ -35,6 +35,10 @@ export function createRelaySocket(serverUrl: string, options: { lazy: boolean })
     connect: () => {
       if (!socket.active) socket.connect();
     },
+    // 暫時中斷但保留訂閱（直連建立後不再佔用伺服器連線）；之後 connect() 可再連上，不會自動重連
+    pause: () => {
+      socket.disconnect();
+    },
     disconnect: () => {
       socket.removeAllListeners();
       socket.disconnect();

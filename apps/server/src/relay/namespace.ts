@@ -45,6 +45,9 @@ export function attachRelay(
     socket.on(RELAY_EVENTS.kick, (payload: unknown) => {
       registry.kick(conn, payload);
     });
+    socket.on(RELAY_EVENTS.park, (_payload: unknown, ack?: unknown) => {
+      reply(ack, registry.park(conn));
+    });
     socket.on(RELAY_EVENTS.ping, () => {
       registry.ping(conn);
     });
