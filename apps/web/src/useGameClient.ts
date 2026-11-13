@@ -40,9 +40,14 @@ export interface GameClientOptions {
   link: LinkFactory;
   /** 是否把身分存在分頁（用於重新整理後接回）。離線主機重新整理就消失，所以不存。 */
   persistSession: boolean;
+  /**
+   * 重新整理後要不要用保存的身分自動接回（預設：有保存身分就接回）。
+   * 房主模式要看「重新整理前是否在某個房間裡」，並在這裡把連線目標設好。
+   */
+  canResume?: () => boolean;
 }
 
-export function useGameClient({ link, persistSession }: GameClientOptions): GameClient {
+export function useGameClient({ link, persistSession, canResume }: GameClientOptions): GameClient {
   const [state, dispatch] = useReducer(appReducer, initialAppState);
   const linkRef = useRef<ClientLink | null>(null);
 
@@ -160,9 +165,9 @@ export function useGameClient({ link, persistSession }: GameClientOptions): Game
   // 重新整理頁面後，用同一分頁保存的身分自動接回
   useEffect(() => {
     const nickname = persistSession ? session.nickname() : null;
-    if (nickname !== null && session.token() !== null) login(nickname);
+    if (nickname !== null && session.token() !== null && (canResume?.() ?? true)) login(nickname);
     return disconnect;
-  }, [login, disconnect, persistSession]);
+  }, [login, disconnect, persistSession, canResume]);
 
   return {
     state,

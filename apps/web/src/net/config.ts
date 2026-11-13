@@ -1,6 +1,8 @@
 import { createGuestEndpoint } from '@kot/room';
 import { parseDirectConfig, rtcSupported } from './direct.js';
 import { setPathStatus } from './pathStatus.js';
+import { setRestoreStatus } from './restoreStatus.js';
+import { session } from '../session.js';
 import { createRtcConnector } from './rtcConnector.js';
 import { resolveServerUrl } from '../serverUrl.js';
 import type { GameClientOptions } from '../useGameClient.js';
@@ -16,7 +18,10 @@ export type ClientOptions = GameClientOptions & {
    * 房主模式：登入前設定要加入的房號（客人）；不設定就是自己當房主。
    * 連線方式在登入時才決定，所以這個值要在呼叫 login 之前設好。
    */
-  target: { code: string | null };
+  target: {
+    code: string | null;
+    /** 房主重新整理後要還原的房號（用過就清掉）。 */ resume: string | null;
+  };
 };
 
 /** 依網址決定怎麼連：預設連伺服器；offline＝本分頁的本機主機；p2p＝房主模式（經中繼）。 */
@@ -25,7 +30,7 @@ export function createClientOptions(
   serverUrl: string | undefined,
 ): ClientOptions {
   const mode = parseMode(location.search);
-  const target: { code: string | null } = { code: null };
+  const target: ClientOptions['target'] = { code: null, resume: null };
   const url = resolveServerUrl(serverUrl, location.origin);
 
   if (mode === 'offline') {
@@ -49,11 +54,25 @@ export function createClientOptions(
       // 有房號＝客人（經中繼連到房主）；沒有＝自己當房主（Worker 跑房間，要開房時才向中繼登記）
       link: (handlers) => {
         const code = target.code;
+        const resumeCode = target.resume;
+        target.resume = null; // 只有重新整理後的第一次連線要還原
         const factory =
           code === null
             ? localLinkFactory(() =>
                 createWorkerEndpoint({
                   relayUrl: url,
+                  ...(resumeCode === null
+                    ? {}
+                    : {
+                        resume: resumeCode,
+                        onRestore: (result) => {
+                          setRestoreStatus(
+                            result.ok
+                              ? { ok: true }
+                              : { ok: false, reason: result.reason ?? '未知原因' },
+                          );
+                        },
+                      }),
                   ...(connector === undefined ? {} : { direct: connector }),
                   onPath: (info) => {
                     setPathStatus({ role: 'host', ...info });
@@ -70,8 +89,19 @@ export function createClientOptions(
               );
         return factory(handlers);
       },
-      // 重新整理會讓房主的房間消失，客人也無法接回（M8 才做）：不保存身分
-      persistSession: false,
+      // 保存身分與所在房間：重新整理後房主從存檔還原、客人用 token 接回座位（M8）
+      persistSession: true,
+      canResume: () => {
+        const marker = session.p2pRoom();
+        if (marker === null) return false;
+        if (marker.role === 'host') {
+          target.code = null;
+          target.resume = marker.code;
+        } else {
+          target.code = marker.code;
+        }
+        return true;
+      },
     };
   }
   return { mode, target, link: socketLinkFactory(url), persistSession: true };
