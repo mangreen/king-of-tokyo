@@ -79,7 +79,9 @@ type GameEvents =
   | typeof EVENTS.roomStart
   | typeof EVENTS.roomAddBot
   | typeof EVENTS.roomRemoveBot
-  | typeof EVENTS.gameAction;
+  | typeof EVENTS.gameAction
+  | typeof EVENTS.clientResync
+  | typeof EVENTS.clientPing;
 
 export class Gateway {
   /** playerId → 目前連線。 */
@@ -286,6 +288,17 @@ export class Gateway {
     });
 
     on(EVENTS.roomLeave, EmptyPayloadSchema, (who) => rooms.leave(who.id));
+
+    // 往返時間量測：收到就回 ack，客戶端自己計時
+    on(EVENTS.clientPing, EmptyPayloadSchema, () => ({ ok: true }));
+
+    // 客戶端漏了訊息時要求完整重送（共用速率限制，避免被拿來灌爆房主）
+    on(EVENTS.clientResync, EmptyPayloadSchema, (who) => {
+      const room = rooms.roomOf(who.id);
+      if (!room) return { ok: false, code: 'not_in_room' };
+      room.resync(who.id);
+      return { ok: true };
+    });
 
     on(EVENTS.roomReady, RoomReadySchema, (who, { ready }) => {
       const room = rooms.roomOf(who.id);

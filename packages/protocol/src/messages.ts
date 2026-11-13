@@ -16,6 +16,13 @@ export const EVENTS = {
   clientHello: 'client:hello',
   /** 使用者還在操作（滑鼠、鍵盤、觸控）。沒有內容，只用來讓伺服器知道這個連線沒有被丟著不管。 */
   clientActive: 'client:active',
+  /**
+   * 客戶端覺得漏了訊息（沒收到預期的更新、分頁從背景回來…），要求重送完整狀態。沒有內容。
+   * 新增事件不改變既有訊息的格式，所以協定版本不變；不認識它的舊房主會直接忽略。
+   */
+  clientResync: 'client:resync',
+  /** 量測往返時間（有 ack、沒有內容）。只在使用者有操作時隨 client:active 一起送，不會讓閒置的連線一直保持活著。 */
+  clientPing: 'client:ping',
   serverHello: 'server:hello',
   serverError: 'server:error',
   roomCreate: 'room:create',

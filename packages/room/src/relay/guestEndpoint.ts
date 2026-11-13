@@ -38,6 +38,11 @@ export interface GuestEndpointOptions {
   /** 加入時房主暫時離線（正在從停泊回來）：多久重試一次、最多等多久（毫秒）。 */
   joinRetryMs?: number;
   joinGiveUpMs?: number;
+  /**
+   * 這是重新整理後的接回（之前已經在這個房間裡）：房號在中繼上暫時找不到（房主還在重新登記、
+   * 或中繼剛重啟）時，也在期限內重試，而不是立刻放棄。
+   */
+  resuming?: boolean;
 }
 
 export function createGuestEndpoint(
@@ -119,12 +124,19 @@ export function createGuestEndpoint(
   };
 
   let joinDeadline = 0;
+  /** 這個端點曾經成功加入過：之後連線中斷再回來，等同於接回。 */
+  let joinedOnce = options.resuming === true;
   const join = (): void => {
     if (!alive || !socket.connected) return;
     socket.emit(RELAY_EVENTS.join, { relayVersion: RELAY_PROTOCOL_VERSION, code }, (result) => {
       const ack = result as RelayJoinAck;
-      if (ack.ok) return;
-      if (ack.code === 'host_offline' && scheduler.now() < joinDeadline) {
+      if (ack.ok) {
+        joinedOnce = true;
+        return;
+      }
+      const transient =
+        ack.code === 'host_offline' || (ack.code === 'room_not_found' && joinedOnce);
+      if (transient && scheduler.now() < joinDeadline) {
         // 房主正在從停泊回到中繼：稍後再試
         cancelRetry();
         cancelRetry = scheduler.after(joinRetryMs, join);

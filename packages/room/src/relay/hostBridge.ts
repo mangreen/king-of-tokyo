@@ -70,6 +70,8 @@ interface GuestEntry {
 
 export class HostBridge {
   private creds: { code: string; hostKey: string } | null = null;
+  /** 從存檔接回（房主重新整理）：伺服器沒有這個房號時，用房號與金鑰重新登記。 */
+  private adopted = false;
   private readonly guests = new Map<string, GuestEntry>();
   private opening: Promise<string> | null = null;
   private done = false;
@@ -135,6 +137,23 @@ export class HostBridge {
 
   get code(): string | null {
     return this.creds?.code ?? null;
+  }
+
+  /** 中繼房號與房主金鑰（登記成功後才有；存檔用）。 */
+  get credentials(): { code: string; hostKey: string } | null {
+    return this.creds;
+  }
+
+  /**
+   * 房主重新整理後從存檔接回：用原本的房號與金鑰向中繼登記（伺服器若已忘記這個房號就重新登記）。
+   * 不等待結果：房主自己的頁面不依賴中繼；結果會經 onStatus 回報（online／closed）。
+   */
+  adopt(creds: { code: string; hostKey: string }): void {
+    this.creds = creds;
+    this.adopted = true;
+    this.transitioning = true;
+    if (this.socket.connected) this.resume(creds);
+    else this.socket.connect?.(); // 連上後 onConnect 會接回
   }
 
   /** 已停泊（測試與除錯用）。 */
@@ -282,7 +301,12 @@ export class HostBridge {
       },
       (result) => {
         const ack = result as RelayHostOpenAck;
-        if (!ack.ok && ack.code === 'room_not_found' && !restore && this.guests.size > 0) {
+        if (
+          !ack.ok &&
+          ack.code === 'room_not_found' &&
+          !restore &&
+          (this.guests.size > 0 || this.adopted)
+        ) {
           // 伺服器重啟、登記遺失，但還有客人經直連在玩：用原本的房號與金鑰重新登記，對局不中斷
           this.resume(creds, true);
           return;

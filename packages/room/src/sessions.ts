@@ -41,6 +41,25 @@ export class SessionStore {
     return { session, token };
   }
 
+  /**
+   * 還原一個已知的身分（房主重新整理後從存檔接回）：只有 token 的雜湊，沒有 token 本身；
+   * 玩家之後拿著原本的 token 重連就會對上。已存在同一身分時什麼都不做。
+   */
+  restore(entry: { playerId: string; nickname: string; tokenHash: string }): Session {
+    const existing = this.byPlayer.get(entry.playerId);
+    if (existing) return existing;
+    const session: Session = {
+      playerId: entry.playerId,
+      nickname: entry.nickname,
+      tokenHash: entry.tokenHash,
+      socketId: null,
+      cancelExpiry: null,
+    };
+    this.byHash.set(session.tokenHash, session);
+    this.byPlayer.set(session.playerId, session);
+    return session;
+  }
+
   resume(token: string): Session | undefined {
     return this.byHash.get(hashToken(token));
   }

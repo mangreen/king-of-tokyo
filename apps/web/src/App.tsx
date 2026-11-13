@@ -6,7 +6,11 @@ import { Login } from './views/Login.js';
 import { RoomView } from './views/RoomView.js';
 import { createClientOptions } from './net/config.js';
 import { describePath, usePathStatus } from './net/pathStatus.js';
+import { describeQuality, useQuality } from './net/quality.js';
+import { setRestoreStatus, useRestoreStatus } from './net/restoreStatus.js';
+import { session } from './session.js';
 import { useGameClient } from './useGameClient.js';
+import { useWakeLock } from './useWakeLock.js';
 
 // 連線方式在載入時決定一次（伺服器或離線），之後不變
 const clientOptions = createClientOptions(
@@ -17,6 +21,8 @@ const clientOptions = createClientOptions(
 export function App() {
   const client = useGameClient(clientOptions);
   const path = usePathStatus();
+  const restored = useRestoreStatus();
+  const quality = useQuality();
   const { state } = client;
   const { connection, room, game } = state;
 
@@ -31,6 +37,28 @@ export function App() {
   }, [invite, connection.status, room, client]);
 
   const p2p = clientOptions.mode === 'p2p';
+
+  // 房主模式：記住目前所在的房間（重新整理後據此接回）；離開或房間結束時忘掉
+  const inRoom = useRef(false);
+  const roomCode = room?.code ?? null;
+  useEffect(() => {
+    if (!p2p) return;
+    if (roomCode !== null) {
+      inRoom.current = true;
+      session.setP2pRoom({
+        role: clientOptions.target.code === null ? 'host' : 'guest',
+        code: roomCode,
+      });
+    } else if (inRoom.current) {
+      inRoom.current = false;
+      session.setP2pRoom(null);
+    }
+  }, [p2p, roomCode]);
+
+  // 房主重新整理但存檔不能用：忘掉舊房間，當作全新的房主（畫面會顯示原因）
+  useEffect(() => {
+    if (restored !== null && !restored.ok) session.setP2pRoom(null);
+  }, [restored]);
 
   // 房主模式：連線方式在登入時才決定——有房號就是客人（經中繼連到房主），沒有就是自己當房主
   function login(nickname: string, roomCode?: string): void {
@@ -114,6 +142,9 @@ export function App() {
   }
 
   const inGame = Boolean(room && game && room.phase !== 'lobby');
+  // 對局中保持螢幕開啟（房主螢幕休眠會讓房間停擺）
+  const wakeLock = useWakeLock(inGame && room?.phase === 'playing');
+  const hostPage = p2p && clientOptions.target.code === null;
   return (
     <main className={inGame ? 'wide' : undefined}>
       <h1>東京之王 King of Tokyo</h1>
@@ -124,13 +155,36 @@ export function App() {
       )}
       {p2p && (
         <div className="notice" role="status" data-testid="p2p-banner">
-          房主模式：房間在房主的瀏覽器裡執行，伺服器負責登記房號、協助玩家建立直連，直連不通時轉送訊息。房主關閉或重新整理頁面，這局就會結束。
+          房主模式：房間在房主的瀏覽器裡執行，伺服器負責登記房號、協助玩家建立直連，直連不通時轉送訊息。房主重新整理頁面時會從瀏覽器存檔接回同一局；關閉分頁或主動離開，這局才會結束。
           {path !== null && <div data-testid="path-status">{describePath(path)}</div>}
+        </div>
+      )}
+      {hostPage && inGame && (wakeLock === 'unsupported' || wakeLock === 'denied') && (
+        <div className="notice" role="status" data-testid="wake-lock-hint">
+          這個瀏覽器無法保持螢幕開啟。你是房主，請避免讓螢幕休眠或切到其他分頁，否則其他玩家會卡住。
+        </div>
+      )}
+      {!hostPage && connection.status === 'online' && quality !== null && (
+        <div className={`quality quality-${quality.level}`} role="status" data-testid="quality">
+          {describeQuality(quality)}
         </div>
       )}
       {connection.status === 'reconnecting' && (
         <div className="notice" role="status">
           連線中斷，重新連線中…（對局由系統暫時代打，連上後會接回你的座位）
+        </div>
+      )}
+      {restored !== null && !restored.ok && (
+        <div className="notice" role="alert" data-testid="restore-failed">
+          原本的房間無法還原（{restored.reason}），已回到大廳，請重新開房。{' '}
+          <button
+            className="link"
+            onClick={() => {
+              setRestoreStatus(null);
+            }}
+          >
+            關閉
+          </button>
         </div>
       )}
       {state.notice && (

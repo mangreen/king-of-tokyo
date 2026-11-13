@@ -18,4 +18,9 @@ describe('feed', () => {
     expect(takeNew([...feed, b(6)], start).batches).toEqual([b(6)]);
     expect(latestVersion([])).toBe(-1);
   });
+
+  it('版本倒退（房主從存檔還原）：以 feed 為準，不重播舊事件，之後的新批次照常播', () => {
+    expect(takeNew([b(4), b(5)], 9)).toEqual({ batches: [], lastPlayed: 5 });
+    expect(takeNew([b(4), b(5), b(6)], 5)).toEqual({ batches: [b(6)], lastPlayed: 6 });
+  });
 });

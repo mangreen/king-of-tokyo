@@ -14,11 +14,12 @@ import {
   type ToHost,
 } from '@kot/room';
 import originalCardSet from '../../../../card-sets/original/set.json';
-import type { WorkerInit, WorkerPath } from './workerInit.js';
+import { createIdbRoomStore } from './idbStore.js';
+import type { WorkerInit, WorkerPath, WorkerRestore } from './workerInit.js';
 
 /** 只宣告用到的 Worker 全域，避免和 DOM 型別衝突。 */
 const scope = self as unknown as {
-  postMessage(message: ToClient | ProxyRequest | WorkerPath): void;
+  postMessage(message: ToClient | ProxyRequest | WorkerPath | WorkerRestore): void;
   onmessage: ((event: { data: ToHost | WorkerInit }) => void) | null;
   close(): void;
 };
@@ -41,14 +42,25 @@ async function start(init: WorkerInit): Promise<void> {
       scope.postMessage(message);
     });
   }
+  // 房主的房間持續存檔到 IndexedDB：重新整理後可以接回（不可用時降級成「重新整理就結束」）
+  const store = createIdbRoomStore();
+  void store.prune();
   const host = createRelayedHost({
     cardSet,
+    store,
     socket: createRelaySocket(init.relayUrl, { lazy: true }),
     ...(proxy === null ? {} : { bridge: { direct: proxy.connector } }),
   });
   host.bridge.onPath((info) => {
     scope.postMessage({ k: 'path', ...info });
   });
+  if (init.resume !== undefined) {
+    // 要在頁面握手之前完成（start 結束前，頁面訊息都在佇列裡）
+    const result = await host.restore(init.resume);
+    scope.postMessage(
+      result.ok ? { k: 'restore', ok: true } : { k: 'restore', ok: false, reason: result.reason },
+    );
+  }
   receive = host.connectPage(send);
 }
 

@@ -13,6 +13,9 @@ export function takeNew(
   feed: readonly FeedBatch[],
   lastPlayed: number,
 ): { batches: FeedBatch[]; lastPlayed: number } {
+  // 版本倒退（房主從存檔還原、少了最後幾步）：已播的紀錄比 feed 還新，以 feed 為準，不重播舊事件
+  const newest = latestVersion(feed);
+  if (feed.length > 0 && newest < lastPlayed) return { batches: [], lastPlayed: newest };
   const batches = feed.filter((b) => b.version > lastPlayed);
   const last = batches.reduce((m, b) => Math.max(m, b.version), lastPlayed);
   return { batches, lastPlayed: last };

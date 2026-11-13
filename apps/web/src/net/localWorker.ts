@@ -5,7 +5,7 @@ import {
   type LocalEndpoint,
   type ToClient,
 } from '@kot/room';
-import type { WorkerInit, WorkerPath } from './workerInit.js';
+import type { WorkerInit, WorkerPath, WorkerRestore } from './workerInit.js';
 
 export interface WorkerEndpointOptions {
   relayUrl?: string;
@@ -13,6 +13,10 @@ export interface WorkerEndpointOptions {
   direct?: DirectConnector;
   /** 房主的連線方式改變。 */
   onPath?: (info: HostPathInfo) => void;
+  /** 房主模式：重新整理後要接回的房號。 */
+  resume?: string;
+  /** 還原的結果（有 resume 才會呼叫）。 */
+  onRestore?: (result: { ok: boolean; reason?: string }) => void;
 }
 
 /** 建立真實的主機 Worker。Vite 會把 local.worker.ts 另外打包，只有離線／房主模式才會載入。 */
@@ -22,6 +26,7 @@ export function createWorkerEndpoint(options: WorkerEndpointOptions = {}): Local
     t: 'init',
     ...(options.relayUrl === undefined ? {} : { relayUrl: options.relayUrl }),
     ...(options.direct === undefined ? {} : { direct: true }),
+    ...(options.resume === undefined ? {} : { resume: options.resume }),
   };
   const served =
     options.direct === undefined
@@ -42,6 +47,10 @@ export function createWorkerEndpoint(options: WorkerEndpointOptions = {}): Local
           if (data.k === 'path' && options.onPath) {
             const { direct, relay, parked } = data as WorkerPath;
             options.onPath({ direct, relay, parked });
+          }
+          if (data.k === 'restore' && options.onRestore) {
+            const { ok, reason } = data as WorkerRestore;
+            options.onRestore(reason === undefined ? { ok } : { ok, reason });
           }
           return;
         }
