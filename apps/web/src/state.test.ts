@@ -251,3 +251,28 @@ describe('閒置踢除', () => {
     expect(s.connection.status).toBe('timed-out');
   });
 });
+
+describe('版本倒退（房主重新整理後從存檔還原）', () => {
+  const at = (version: number) =>
+    ({ type: 'game-update', payload: update(version), at: 0 }) as const;
+
+  it('平常丟棄比手上舊的更新；剛握手後的第一筆就算比較舊也接受，之後恢復丟棄', () => {
+    let state = appReducer(online(), at(10));
+    state = appReducer(state, at(7));
+    expect(state.game?.version).toBe(10); // 亂序的舊更新：丟棄
+    state = appReducer(state, { type: 'hello', payload: hello }); // 重新握手（重連）
+    state = appReducer(state, at(8));
+    expect(state.game?.version).toBe(8); // 以房主為準
+    state = appReducer(state, at(6));
+    expect(state.game?.version).toBe(8); // 只有握手後的第一筆可以倒退
+  });
+
+  it('倒退時把比新版本更新的舊事件從動畫佇列移除', () => {
+    let state = appReducer(online(), at(9));
+    state = appReducer(state, at(10));
+    expect(state.feed.map((b) => b.version)).toEqual([9, 10]);
+    state = appReducer(state, { type: 'hello', payload: hello });
+    state = appReducer(state, at(9));
+    expect(state.feed.map((b) => b.version)).toEqual([9]); // 舊的 9 被新的取代
+  });
+});

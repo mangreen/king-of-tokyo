@@ -43,6 +43,11 @@ export interface AppState {
   feed: EventBatch[];
   /** 操作失敗等一次性提示。 */
   notice: string | null;
+  /**
+   * 剛（重新）握手：下一筆 game:update 即使版本比手上的舊也要接受。
+   * 房主重新整理後從存檔還原，可能少了最後幾步（版本倒退），這時以房主為準。
+   */
+  acceptRewind: boolean;
 }
 
 export type AppAction =
@@ -71,6 +76,7 @@ export const initialAppState: AppState = {
   log: [],
   feed: [],
   notice: null,
+  acceptRewind: false,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -134,6 +140,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         },
         cardSets: parsed.data.cardSets,
         defaultCardSetId: parsed.data.defaultCardSetId,
+        acceptRewind: true,
       };
     }
 
@@ -196,8 +203,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'game-update': {
       if (!isGameUpdate(action.payload)) return state;
       const update = action.payload;
-      // 丟棄過期的更新（網路亂序時）
-      if (state.game && update.version < state.game.version) return state;
+      // 丟棄過期的更新（網路亂序時）；剛握手後的第一筆以房主為準（房主可能從存檔還原而倒退）
+      const rewound = state.game !== null && update.version < state.game.version;
+      if (rewound && !state.acceptRewind) return state;
       // 事件文字以玩家暱稱顯示（開局時房間快照已有座位）
       const nameOf = (seat: number): string =>
         state.room?.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
@@ -206,15 +214,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         .map((e) => describeEvent(e, nameOf, cardName))
         .filter((l) => l !== '');
       const log = [...state.log, ...lines].slice(-LOG_LIMIT);
+      // 倒退時，比新版本更新的舊事件已不存在：從動畫佇列移除
+      const kept = rewound
+        ? state.feed.filter((b) =>
+            update.events.length > 0 ? b.version < update.version : b.version <= update.version,
+          )
+        : state.feed;
       const feed =
         update.events.length === 0
-          ? state.feed
-          : [
-              ...state.feed,
-              { version: update.version, events: update.events as GameEvent[] },
-            ].slice(-FEED_LIMIT);
+          ? kept
+          : [...kept, { version: update.version, events: update.events as GameEvent[] }].slice(
+              -FEED_LIMIT,
+            );
       return {
         ...state,
+        acceptRewind: false,
         game: update,
         feed,
         deadlineAt: update.remainingMs === null ? null : action.at + update.remainingMs,

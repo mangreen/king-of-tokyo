@@ -20,7 +20,8 @@ export type ClientOptions = GameClientOptions & {
    */
   target: {
     code: string | null;
-    /** 房主重新整理後要還原的房號（用過就清掉）。 */ resume: string | null;
+    /** 重新整理後要接回的房號（房主：還原房間；客人：重試加入）；用過就清掉。 */ resume:
+      string | null;
   };
 };
 
@@ -81,6 +82,8 @@ export function createClientOptions(
               )
             : localLinkFactory(() =>
                 createGuestEndpoint(createRelaySocket(url, { lazy: false }), code, {
+                  // 重新整理後的接回：房號暫時找不到（房主也在重新整理）時要重試
+                  resuming: resumeCode === code,
                   ...(connector === undefined ? {} : { direct: connector }),
                   onPath: (path) => {
                     setPathStatus({ role: 'guest', path });
@@ -94,12 +97,8 @@ export function createClientOptions(
       canResume: () => {
         const marker = session.p2pRoom();
         if (marker === null) return false;
-        if (marker.role === 'host') {
-          target.code = null;
-          target.resume = marker.code;
-        } else {
-          target.code = marker.code;
-        }
+        target.code = marker.role === 'host' ? null : marker.code;
+        target.resume = marker.code;
         return true;
       },
     };

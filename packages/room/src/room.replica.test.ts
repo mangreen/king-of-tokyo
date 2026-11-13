@@ -246,3 +246,35 @@ describe('房間複本：序列化與還原', () => {
     expect(closed).toEqual([code]);
   });
 });
+
+describe('client:resync（客戶端漏了訊息時要求完整重送）', () => {
+  it('在房間裡：重送房間狀態、卡牌與對局狀態，且不含事件（不會重播動畫）', () => {
+    const { guest } = startedRoom();
+    const before = guest.events.length;
+    expect(guest.request(EVENTS.clientResync)).toEqual({ ok: true });
+    const fresh = guest.events.slice(before).flatMap((m) => (m.t === 'emit' ? [m] : []));
+    expect(fresh.map((m) => m.event)).toEqual(
+      expect.arrayContaining([EVENTS.roomState, EVENTS.gameCards, EVENTS.gameUpdate]),
+    );
+    const update = fresh.find((m) => m.event === EVENTS.gameUpdate)?.payload as GameUpdateMessage;
+    expect(update.events).toEqual([]);
+    expect(update.version).toBe(guest.game()?.version);
+  });
+
+  it('不在房間裡：回 not_in_room；沒握手前不處理', () => {
+    const local = makeHost(new FakeScheduler());
+    const c = client(local);
+    c.hello('路人');
+    expect(c.request(EVENTS.clientResync)).toEqual({ ok: false, code: 'not_in_room' });
+    const stranger = client(local);
+    expect(stranger.request(EVENTS.clientResync)).toBeUndefined();
+  });
+
+  it('速率限制：連續狂送會被擋下，不會無限重送', () => {
+    const { guest } = startedRoom();
+    const results = Array.from({ length: 80 }, () => guest.request(EVENTS.clientResync));
+    expect(results.some((r) => (r as { ok: boolean; code?: string }).code === 'rate_limited')).toBe(
+      true,
+    );
+  });
+});

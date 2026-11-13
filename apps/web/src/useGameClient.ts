@@ -9,12 +9,17 @@ import {
 import { ACTIVITY_EVENTS, createActivityPing } from './activity.js';
 import { ackMessage } from './messages.js';
 import type { ClientLink, LinkFactory } from './net/link.js';
+import { createResyncGate, hasGap, isStalled } from './resync.js';
 import { session } from './session.js';
 import { appReducer, initialAppState, type AppState } from './state.js';
 
 const ACK_TIMEOUT_MS = 5_000;
 /** 使用者有操作時，最多每隔這麼久通知伺服器一次（伺服器的閒置上限是分鐘等級）。 */
 const ACTIVITY_INTERVAL_MS = 20_000;
+/** 要求重送完整狀態的最短間隔，以及檢查「是不是卡住了」的週期。 */
+const RESYNC_MIN_INTERVAL_MS = 4_000;
+const WATCHDOG_INTERVAL_MS = 4_000;
+const clock = (): number => Date.now();
 
 export interface GameClient {
   state: AppState;
@@ -50,6 +55,19 @@ export interface GameClientOptions {
 export function useGameClient({ link, persistSession, canResume }: GameClientOptions): GameClient {
   const [state, dispatch] = useReducer(appReducer, initialAppState);
   const linkRef = useRef<ClientLink | null>(null);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  /** 目前連線已收到的最新對局版本（用來偵測漏訊息）；每次重新握手後重新開始。 */
+  const lastVersion = useRef<number | null>(null);
+  const resyncGate = useRef(createResyncGate(clock, RESYNC_MIN_INTERVAL_MS));
+
+  const resync = useCallback(() => {
+    const connection = linkRef.current;
+    if (!connection?.connected || !resyncGate.current.tryPass()) return;
+    connection.emit(EVENTS.clientResync);
+  }, []);
 
   const disconnect = useCallback(() => {
     linkRef.current?.close();
@@ -78,6 +96,7 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
               if (parsed.success && persistSession) {
                 session.save(parsed.data.nickname, parsed.data.sessionToken);
               }
+              lastVersion.current = null; // 重新握手後，房主會重送完整狀態；版本從那裡重新算起
               dispatch({ type: 'hello', payload });
               break;
             }
@@ -90,9 +109,15 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
             case EVENTS.gameCards:
               dispatch({ type: 'game-cards', payload });
               break;
-            case EVENTS.gameUpdate:
+            case EVENTS.gameUpdate: {
+              const version = (payload as { version?: unknown } | null)?.version;
+              if (typeof version === 'number') {
+                if (hasGap(lastVersion.current, version)) resync();
+                lastVersion.current = version;
+              }
               dispatch({ type: 'game-update', payload, at: Date.now() });
               break;
+            }
           }
         },
         onError: (code) => {
@@ -104,7 +129,7 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
       });
       linkRef.current = connection;
     },
-    [disconnect, link, persistSession],
+    [disconnect, link, persistSession, resync],
   );
 
   const logout = useCallback(() => {
@@ -145,6 +170,24 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
       document.removeEventListener('visibilitychange', touch);
     };
   }, []);
+
+  // 分頁從背景回來、或對局的決策時間早就過了卻沒有新動靜：要求房主重送完整狀態
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible' && stateRef.current.game !== null) resync();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = setInterval(() => {
+      const current = stateRef.current;
+      if (current.connection.status === 'online' && isStalled(current.deadlineAt, Date.now())) {
+        resync();
+      }
+    }, WATCHDOG_INTERVAL_MS);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(timer);
+    };
+  }, [resync]);
 
   const request = useCallback((event: string, payload: unknown) => {
     const connection = linkRef.current;
