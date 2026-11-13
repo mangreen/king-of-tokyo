@@ -182,10 +182,11 @@ export class Cluster {
     options: GuestEndpointOptions = {},
     join = true,
   ): Promise<GuestNode> {
-    const scheduler = new FakeScheduler();
+    // 呼叫端可以先建好時鐘（例如後備房主的狀態機要與端點共用同一個時鐘）
+    const scheduler = (options.scheduler as FakeScheduler | undefined) ?? new FakeScheduler();
     this.alive.add(scheduler);
     const socket = this.relay.socket();
-    const endpoint = createGuestEndpoint(socket, code, { scheduler, ...options });
+    const endpoint = createGuestEndpoint(socket, code, { ...options, scheduler });
     const page = new Page((m) => {
       endpoint.post(m);
     }, this.settle);

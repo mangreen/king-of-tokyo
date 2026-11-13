@@ -54,6 +54,8 @@ export type { RelayedHost, RelayedHostOptions } from './relay/relayedHost.js';
 export { ReplicaMirror, ReplicaSender, ReplicaSyncSchema, REPLICA_BATCH } from './failover/sync.js';
 export type { ReplicaSync } from './failover/sync.js';
 export { rankCandidates, SuccessionPlanner } from './failover/succession.js';
+export { Standby, STANDBY_GRACE_MS, STANDBY_STAGGER_MS } from './failover/standby.js';
+export type { StandbyOptions, StandbyState, TakeoverTarget } from './failover/standby.js';
 export type { RelaySocket } from './relay/socket.js';
 
 export { createMemoryRoomStore, HostSaveSchema, parseHostSave, RoomSaver } from './persist.js';

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { EVENTS, RELAY_PROTOCOL_VERSION } from '@kot/protocol';
-import { hashToken, ReplicaMirror, type ReplicaSync } from '@kot/room';
-import { Cluster, type GuestNode } from './testkit.js';
+import {
+  hashToken,
+  ReplicaMirror,
+  Standby,
+  type ReplicaSync,
+  type RoomReplica,
+  type TakeoverTarget,
+} from '@kot/room';
+import { FakeScheduler } from '@kot/room/testing';
+import { Cluster, type GuestNode, type HostNode } from './testkit.js';
 
 /** 客人收到的複本同步（攔在端點層，頁面完全看不到）。 */
 function mirrorOf(): {
@@ -132,5 +140,160 @@ describe('複本同步與後備登記（M9-2）', () => {
     await g2.page.hello('客人1', g.page.token);
     expect(again.mirror.snapshot()?.code).toBe(host.code());
     expect(again.syncs[0]?.from).toBe(0);
+  });
+});
+
+/** 後備客人：端點＋Standby；接手成功時換成新的房主節點。 */
+class RelayedTarget implements TakeoverTarget {
+  constructor(readonly node: HostNode) {}
+  prepare(replica: RoomReplica) {
+    return this.node.relayed.prepare(replica);
+  }
+  takeover(code: string, key: string) {
+    return this.node.relayed.takeover(code, key);
+  }
+  abandon(): void {
+    this.node.relayed.bridge.close();
+  }
+}
+
+interface StandbyGuest {
+  node: GuestNode;
+  standby: Standby<RelayedTarget>;
+  /** 接手成功後的新房主節點與他自己的頁面（還沒接手為 null）。 */
+  taken: { host: HostNode; epoch: number } | null;
+  states: string[];
+}
+
+async function standbyGuest(
+  cluster: Cluster,
+  code: string,
+  nickname: string,
+): Promise<StandbyGuest> {
+  const scheduler = new FakeScheduler();
+  const result = { taken: null, states: [] } as unknown as StandbyGuest;
+  const standby = new Standby<RelayedTarget>({
+    code,
+    playerId: () => (result.node as GuestNode | undefined)?.page.playerId,
+    scheduler,
+    create: () => new RelayedTarget(cluster.host()),
+    onTakeover: (target, epoch) => {
+      result.node.endpoint.terminate();
+      result.taken = { host: target.node, epoch };
+    },
+    requestReplica: () => result.node.endpoint.requestReplica(),
+    onState: (state) => result.states.push(state),
+  });
+  result.standby = standby;
+  result.node = await cluster.guest(code, nickname, {
+    scheduler,
+    onReplica: (sync) => standby.onReplica(sync),
+    onHostState: (state) => standby.onHostState(state),
+  });
+  return result;
+}
+
+/** 房主「整個分頁消失」：時鐘停擺、連線斷掉。 */
+async function killHost(cluster: Cluster, host: HostNode): Promise<void> {
+  cluster.kill(host.scheduler);
+  host.socket.kill();
+  await cluster.settle();
+}
+
+describe('故障接手（M9-3）', () => {
+  it('房主消失：第一順位在 10 秒後接手，所有人以原本身分接回，對局繼續到結束', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const code = host.code();
+    const g1 = await standbyGuest(cluster, code, '客人1');
+    const g2 = await standbyGuest(cluster, code, '客人2');
+    await host.page.request(EVENTS.roomReady, { ready: true });
+    expect(await host.page.request(EVENTS.roomStart, {})).toEqual({ ok: true });
+    await cluster.advance(3_000);
+    const before = host.relayed.local.host.exportRoom(code);
+    expect(before?.actions.length).toBeGreaterThan(3);
+
+    await killHost(cluster, host);
+    expect(g1.standby.state).toBe('waiting');
+    await cluster.advance(9_000);
+    expect(g1.taken).toBeNull();
+    await cluster.advance(2_000);
+    expect(g1.taken?.epoch).toBe(1);
+    expect(g2.taken).toBeNull(); // 第二順位不會搶
+
+    // 新房主的頁面（原本的客人1）以原本的 token 接回座位
+    const next = g1.taken?.host as HostNode;
+    const token1 = g1.node.page.token;
+    await next.page.hello('客人1', token1);
+    expect(next.page.last('server:hello')).toMatchObject({ resumed: true });
+    expect(next.page.playerId).toBe(g1.node.page.playerId);
+    // 客人2 看到房主換了（連線重開），用原本的 token 接回
+    expect(g2.node.page.opens).toBeGreaterThanOrEqual(2);
+    await g2.node.page.hello('客人2', g2.node.page.token);
+    expect(g2.node.page.last('server:hello')).toMatchObject({ resumed: true });
+    expect(g2.node.page.room()?.hostId).toBe(host.page.playerId);
+
+    // 接手的複本是房主消失前的狀態（至少包含當時已同步的所有動作）
+    const after = next.relayed.local.host.exportRoom(code);
+    expect(after?.actions.slice(0, before?.actions.length)).toEqual(before?.actions);
+
+    // 對局繼續：所有計時器與電腦玩家照常運作，直到結束
+    await cluster.advance(300_000);
+    const phases = next.page.events.flatMap((m) =>
+      m.t === 'emit' && m.event === 'room:state'
+        ? [(m.payload as { room: { phase: string } | null }).room?.phase ?? 'closed']
+        : [],
+    );
+    expect(phases).toContain('over'); // 對局正常打完（之後房間照常依閒置規則關閉）
+  });
+  it('第一順位也不見了：第二順位在 13 秒（10＋3）接手', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const code = host.code();
+    const g1 = await standbyGuest(cluster, code, '客人1');
+    const g2 = await standbyGuest(cluster, code, '客人2');
+    await host.page.request(EVENTS.roomReady, { ready: true });
+    await host.page.request(EVENTS.roomStart, {});
+    await cluster.advance(2_000);
+    await killHost(cluster, host);
+    await killHost(cluster, { ...host, scheduler: g1.node.scheduler, socket: g1.node.socket });
+    await cluster.advance(12_000);
+    expect(g2.taken).toBeNull();
+    await cluster.advance(2_000);
+    expect(g2.taken?.epoch).toBe(1);
+    expect(g1.taken).toBeNull();
+  });
+
+  it('房主在寬限內回來：沒有人接手，原房主繼續', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const g1 = await standbyGuest(cluster, host.code(), '客人1');
+    await standbyGuest(cluster, host.code(), '客人2');
+    host.socket.kill();
+    await cluster.advance(6_000);
+    host.socket.connect?.();
+    await cluster.advance(30_000);
+    expect(g1.taken).toBeNull();
+    expect(g1.standby.state).toBe('watching');
+    expect(cluster.relay.registry.roomCount).toBe(1);
+  });
+
+  it('網路分隔而不是死亡：新房主接手後，舊房主回來只會被告知已被取代', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const g1 = await standbyGuest(cluster, host.code(), '客人1');
+    await standbyGuest(cluster, host.code(), '客人2');
+    const statuses: string[] = [];
+    host.relayed.bridge.onStatus((s) =>
+      statuses.push(s.state === 'closed' ? `closed:${s.reason}` : s.state),
+    );
+    host.socket.kill();
+    await cluster.advance(11_000);
+    expect(g1.taken?.epoch).toBe(1);
+    host.socket.connect?.();
+    await cluster.advance(2_000);
+    expect(statuses).toContain('closed:superseded');
+    // 房間仍屬於新房主：舊房主不能再用舊金鑰登記
+    expect(cluster.relay.registry.roomCount).toBe(1);
   });
 });
