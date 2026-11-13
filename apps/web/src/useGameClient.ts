@@ -9,6 +9,7 @@ import {
 import { ACTIVITY_EVENTS, createActivityPing } from './activity.js';
 import { ackMessage } from './messages.js';
 import type { ClientLink, LinkFactory } from './net/link.js';
+import { QualityMeter, setQuality } from './net/quality.js';
 import { createResyncGate, hasGap, isStalled } from './resync.js';
 import { session } from './session.js';
 import { appReducer, initialAppState, type AppState } from './state.js';
@@ -20,6 +21,7 @@ const ACTIVITY_INTERVAL_MS = 20_000;
 const RESYNC_MIN_INTERVAL_MS = 4_000;
 const WATCHDOG_INTERVAL_MS = 4_000;
 const clock = (): number => Date.now();
+const PING_TIMEOUT_MS = 4_000;
 
 export interface GameClient {
   state: AppState;
@@ -63,6 +65,26 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
   const lastVersion = useRef<number | null>(null);
   const resyncGate = useRef(createResyncGate(clock, RESYNC_MIN_INTERVAL_MS));
 
+  const meter = useRef(new QualityMeter());
+
+  /** 量一次往返時間（隨使用者操作送出，所以不會讓閒置的連線保持活著）。 */
+  const measure = useCallback((connection: ClientLink) => {
+    const started = performance.now();
+    connection
+      .request(EVENTS.clientPing, {}, PING_TIMEOUT_MS)
+      .then((ack) => {
+        if (linkRef.current === connection && ack.ok) {
+          setQuality(meter.current.success(performance.now() - started));
+        }
+      })
+      .catch(() => {
+        // 連線已被關閉時的失敗不算（斷線另有提示）
+        if (linkRef.current === connection && connection.connected) {
+          setQuality(meter.current.failure());
+        }
+      });
+  }, []);
+
   const resync = useCallback(() => {
     const connection = linkRef.current;
     if (!connection?.connected || !resyncGate.current.tryPass()) return;
@@ -72,6 +94,8 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
   const disconnect = useCallback(() => {
     linkRef.current?.close();
     linkRef.current = null;
+    meter.current.reset();
+    setQuality(null);
   }, []);
 
   const login = useCallback(
@@ -155,6 +179,7 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
         const connection = linkRef.current;
         if (!connection?.connected) return false;
         connection.emit(EVENTS.clientActive);
+        measure(connection);
         return true;
       },
       () => Date.now(),
@@ -169,7 +194,7 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
       for (const name of ACTIVITY_EVENTS) window.removeEventListener(name, touch);
       document.removeEventListener('visibilitychange', touch);
     };
-  }, []);
+  }, [measure]);
 
   // 分頁從背景回來、或對局的決策時間早就過了卻沒有新動靜：要求房主重送完整狀態
   useEffect(() => {

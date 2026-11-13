@@ -278,3 +278,13 @@ describe('client:resync（客戶端漏了訊息時要求完整重送）', () => 
     );
   });
 });
+
+describe('client:ping（往返時間量測）', () => {
+  it('握手後回 ack；沒握手不處理；不需要在房間裡', () => {
+    const local = makeHost(new FakeScheduler());
+    const c = client(local);
+    expect(c.request(EVENTS.clientPing)).toBeUndefined();
+    c.hello('路人');
+    expect(c.request(EVENTS.clientPing)).toEqual({ ok: true });
+  });
+});

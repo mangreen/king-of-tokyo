@@ -103,6 +103,17 @@ input {
 .notice .link {
   color: #fff;
 }
+.quality {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  margin: 0.25rem 0;
+}
+.quality-poor,
+.quality-unresponsive {
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 600;
+}
 .room-code {
   font-family: ui-monospace, monospace;
   letter-spacing: 0.25em;

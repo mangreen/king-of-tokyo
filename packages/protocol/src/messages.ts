@@ -21,6 +21,8 @@ export const EVENTS = {
    * 新增事件不改變既有訊息的格式，所以協定版本不變；不認識它的舊房主會直接忽略。
    */
   clientResync: 'client:resync',
+  /** 量測往返時間（有 ack、沒有內容）。只在使用者有操作時隨 client:active 一起送，不會讓閒置的連線一直保持活著。 */
+  clientPing: 'client:ping',
   serverHello: 'server:hello',
   serverError: 'server:error',
   roomCreate: 'room:create',

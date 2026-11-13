@@ -6,9 +6,11 @@ import { Login } from './views/Login.js';
 import { RoomView } from './views/RoomView.js';
 import { createClientOptions } from './net/config.js';
 import { describePath, usePathStatus } from './net/pathStatus.js';
+import { describeQuality, useQuality } from './net/quality.js';
 import { setRestoreStatus, useRestoreStatus } from './net/restoreStatus.js';
 import { session } from './session.js';
 import { useGameClient } from './useGameClient.js';
+import { useWakeLock } from './useWakeLock.js';
 
 // 連線方式在載入時決定一次（伺服器或離線），之後不變
 const clientOptions = createClientOptions(
@@ -20,6 +22,7 @@ export function App() {
   const client = useGameClient(clientOptions);
   const path = usePathStatus();
   const restored = useRestoreStatus();
+  const quality = useQuality();
   const { state } = client;
   const { connection, room, game } = state;
 
@@ -139,6 +142,9 @@ export function App() {
   }
 
   const inGame = Boolean(room && game && room.phase !== 'lobby');
+  // 對局中保持螢幕開啟（房主螢幕休眠會讓房間停擺）
+  const wakeLock = useWakeLock(inGame && room?.phase === 'playing');
+  const hostPage = p2p && clientOptions.target.code === null;
   return (
     <main className={inGame ? 'wide' : undefined}>
       <h1>東京之王 King of Tokyo</h1>
@@ -151,6 +157,16 @@ export function App() {
         <div className="notice" role="status" data-testid="p2p-banner">
           房主模式：房間在房主的瀏覽器裡執行，伺服器負責登記房號、協助玩家建立直連，直連不通時轉送訊息。房主重新整理頁面時會從瀏覽器存檔接回同一局；關閉分頁或主動離開，這局才會結束。
           {path !== null && <div data-testid="path-status">{describePath(path)}</div>}
+        </div>
+      )}
+      {hostPage && inGame && (wakeLock === 'unsupported' || wakeLock === 'denied') && (
+        <div className="notice" role="status" data-testid="wake-lock-hint">
+          這個瀏覽器無法保持螢幕開啟。你是房主，請避免讓螢幕休眠或切到其他分頁，否則其他玩家會卡住。
+        </div>
+      )}
+      {!hostPage && connection.status === 'online' && quality !== null && (
+        <div className={`quality quality-${quality.level}`} role="status" data-testid="quality">
+          {describeQuality(quality)}
         </div>
       )}
       {connection.status === 'reconnecting' && (
