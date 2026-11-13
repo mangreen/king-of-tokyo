@@ -41,11 +41,19 @@ export type { ProxyEvent, ProxyRequest } from './direct/proxy.js';
 export { DirectSession } from './direct/session.js';
 export type { DirectConnector, DirectPeer, DirectPeerEvents, DirectRole } from './direct/types.js';
 export { createGuestEndpoint } from './relay/guestEndpoint.js';
-export type { GuestEndpointOptions, GuestPath } from './relay/guestEndpoint.js';
+export type { GuestEndpoint, GuestEndpointOptions, GuestPath } from './relay/guestEndpoint.js';
 export { DIRECT_TIMEOUT_MS, HostBridge, PARK_REFRESH_MS } from './relay/hostBridge.js';
-export type { BridgeStatus, HostBridgeOptions, HostPathInfo } from './relay/hostBridge.js';
+export type {
+  BridgeStatus,
+  HostBridgeOptions,
+  HostPathInfo,
+  TakeoverResult,
+} from './relay/hostBridge.js';
 export { createRelayedHost } from './relay/relayedHost.js';
-export type { RelayedHost } from './relay/relayedHost.js';
+export type { RelayedHost, RelayedHostOptions } from './relay/relayedHost.js';
+export { ReplicaMirror, ReplicaSender, ReplicaSyncSchema, REPLICA_BATCH } from './failover/sync.js';
+export type { ReplicaSync } from './failover/sync.js';
+export { rankCandidates, SuccessionPlanner } from './failover/succession.js';
 export type { RelaySocket } from './relay/socket.js';
 
 export { createMemoryRoomStore, HostSaveSchema, parseHostSave, RoomSaver } from './persist.js';

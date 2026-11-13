@@ -8,24 +8,32 @@
  * 關掉自己的中繼連線，只留房號登記，不再佔伺服器的連線。任何人的直連中斷就立刻回到中繼。
  */
 import {
+  EVENTS,
   RELAY_EVENTS,
   RELAY_PROTOCOL_VERSION,
   type RelayClosedReason,
   type RelayErrorCode,
   type RelayHostOpenAck,
   type RelayParkAck,
+  type RelaySimpleAck,
+  type RelayTakeoverAck,
 } from '@kot/protocol';
 import type { DirectConnector } from '../direct/types.js';
 import { DirectSession } from '../direct/session.js';
+import { ReplicaSender, type ReplicaSync } from '../failover/sync.js';
+import { rankCandidates, SuccessionPlanner, type Candidate } from '../failover/succession.js';
 import type { LocalHost } from '../local/host.js';
 import {
-  parseToHost,
   parseWireToHost,
   type ToClient,
   type ToHost,
+  type WireReplica,
+  type WireReplicaNeed,
   type WireRtc,
   type WireSwitch,
 } from '../local/protocol.js';
+import { randomHex } from '../random.js';
+import type { RoomReplica } from '../replica.js';
 import { realScheduler, type Scheduler } from '../scheduler.js';
 import type { RelaySocket } from './socket.js';
 
@@ -56,7 +64,20 @@ export interface HostBridgeOptions {
   directTimeoutMs?: number;
   /** 停泊期間每隔多久回伺服器刷新一次房號期限（毫秒，必須小於伺服器的停泊期限）。 */
   parkRefreshMs?: number;
+  /**
+   * 目前房間的複本（M9）。提供就會把複本增量送給每位真人客人（後備房主）並向伺服器登記後備順序。
+   * 回傳的 epoch 會被覆寫成橋接端知道的世代。
+   */
+  replica?: () => RoomReplica | null;
+  /** 後備房主的接手金鑰（沿用重新整理前的存檔；沒有就由橋接端新產生）。 */
+  takeoverKeys?: Record<string, string>;
+  randomHex?: (bytes: number) => string;
 }
+
+/** 接手的結果（成為新房主）。retryInMs：太早，伺服器建議多久後再試。 */
+export type TakeoverResult =
+  | { ok: true; epoch: number }
+  | { ok: false; reason: RelayErrorCode | 'unreachable'; retryInMs?: number };
 
 /** 15 秒：區網／一般 NAT 通常幾秒內就連上；要靠 TURN 才通的我們沒有提供，放棄就走中繼。 */
 export const DIRECT_TIMEOUT_MS = 15_000;
@@ -65,7 +86,12 @@ export const PARK_REFRESH_MS = 6 * 60_000;
 
 interface GuestEntry {
   receive: (message: ToHost) => void;
-  session: DirectSession<ToClient, ToHost>;
+  session: DirectSession<ToClient | WireReplica, ToHost | WireReplicaNeed>;
+  /** 握手後才知道這位客人是哪個玩家。 */
+  playerId: string | null;
+  /** 加入的先後（後備順序用）。 */
+  serial: number;
+  sender: ReplicaSender;
 }
 
 export class HostBridge {
@@ -84,6 +110,13 @@ export class HostBridge {
   private readonly scheduler: Scheduler;
   private pathHandlers: ((info: HostPathInfo) => void)[] = [];
   private lastPath = '';
+  /** 房主世代：房主轉移時由伺服器遞增。 */
+  private epochValue = 0;
+  private readonly planner: SuccessionPlanner;
+  /** 已向伺服器登記（或正在登記）的後備順序（JSON）；空字串＝還沒登記。 */
+  private registeredOrder = '';
+  private guestSerial = 0;
+  private handoverWaiter: ((ok: boolean) => void) | null = null;
 
   constructor(
     private readonly local: LocalHost,
@@ -91,6 +124,7 @@ export class HostBridge {
     private readonly options: HostBridgeOptions = {},
   ) {
     this.scheduler = options.scheduler ?? realScheduler;
+    this.planner = new SuccessionPlanner(options.randomHex ?? randomHex, options.takeoverKeys);
     socket.onEvent(RELAY_EVENTS.guestJoined, (payload) => {
       const guestId = readGuestId(payload);
       if (guestId !== null) this.attachGuest(guestId);
@@ -123,6 +157,7 @@ export class HostBridge {
     });
     socket.onEvent(RELAY_EVENTS.closed, (payload) => {
       const reason = (payload as { reason?: RelayClosedReason } | null)?.reason ?? 'room_closed';
+      if (reason === 'superseded') this.handoverWaiter?.(true);
       this.finish({ state: 'closed', reason });
     });
     socket.onDisconnect(() => {
@@ -144,16 +179,137 @@ export class HostBridge {
     return this.creds;
   }
 
+  /** 房主世代（伺服器記錄；房主轉移時遞增）。 */
+  get epoch(): number {
+    return this.epochValue;
+  }
+
+  /** 載入重新整理前存下的接手金鑰（後備手上的金鑰才不會失效）。 */
+  loadTakeoverKeys(keys: Readonly<Record<string, string>>): void {
+    this.planner.load(keys);
+  }
+
+  /** 後備房主的接手金鑰（存檔用）。 */
+  get takeoverKeys(): Record<string, string> {
+    return this.planner.exportKeys();
+  }
+
   /**
    * 房主重新整理後從存檔接回：用原本的房號與金鑰向中繼登記（伺服器若已忘記這個房號就重新登記）。
    * 不等待結果：房主自己的頁面不依賴中繼；結果會經 onStatus 回報（online／closed）。
    */
-  adopt(creds: { code: string; hostKey: string }): void {
-    this.creds = creds;
+  adopt(creds: { code: string; hostKey: string; epoch?: number }): void {
+    this.creds = { code: creds.code, hostKey: creds.hostKey };
+    this.epochValue = creds.epoch ?? 0;
     this.adopted = true;
     this.transitioning = true;
-    if (this.socket.connected) this.resume(creds);
+    if (this.socket.connected) this.resume(this.creds);
     else this.socket.connect?.(); // 連上後 onConnect 會接回
+  }
+
+  /**
+   * 以後備房主的身分接手一個房間：向伺服器出示接手金鑰，成功就成為新房主（拿到新的房主金鑰與世代）。
+   * 呼叫前要先把複本還原到本機主機。時間未到時回 retryInMs，由呼叫端排程重試。
+   */
+  takeover(code: string, key: string): Promise<TakeoverResult> {
+    return new Promise<TakeoverResult>((resolve) => {
+      const send = (): void => {
+        this.socket.emit(
+          RELAY_EVENTS.takeover,
+          { relayVersion: RELAY_PROTOCOL_VERSION, code, key },
+          (result) => {
+            const ack = result as RelayTakeoverAck;
+            if (!ack.ok) {
+              resolve({
+                ok: false,
+                reason: ack.code,
+                ...(ack.retryInMs === undefined ? {} : { retryInMs: ack.retryInMs }),
+              });
+              return;
+            }
+            this.creds = { code: ack.code, hostKey: ack.hostKey };
+            this.epochValue = ack.epoch;
+            this.adopted = true;
+            this.registeredOrder = '';
+            this.emitStatus({ state: 'online', code: ack.code });
+            resolve({ ok: true, epoch: ack.epoch });
+            this.pushReplicas();
+          },
+        );
+      };
+      if (this.socket.connected) send();
+      else {
+        this.socket.connect?.();
+        let sent = false;
+        this.socket.onConnect(() => {
+          if (!sent) {
+            sent = true;
+            send();
+          }
+        });
+        this.socket.onConnectError(() => {
+          if (!sent) {
+            sent = true;
+            resolve({ ok: false, reason: 'unreachable' });
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * 計畫性交接（M9）：把房間交給某位後備。呼叫端要先讓房間停止提交（凍結）。
+   * 先把最新複本推給對方、向伺服器登記「指定這位」，再通知對方立刻接手；伺服器在對方接手的瞬間
+   * 取代我們的連線，之後狀態變成 closed(superseded)。逾時沒人接手就回傳失敗，呼叫端可以解凍繼續。
+   */
+  async handover(
+    playerId: string,
+    timeoutMs = 20_000,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const entry = [...this.guests.values()].find((g) => g.playerId === playerId);
+    if (!entry || this.creds === null) return { ok: false, reason: '對方不在線上' };
+    if (this.parked) {
+      this.unpark();
+      return { ok: false, reason: '連線方式切換中，請稍後再試' };
+    }
+    if (!this.socket.connected) return { ok: false, reason: '與伺服器的連線中斷' };
+    this.pushReplicas(); // 對方的複本先追到最新（同一條連線上依序到達）
+    const replica = this.currentReplica();
+    if (!replica) return { ok: false, reason: '沒有可交接的房間' };
+    const { actions, ...meta } = replica;
+    const offer: ReplicaSync = {
+      epoch: replica.epoch,
+      meta,
+      from: actions.length,
+      actions: [],
+      key: this.planner.keyOf(playerId),
+      order: this.currentOrder(replica),
+      handover: true,
+    };
+    const registered = await this.ask<RelaySimpleAck>(RELAY_EVENTS.handover, {
+      target: this.planner.hashes([playerId])[0] as string,
+    });
+    if (!registered.ok) return { ok: false, reason: registered.code };
+    return new Promise((resolve) => {
+      const cancel = this.scheduler.after(timeoutMs, () => {
+        this.handoverWaiter = null;
+        resolve({ ok: false, reason: '對方沒有接手' });
+      });
+      this.handoverWaiter = (ok) => {
+        cancel();
+        this.handoverWaiter = null;
+        resolve(ok ? { ok: true } : { ok: false, reason: '交接失敗' });
+      };
+      entry.session.send({ t: 'replica', d: offer });
+    });
+  }
+
+  private ask<T>(event: string, payload: unknown): Promise<T> {
+    return new Promise<T>((resolve) => {
+      this.socket.emit(event, payload, (result) => {
+        resolve(result as T);
+      });
+    });
   }
 
   /** 已停泊（測試與除錯用）。 */
@@ -203,6 +359,7 @@ export class HostBridge {
             const ack = result as RelayHostOpenAck;
             if (ack.ok) {
               this.creds = { code: ack.code, hostKey: ack.hostKey };
+              this.epochValue = ack.epoch;
               this.emitStatus({ state: 'online', code: ack.code });
               resolve(ack.code);
             } else {
@@ -297,7 +454,7 @@ export class HostBridge {
         relayVersion: RELAY_PROTOCOL_VERSION,
         code: creds.code,
         hostKey: creds.hostKey,
-        ...(restore ? { restore: true } : {}),
+        ...(restore ? { restore: true, epoch: this.epochValue } : {}),
       },
       (result) => {
         const ack = result as RelayHostOpenAck;
@@ -313,11 +470,65 @@ export class HostBridge {
         }
         this.transitioning = false;
         if (ack.ok) {
+          this.epochValue = ack.epoch;
+          this.registeredOrder = ''; // 伺服器可能忘了（重啟、接回）：重新登記後備順序
           this.emitStatus({ state: 'online', code: ack.code });
           this.evaluate();
+          this.pushReplicas();
         } else this.finish({ state: 'closed', reason: ack.code });
       },
     );
+  }
+
+  // ── 複本與後備順序（M9）────────────────────────────
+
+  private currentReplica(): RoomReplica | null {
+    const replica = this.options.replica?.();
+    return replica ? { ...replica, epoch: this.epochValue } : null;
+  }
+
+  /** 目前的後備順序：已握手、仍在房間裡的真人客人，直連優先。 */
+  private currentOrder(replica: RoomReplica): string[] {
+    const humans = new Set(
+      replica.members.filter((m) => !m.bot && !m.left && m.id !== replica.hostId).map((m) => m.id),
+    );
+    const candidates: Candidate[] = [];
+    for (const entry of this.guests.values()) {
+      if (entry.playerId === null || !humans.has(entry.playerId)) continue;
+      candidates.push({
+        playerId: entry.playerId,
+        direct: entry.session.isDirect,
+        serial: entry.serial,
+      });
+    }
+    return rankCandidates(candidates);
+  }
+
+  /** 把複本的變化送給每位後備，並在順序改變時向伺服器登記。房間每次改變、連線方式改變時呼叫（很便宜）。 */
+  pushReplicas(): void {
+    if (this.done || this.creds === null) return;
+    const replica = this.currentReplica();
+    if (!replica) return;
+    const order = this.currentOrder(replica);
+    this.registerSuccession(order);
+    for (const entry of this.guests.values()) {
+      if (entry.playerId === null || !order.includes(entry.playerId)) continue;
+      const key = this.planner.keyOf(entry.playerId);
+      for (const d of entry.sender.messages(replica, key, order)) {
+        entry.session.send({ t: 'replica', d });
+      }
+    }
+  }
+
+  private registerSuccession(order: readonly string[]): void {
+    const hashes = this.planner.hashes(order);
+    const json = JSON.stringify(hashes);
+    if (json === this.registeredOrder || !this.socket.connected || this.transitioning) return;
+    this.registeredOrder = json;
+    this.socket.emit(RELAY_EVENTS.succession, { order: hashes }, (result) => {
+      // 登記失敗（例如已不是房主）：下次再試
+      if (!(result as RelaySimpleAck).ok) this.registeredOrder = '';
+    });
   }
 
   /** 客人進來（或房主接回後被重新告知）：換一條全新的閘道連線，客人會收到 open 並重新握手。 */
@@ -326,34 +537,57 @@ export class HostBridge {
     const relayEmit = (data: unknown): void => {
       this.socket.emit(RELAY_EVENTS.toGuest, { guestId, data });
     };
-    const session: DirectSession<ToClient, ToHost> = new DirectSession<ToClient, ToHost>({
-      role: 'host',
-      connector: this.options.direct ?? null,
-      scheduler: this.scheduler,
-      connectTimeoutMs: this.options.directTimeoutMs ?? DIRECT_TIMEOUT_MS,
-      // 協商資料與切換標記只在中繼還連著時有意義；斷線期間不要讓 socket.io 把它們緩存起來重送
-      sendRelay: (message) => {
-        if (message.t === 'rtc' || message.t === 'switch') {
-          if (this.socket.connected) relayEmit(message);
-        } else relayEmit(message);
-      },
-      deliver: (message) => {
-        this.guests.get(guestId)?.receive(message);
-      },
-      parse: (value) => parseToHost(value),
-      onSwitched: () => {
-        this.notifyPath();
-        this.evaluate();
-      },
-      onLost: () => {
-        // 直連中斷：遺失了哪些訊息無從得知，當作這位客人斷線；他會經中繼重新加入並接回座位
-        this.detachGuest(guestId); // 會通知連線方式
-        if (this.parked) this.unpark();
-        else this.evaluate();
-      },
-    });
+    const session: DirectSession<ToClient | WireReplica, ToHost | WireReplicaNeed> =
+      new DirectSession<ToClient | WireReplica, ToHost | WireReplicaNeed>({
+        role: 'host',
+        connector: this.options.direct ?? null,
+        scheduler: this.scheduler,
+        connectTimeoutMs: this.options.directTimeoutMs ?? DIRECT_TIMEOUT_MS,
+        // 協商資料與切換標記只在中繼還連著時有意義；斷線期間不要讓 socket.io 把它們緩存起來重送
+        sendRelay: (message) => {
+          if (message.t === 'rtc' || message.t === 'switch') {
+            if (this.socket.connected) relayEmit(message);
+          } else relayEmit(message);
+        },
+        deliver: (message) => {
+          const entry = this.guests.get(guestId);
+          if (!entry) return;
+          if (message.t === 'replica-need') {
+            // 後備說他漏了訊息：從頭重送
+            entry.sender.reset();
+            this.pushReplicas();
+            return;
+          }
+          entry.receive(message);
+        },
+        parse: (value) => {
+          const parsed = parseWireToHost(value);
+          // 協商與切換標記只走中繼
+          return parsed === null || parsed.t === 'rtc' || parsed.t === 'switch' ? null : parsed;
+        },
+        onSwitched: () => {
+          this.notifyPath();
+          this.evaluate();
+        },
+        onLost: () => {
+          // 直連中斷：遺失了哪些訊息無從得知，當作這位客人斷線；他會經中繼重新加入並接回座位
+          this.detachGuest(guestId); // 會通知連線方式
+          if (this.parked) this.unpark();
+          else this.evaluate();
+        },
+      });
     const send = (message: ToClient): void => {
       session.send(message);
+      if (message.t === 'emit' && message.event === EVENTS.serverHello) {
+        // 握手完成：知道這位客人是哪個玩家了，他可以開始收複本
+        const entry = this.guests.get(guestId);
+        const id = (message.payload as { playerId?: unknown } | null)?.playerId;
+        if (entry && typeof id === 'string') {
+          entry.playerId = id;
+          entry.sender.reset();
+          this.pushReplicas();
+        }
+      }
       if (message.t === 'closed') {
         // 閘道主動中斷這條連線（握手逾時、被取代等）：關掉直連，並請伺服器也把客人踢出中繼
         this.guests.delete(guestId);
@@ -361,7 +595,14 @@ export class HostBridge {
         session.close();
       }
     };
-    this.guests.set(guestId, { receive: this.local.connect(send), session });
+    this.guestSerial += 1;
+    this.guests.set(guestId, {
+      receive: this.local.connect(send),
+      session,
+      playerId: null,
+      serial: this.guestSerial,
+      sender: new ReplicaSender(),
+    });
     session.start();
     this.notifyPath();
   }
