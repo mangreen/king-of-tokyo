@@ -11,10 +11,13 @@ import {
 } from '@kot/protocol';
 import {
   createGuestEndpoint,
+  createMemoryRoomStore,
   createRelayedHost,
   type GuestEndpointOptions,
   type HostBridge,
   type HostBridgeOptions,
+  type RelayedHost,
+  type RoomStore,
   type LocalEndpoint,
   type RelaySocket,
   type Timings,
@@ -174,14 +177,30 @@ function startHost(
   url: string,
   scheduler: FakeScheduler,
   bridge?: Omit<HostBridgeOptions, 'canPark'>,
-): { page: TestClient; code: () => string; bridge: HostBridge } {
+  extra: { store?: RoomStore; restore?: string } = {},
+): {
+  page: TestClient;
+  code: () => string;
+  bridge: HostBridge;
+  relayed: RelayedHost;
+  /** 模擬房主頁面被關掉／重新整理：中繼連線突然消失（不做任何「正常離開」的收尾）。 */
+  kill: () => void;
+  /** 有指定 restore 時：從存檔還原的結果（要等它完成頁面才能握手）。 */
+  restored: Promise<{ ok: true } | { ok: false; reason: string }>;
+} {
+  const socket = relaySocket(url);
   const host = createRelayedHost({
     cardSet: testCardSet(),
     scheduler,
     timings: TIMINGS,
-    socket: relaySocket(url),
+    socket,
     ...(bridge === undefined ? {} : { bridge }),
+    ...(extra.store === undefined ? {} : { store: extra.store }),
   });
+  const restored =
+    extra.restore === undefined
+      ? Promise.resolve({ ok: true } as const)
+      : host.restore(extra.restore);
   let receive: (m: Parameters<ReturnType<typeof host.connectPage>>[0]) => void = () => undefined;
   let handler: (m: ToClient) => void = () => undefined;
   receive = host.connectPage((m) => {
@@ -200,7 +219,16 @@ function startHost(
     },
     terminate: () => undefined,
   });
-  return { page, code: () => host.bridge.code ?? '', bridge: host.bridge };
+  return {
+    page,
+    code: () => host.bridge.code ?? '',
+    bridge: host.bridge,
+    relayed: host,
+    kill: () => {
+      socket.pause?.();
+    },
+    restored,
+  };
 }
 
 function guestClient(url: string, code: string, options?: GuestEndpointOptions): TestClient {
@@ -443,4 +471,168 @@ describe('直連（M7）：中繼 → WebRTC 無縫切換與停泊', () => {
     await until(() => host.bridge.isParked && relaySockets() === 0); // 又停泊
     expect(app?.relay.roomCount).toBe(1);
   }, 30_000);
+});
+
+/** 等客人收到新的 open（連線被房主重新接上）後，用原本的 token 重新握手。 */
+async function rehello(g: TestClient, nickname: string, token: string, opensBefore: number) {
+  await until(() => g.events.filter((e) => e.t === 'open').length > opensBefore, 10_000);
+  return g.hello(nickname, token);
+}
+
+const opens = (c: TestClient): number => c.events.filter((e) => e.t === 'open').length;
+
+describe('房主重整接回（M8）', () => {
+  it('房主頁面消失後，新房主從存檔還原並重新登記：身分接回、同一局打完（純中繼）', async () => {
+    const url = await start();
+    const store = createMemoryRoomStore();
+    const clock1 = new FakeScheduler();
+    const host1 = startHost(url, clock1, undefined, { store });
+    await until(() => host1.page.events.some((e) => e.t === 'open'));
+    const hostHello = await host1.page.hello('房主');
+    await host1.page.request(EVENTS.roomCreate, {});
+    const code = host1.code();
+    const guests = [guestClient(url, code), guestClient(url, code)];
+    const tokens: string[] = [];
+    for (const [i, g] of guests.entries()) {
+      await until(() => g.events.some((e) => e.t === 'open'));
+      tokens.push((await g.hello(`客人${String(i + 1)}`))['sessionToken'] as string);
+      await g.request(EVENTS.roomJoin, { code });
+      await g.request(EVENTS.roomReady, { ready: true });
+    }
+    expect(await host1.page.request(EVENTS.roomStart, {})).toEqual({ ok: true });
+    for (let i = 0; i < 40; i += 1) {
+      clock1.advance(250);
+      await tick(2);
+    }
+    const versionBefore = host1.page.last<{ version: number }>(EVENTS.gameUpdate)?.version ?? 0;
+    expect(versionBefore).toBeGreaterThan(2);
+    await host1.relayed.flush();
+    expect(store.size).toBe(1);
+    expect(JSON.stringify(store.raw(code))).not.toContain(tokens[0] ?? 'x'); // 存檔裡只有 token 雜湊
+
+    // 房主「重新整理」：舊房主突然消失（不再推進它的時鐘），客人看到連線中斷
+    const guestOpens = guests.map(opens);
+    host1.kill();
+    await until(() => guests.every((g) => g.events.at(-1)?.t === 'closed'));
+
+    // 新頁面載入：從存檔還原、用同一個房號重新登記，再用原 token 握手
+    const clock2 = new FakeScheduler();
+    const host2 = startHost(url, clock2, undefined, { store, restore: code });
+    expect(await host2.restored).toEqual({ ok: true });
+    expect(host2.code()).toBe(code);
+    const back = await host2.page.hello('房主', hostHello['sessionToken'] as string);
+    expect(back['resumed']).toBe(true);
+    expect(back['playerId']).toBe(hostHello['playerId']);
+    expect(host2.page.room()?.phase).toBe('playing');
+    expect(host2.page.room()?.code).toBe(code);
+
+    for (const [i, g] of guests.entries()) {
+      const hello = await rehello(g, `客人${String(i + 1)}`, tokens[i] ?? '', guestOpens[i] ?? 0);
+      expect(hello['resumed']).toBe(true);
+    }
+    await until(() => guests.every((g) => g.room()?.phase === 'playing'));
+    await until(() => host2.page.room()?.players.every((p) => p.connected) === true);
+    // 還原後的版本與存檔一致（最多少掉重整當下尚未寫入的最後幾步，這裡有 flush 所以不會）
+    expect(host2.page.last<{ version: number }>(EVENTS.gameUpdate)?.version).toBe(versionBefore);
+
+    for (let i = 0; i < 3000 && host2.page.room()?.phase !== 'over'; i += 1) {
+      clock2.advance(250);
+      await tick(2);
+    }
+    expect(host2.page.room()?.phase).toBe('over');
+    await until(() => guests.every((g) => g.room()?.phase === 'over'));
+  }, 60_000);
+
+  it('沒有存檔：restore 回傳原因，不留下房間', async () => {
+    const url = await start();
+    const host = startHost(url, new FakeScheduler(), undefined, {
+      store: createMemoryRoomStore(),
+      restore: 'ZZZZZ',
+    });
+    expect(await host.restored).toEqual({ ok: false, reason: '沒有存檔' });
+    expect(host.bridge.code).toBeNull();
+    expect(app?.relay.roomCount).toBe(0);
+  });
+
+  it('房主主動離開（不是重新整理）：存檔被刪除，下次不會誤還原', async () => {
+    const url = await start();
+    const store = createMemoryRoomStore();
+    const host = startHost(url, new FakeScheduler(), undefined, { store });
+    await until(() => host.page.events.some((e) => e.t === 'open'));
+    await host.page.hello('房主');
+    await host.page.request(EVENTS.roomCreate, {});
+    await host.relayed.flush();
+    expect(store.size).toBe(1);
+    host.page.endpoint.post({ t: 'close' });
+    await tick(20);
+    await host.relayed.flush();
+    expect(store.size).toBe(0);
+  });
+
+  it('全員直連、房主停泊時房主頁面消失：客人直連中斷後等房主回來，新房主接回，繼續同一局', async () => {
+    const url = await start();
+    const store = createMemoryRoomStore();
+    const net: FakeDirectNetwork = createFakeDirectNetwork();
+    const clock1 = new FakeScheduler();
+    const bridgeClock = new FakeScheduler();
+    const host1 = startHost(
+      url,
+      clock1,
+      { direct: net.connector, scheduler: bridgeClock, parkRefreshMs: 24 * 3_600_000 },
+      { store },
+    );
+    await until(() => host1.page.events.some((e) => e.t === 'open'));
+    const hostHello = await host1.page.hello('房主');
+    await host1.page.request(EVENTS.roomCreate, {});
+    const code = host1.code();
+    const guestOptions: GuestEndpointOptions = {
+      direct: net.connector,
+      relayCloseDelayMs: 20,
+      joinRetryMs: 30,
+    };
+    const guests = [guestClient(url, code, guestOptions), guestClient(url, code, guestOptions)];
+    const tokens: string[] = [];
+    for (const [i, g] of guests.entries()) {
+      await until(() => g.events.some((e) => e.t === 'open'));
+      tokens.push((await g.hello(`客人${String(i + 1)}`))['sessionToken'] as string);
+      await g.request(EVENTS.roomJoin, { code });
+      await g.request(EVENTS.roomReady, { ready: true });
+    }
+    await until(() => net.pending === 2);
+    net.openAll();
+    await until(() => host1.bridge.directCount === 2);
+    await host1.page.request(EVENTS.roomStart, {});
+    await until(() => host1.bridge.isParked);
+    await until(() => relaySockets() === 0);
+    for (let i = 0; i < 20; i += 1) {
+      clock1.advance(250);
+      await tick(2);
+    }
+    await host1.relayed.flush();
+
+    // 房主頁面消失：直連一起斷掉（停泊中沒有中繼連線可關）
+    const guestOpens = guests.map(opens);
+    host1.kill();
+    net.dropAll();
+    await until(() => guests.every((g) => g.events.at(-1)?.t === 'closed'));
+    expect(app?.relay.roomCount).toBe(1); // 房號還在（停泊期限內），客人的加入被擋成 host_offline 後重試
+
+    const clock2 = new FakeScheduler();
+    const host2 = startHost(url, clock2, { direct: net.connector }, { store, restore: code });
+    expect(await host2.restored).toEqual({ ok: true });
+    expect((await host2.page.hello('房主', hostHello['sessionToken'] as string))['resumed']).toBe(
+      true,
+    );
+    for (const [i, g] of guests.entries()) {
+      const hello = await rehello(g, `客人${String(i + 1)}`, tokens[i] ?? '', guestOpens[i] ?? 0);
+      expect(hello['resumed']).toBe(true);
+    }
+    await until(() => host2.page.room()?.players.every((p) => p.connected) === true);
+    for (let i = 0; i < 3000 && host2.page.room()?.phase !== 'over'; i += 1) {
+      clock2.advance(250);
+      await tick(2);
+    }
+    expect(host2.page.room()?.phase).toBe('over');
+    await until(() => guests.every((g) => g.room()?.phase === 'over'));
+  }, 60_000);
 });

@@ -8,6 +8,7 @@ import {
   smartBot,
   legalActions,
   redactEvent,
+  replay,
   redactState,
   type Action,
   type CardDef,
@@ -19,6 +20,7 @@ import {
 } from '@kot/rules';
 import type { LoadedCardSet } from '@kot/cardsets/pure';
 import { pickMonsters } from './monsters.js';
+import { ReplicaError, type RoomReplica } from './replica.js';
 import {
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -87,6 +89,17 @@ export interface RoomDeps {
   onClose: (room: Room) => void;
   /** 成員被系統移出房間（例如大廳離線逾時）時通知管理者。 */
   onMemberRemoved: (playerId: string) => void;
+  /** 房間內容改變（成員、狀態或動作日誌）；用來做持久化。呼叫端自己去抖。 */
+  onChange?: (room: Room) => void;
+}
+
+/** 還原房間時的選項。 */
+export interface RestoreOptions {
+  /**
+   * 復原寬限（毫秒）：還原後所有真人都是離線，這段時間內輪到離線玩家時不要太快代打，
+   * 讓大家有時間重新連回來。
+   */
+  graceMs: number;
 }
 
 interface Member {
@@ -126,17 +139,25 @@ export class Room {
   private deadline: number | null = null;
   private closed = false;
 
+  /** 還原後的寬限截止時間（scheduler.now() 為基準）；0＝沒有。 */
+  private recoveryUntil = 0;
+
   constructor(
     readonly code: string,
     host: { id: string; nickname: string },
     private readonly cardSet: LoadedCardSet,
     private readonly deps: RoomDeps,
+    replica?: { data: RoomReplica; options: RestoreOptions },
   ) {
     const cards: Record<string, CardDef> = {};
     for (const card of cardSet.set.cards) cards[card.id] = card;
     this.env = { cards };
     this.cardsMessage = { cardSetId: cardSet.set.id, cards: cardSet.set.cards };
     this.hostId = host.id;
+    if (replica) {
+      this.loadReplica(replica.data, replica.options);
+      return;
+    }
     this.members.push({
       id: host.id,
       nickname: host.nickname,
@@ -149,6 +170,101 @@ export class Room {
       bot: false,
     });
     this.broadcastRoom();
+  }
+
+  /**
+   * 序列化成複本（純 JSON）。tokenHash 由呼叫端依身分資料補上。
+   * 大廳階段沒有種子與日誌。
+   */
+  toReplica(epoch = 0, tokenHashOf: (playerId: string) => string | null = () => null): RoomReplica {
+    return {
+      version: 1,
+      epoch,
+      code: this.code,
+      cardSetId: this.cardSet.set.id,
+      cardSetHash: this.cardSet.hash,
+      phase: this.phase,
+      hostId: this.hostId,
+      botSerial: this.botSerial,
+      members: this.members.map((m) => ({
+        id: m.id,
+        nickname: m.nickname,
+        bot: m.bot,
+        ready: m.ready,
+        away: m.away,
+        left: m.left,
+        seat: m.seat,
+        monster: m.monster,
+        tokenHash: m.bot ? null : tokenHashOf(m.id),
+      })),
+      seed: this.state ? this.seed : null,
+      config: this.config,
+      actions: [...this.log],
+    };
+  }
+
+  /** 從複本重建內部狀態。格式或內容不符就丟出 ReplicaError（呼叫端不會得到半成品房間）。 */
+  private loadReplica(data: RoomReplica, options: RestoreOptions): void {
+    if (data.version !== 1) throw new ReplicaError('不認識的複本版本');
+    if (data.code !== this.code) throw new ReplicaError('房號不符');
+    if (data.cardSetHash !== this.cardSet.hash) throw new ReplicaError('卡牌組與存檔不一致');
+    if (!data.members.some((m) => m.id === data.hostId)) throw new ReplicaError('找不到房主');
+
+    let state: GameState | null = null;
+    if (data.phase === 'lobby' && (data.seed !== null || data.actions.length > 0)) {
+      throw new ReplicaError('大廳階段不該有種子或動作日誌');
+    }
+    if (data.phase !== 'lobby') {
+      if (data.config === null || data.seed === null) throw new ReplicaError('缺少種子或設定');
+      try {
+        state = replay(data.config, data.seed, data.actions, this.env).state;
+      } catch (error) {
+        throw new ReplicaError(
+          `重放動作日誌失敗：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if ((state.phase === 'over') !== (data.phase === 'over')) {
+        throw new ReplicaError('存檔階段與重放結果不一致');
+      }
+    }
+
+    this.hostId = data.hostId;
+    this.phase = data.phase;
+    this.botSerial = data.botSerial;
+    this.state = state;
+    this.seed = data.seed ?? 0;
+    this.config = data.config;
+    this.log.push(...data.actions);
+    for (const m of data.members) {
+      this.members.push({
+        id: m.id,
+        nickname: m.nickname,
+        ready: m.ready,
+        // 還原後真人都還沒連回來；電腦永遠在線
+        connected: m.bot,
+        away: m.away,
+        left: m.left,
+        seat: m.seat,
+        monster: m.monster,
+        bot: m.bot,
+      });
+    }
+    const { scheduler, timings } = this.deps;
+    this.recoveryUntil = scheduler.now() + options.graceMs;
+    if (this.phase === 'lobby') {
+      for (const m of this.members) {
+        if (!m.bot && !m.left) this.armOfflineTimer(m.id);
+      }
+    } else if (this.phase === 'over') {
+      this.cancelOverTimer = scheduler.after(timings.overRoomMs, () => {
+        this.guarded(() => {
+          this.close();
+        });
+      });
+    } else {
+      this.armTurnTimer(); // 決策計時重新給一整段（不繼承舊的剩餘時間）
+    }
+    this.afterPresenceChange();
   }
 
   // ── 查詢 ───────────────────────────────────────────────
@@ -516,6 +632,7 @@ export class Room {
   private commit(action: Action, state: GameState, events: GameEvent[]): void {
     this.state = state;
     this.log.push(action);
+    this.changed();
     if (state.phase === 'over') {
       this.phase = 'over';
       this.cancelTurn();
@@ -561,7 +678,7 @@ export class Room {
     const delay = actor.bot
       ? timings.botMs
       : offline
-        ? timings.awayOfflineMs
+        ? Math.max(timings.awayOfflineMs, this.recoveryUntil - this.deps.scheduler.now())
         : actor.away
           ? timings.awayConnectedMs
           : state.phase === 'prompt'
@@ -697,7 +814,12 @@ export class Room {
     this.deps.onClose(this);
   }
 
+  private changed(): void {
+    if (!this.closed) this.deps.onChange?.(this);
+  }
+
   private broadcastRoom(): void {
+    this.changed();
     const snapshot = this.snapshot();
     for (const member of this.members) {
       if (!member.left && !member.bot) this.deps.publisher.roomState(member.id, snapshot);

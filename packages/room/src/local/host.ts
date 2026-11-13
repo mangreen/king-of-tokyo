@@ -14,6 +14,9 @@ export interface LocalHostOptions {
   /** 測試可注入假時鐘；預設用真實計時器。 */
   scheduler?: Scheduler;
   timings?: Timings;
+  /** 房間內容改變／關閉時通知（持久化用）。 */
+  onRoomChange?: (code: string) => void;
+  onRoomClosed?: (code: string) => void;
 }
 
 export interface LocalHost {
@@ -31,6 +34,8 @@ export function createLocalHost(options: LocalHostOptions): LocalHost {
     maxRooms: 1,
     idleKickMs: 0,
     ...(options.timings === undefined ? {} : { timings: options.timings }),
+    ...(options.onRoomChange === undefined ? {} : { onRoomChange: options.onRoomChange }),
+    ...(options.onRoomClosed === undefined ? {} : { onRoomClosed: options.onRoomClosed }),
   });
   let serial = 0;
 

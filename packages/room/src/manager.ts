@@ -1,7 +1,15 @@
 import type { AckErrorCode } from '@kot/protocol';
 import type { Seed } from '@kot/rules';
 import type { LoadedCardSet } from '@kot/cardsets/pure';
-import { Room, type Publisher, type Result, type RoomDeps, type Timings } from './room.js';
+import {
+  Room,
+  type Publisher,
+  type RestoreOptions,
+  type Result,
+  type RoomDeps,
+  type Timings,
+} from './room.js';
+import { ReplicaError, type RoomReplica } from './replica.js';
 import { generateRoomCode } from './roomCode.js';
 import type { Scheduler } from './scheduler.js';
 
@@ -16,6 +24,10 @@ export interface ManagerDeps {
   /** 可用的卡牌組（id → 內容）與預設值。 */
   cardSets: ReadonlyMap<string, LoadedCardSet>;
   defaultCardSetId: string;
+  /** 房間內容改變（成員、狀態、動作日誌）；用來做持久化。 */
+  onRoomChange?: (room: Room) => void;
+  /** 房間關閉（對局結束後逾時、沒人了…）。 */
+  onRoomClosed?: (room: Room) => void;
 }
 
 export type CreateResult = { ok: true; code: string } | { ok: false; code: AckErrorCode };
@@ -90,6 +102,47 @@ export class RoomManager {
     return { ok: true, code };
   }
 
+  /**
+   * 從複本還原一個房間（房主重新整理後接回）。成員都先視為離線，等他們用 token 重新連回來。
+   * 失敗（卡牌組不存在或不一致、日誌無法重放、房號衝突、已達上限）時不會留下任何東西。
+   */
+  restoreRoom(
+    replica: RoomReplica,
+    options: RestoreOptions,
+  ): { ok: true } | { ok: false; reason: string } {
+    if (this.rooms.has(replica.code)) return { ok: false, reason: '房號已存在' };
+    if (this.rooms.size >= this.deps.maxRooms) return { ok: false, reason: '房間數已達上限' };
+    const cardSet = this.deps.cardSets.get(replica.cardSetId);
+    if (!cardSet) return { ok: false, reason: `找不到卡牌組 ${replica.cardSetId}` };
+    const host = replica.members.find((m) => m.id === replica.hostId);
+    if (!host) return { ok: false, reason: '找不到房主' };
+    for (const m of replica.members) {
+      if (!m.bot && !m.left && this.playerRoom.has(m.id))
+        return { ok: false, reason: '玩家已在其他房間' };
+    }
+    let room: Room;
+    try {
+      room = new Room(
+        replica.code,
+        { id: host.id, nickname: host.nickname },
+        cardSet,
+        this.roomDeps(),
+        { data: replica, options },
+      );
+    } catch (error) {
+      if (error instanceof ReplicaError) return { ok: false, reason: error.message };
+      throw error;
+    }
+    this.rooms.set(replica.code, room);
+    for (const id of room.memberIds()) this.playerRoom.set(id, replica.code);
+    return { ok: true };
+  }
+
+  /** 用房號取得房間。 */
+  room(code: string): Room | undefined {
+    return this.rooms.get(code);
+  }
+
   joinRoom(code: string, player: Identity): Result {
     if (this.playerRoom.has(player.id)) return { ok: false, code: 'already_in_room' };
     const room = this.rooms.get(code);
@@ -120,8 +173,10 @@ export class RoomManager {
         this.playerRoom.delete(playerId);
         this.deps.publisher.roomState(playerId, null);
       },
+      ...(this.deps.onRoomChange === undefined ? {} : { onChange: this.deps.onRoomChange }),
       onClose: (room) => {
         this.rooms.delete(room.code);
+        this.deps.onRoomClosed?.(room);
         for (const id of room.memberIds()) {
           this.playerRoom.delete(id);
           this.deps.publisher.roomState(id, null);
