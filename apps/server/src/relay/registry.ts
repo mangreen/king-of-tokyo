@@ -8,9 +8,12 @@ import {
   RELAY_EVENTS,
   RELAY_MAX_DATA_BYTES,
   RELAY_PROTOCOL_VERSION,
+  RelayHandoverSchema,
   RelayHostOpenSchema,
   RelayJoinSchema,
   RelayKickSchema,
+  RelaySuccessionSchema,
+  RelayTakeoverSchema,
   RelayToGuestSchema,
   RelayToHostSchema,
   type RelayClosedReason,
@@ -19,8 +22,10 @@ import {
   type RelayJoinAck,
   type RelayParkAck,
   type RelayServerEvents,
+  type RelaySimpleAck,
+  type RelayTakeoverAck,
 } from '@kot/protocol';
-import { generateRoomCode, TokenBucket, type Scheduler } from '@kot/room';
+import { generateRoomCode, hashToken, TokenBucket, type Scheduler } from '@kot/room';
 
 export interface RelayConn {
   readonly id: string;
@@ -41,6 +46,14 @@ export interface RelayOptions {
   hostGraceMs: number;
   /** 房主主動「停泊」（所有客人都已直連）後保留房號多久（毫秒）；期間房主可隨時接回，逾時關房。 */
   parkTtlMs: number;
+  /**
+   * 房主轉移的時序（毫秒）：房主不見之後，第 k 順位要等「寬限＋(k−1)×間隔」才能接手。
+   * 由伺服器的時鐘判定（客人自己也會排程，但以伺服器為準，避免兩個人同時成為房主）。
+   */
+  successionGraceMs?: number;
+  successionStaggerMs?: number;
+  /** 計畫性交接：指定後備要在多久內接手，逾時就當作沒發生（原房主繼續）。 */
+  handoverTtlMs?: number;
   /** 單則訊息 data 的大小上限（序列化後位元組）。 */
   maxDataBytes?: number;
   /** 每個房間每秒可轉發的位元組，以及瞬間上限。 */
@@ -64,6 +77,18 @@ interface Room {
   guests: Map<string, RelayConn>;
   bytes: TokenBucket;
   cancelGrace: () => void;
+  /** 房主世代：每次轉移加 1。 */
+  epoch: number;
+  /** 後備順序：接手金鑰的雜湊（第 1 個是第一順位）。 */
+  succession: string[];
+  /** 房主意外斷線的時間（房主在線上或主動停泊時為 null）。 */
+  lostAt: number | null;
+  /** 停泊中的房間：第一次有人（直連斷掉的客人）來找房主卻找不到的時間；房主回來就清除。 */
+  suspectSince: number | null;
+  /** 計畫性交接：房主指定的後備（金鑰雜湊）與期限。 */
+  handover: { target: string; until: number } | null;
+  /** 已被取代的房主金鑰（舊房主回來時回報 superseded，而不是一般的金鑰錯誤）。 */
+  retiredKeys: string[];
 }
 
 interface Peer {
@@ -73,6 +98,14 @@ interface Peer {
   lastActive: number;
   cancelIdle: () => void;
 }
+
+/** 預設：房主不見 10 秒後第一順位接手（給房主重新整理接回的時間），之後每順位多等 3 秒。 */
+export const SUCCESSION_GRACE_MS = 10_000;
+export const SUCCESSION_STAGGER_MS = 3_000;
+export const HANDOVER_TTL_MS = 30_000;
+/** 房主不見之後，房間至少保留到最後一順位的接手時間再多這麼久。 */
+const SUCCESSION_MARGIN_MS = 10_000;
+const MAX_RETIRED_KEYS = 8;
 
 const HOST_BURST = 400;
 const HOST_PER_SECOND = 200;
@@ -122,7 +155,7 @@ export class RelayRegistry {
       };
     }
     if (peer.role) return { ok: false, code: 'invalid_message' };
-    const { code, hostKey, restore } = parsed.data;
+    const { code, hostKey, restore, epoch } = parsed.data;
 
     if (code !== undefined || hostKey !== undefined) {
       // 接回：必須兩者都帶，且金鑰正確
@@ -131,11 +164,19 @@ export class RelayRegistry {
         // 登記遺失（伺服器重啟）：用房主手上的房號與金鑰重新登記
         if (this.rooms.size >= this.options.maxRooms) return { ok: false, code: 'server_full' };
         room = this.registerRoom(conn, code, hostKey);
+        room.epoch = epoch ?? 0;
       }
       if (!room || hostKey === undefined) return { ok: false, code: 'room_not_found' };
-      if (room.hostKey !== hostKey) return { ok: false, code: 'bad_host_key' };
+      if (room.hostKey !== hostKey) {
+        return {
+          ok: false,
+          code: room.retiredKeys.includes(hostKey) ? 'superseded' : 'bad_host_key',
+        };
+      }
       room.cancelGrace();
       room.parked = false;
+      room.lostAt = null;
+      room.suspectSince = null;
       const previous = room.host;
       room.host = conn;
       peer.role = { kind: 'host', room };
@@ -149,7 +190,7 @@ export class RelayRegistry {
         guest.send(RELAY_EVENTS.hostStatus, { online: true });
       // 房主可能漏掉斷線期間的進出：把目前所有客人再告知一次（橋接端對已知的客人會忽略）
       for (const guestId of room.guests.keys()) conn.send(RELAY_EVENTS.guestJoined, { guestId });
-      return { ok: true, code: room.code, hostKey: room.hostKey };
+      return { ok: true, code: room.code, hostKey: room.hostKey, epoch: room.epoch };
     }
 
     if (this.rooms.size >= this.options.maxRooms) return { ok: false, code: 'server_full' };
@@ -161,7 +202,7 @@ export class RelayRegistry {
     const room = this.registerRoom(conn, newCode, this.options.randomHex(16));
     peer.role = { kind: 'host', room };
     this.promoteToHost(peer);
-    return { ok: true, code: room.code, hostKey: room.hostKey };
+    return { ok: true, code: room.code, hostKey: room.hostKey, epoch: room.epoch };
   }
 
   private registerRoom(conn: RelayConn, code: string, hostKey: string): Room {
@@ -178,6 +219,12 @@ export class RelayRegistry {
         () => scheduler.now(),
       ),
       cancelGrace: () => undefined,
+      epoch: 0,
+      succession: [],
+      lostAt: null,
+      suspectSince: null,
+      handover: null,
+      retiredKeys: [],
     };
     this.rooms.set(code, room);
     return room;
@@ -198,7 +245,11 @@ export class RelayRegistry {
     const room = this.rooms.get(parsed.data.code);
     if (!room) return { ok: false, code: 'room_not_found' };
     // 停泊中的房間不接新客人（房主不在中繼上，也沒人需要加入；有人斷線時房主會自己回來）
-    if (room.host === null || room.parked) return { ok: false, code: 'host_offline' };
+    if (room.host === null || room.parked) {
+      // 停泊中的房間有人來找房主卻找不到（通常是他的直連斷了）：從這時起開始計「房主不見」的時間
+      if (room.parked) room.suspectSince ??= this.options.scheduler.now();
+      return { ok: false, code: 'host_offline' };
+    }
     if (room.guests.size >= this.options.maxGuests) return { ok: false, code: 'room_full' };
     this.guestSerial += 1;
     const guestId = `g${String(this.guestSerial)}`;
@@ -283,11 +334,115 @@ export class RelayRegistry {
     for (const guest of room.guests.values())
       guest.send(RELAY_EVENTS.hostStatus, { online: false });
     room.cancelGrace();
-    // 主動停泊的房間保留較久（房主在等直連的客人出狀況時才會回來）；意外斷線只給短暫寬限
-    const keepMs = room.parked ? this.options.parkTtlMs : this.options.hostGraceMs;
+    // 主動停泊的房間保留較久（房主在等直連的客人出狀況時才會回來）；意外斷線只給短暫寬限，
+    // 但有後備房主時至少要撐到最後一順位的接手時間
+    if (!room.parked) room.lostAt = this.options.scheduler.now();
+    const keepMs = room.parked
+      ? this.options.parkTtlMs
+      : Math.max(this.options.hostGraceMs, this.successionWindowMs(room));
     room.cancelGrace = this.options.scheduler.after(keepMs, () => {
       this.closeRoom(room, 'host_left');
     });
+  }
+
+  // ── 房主轉移 ──────────────────────────────────────
+
+  /** 房主登記後備順序（接手金鑰的雜湊）。每次順序改變就重送一次，整份取代。 */
+  succession(conn: RelayConn, payload: unknown): RelaySimpleAck {
+    const peer = this.touch(conn);
+    if (!peer || peer.role?.kind !== 'host') return { ok: false, code: 'not_host' };
+    const parsed = RelaySuccessionSchema.safeParse(payload);
+    if (!parsed.success) return { ok: false, code: 'invalid_message' };
+    peer.role.room.succession = [...new Set(parsed.data.order)];
+    return { ok: true };
+  }
+
+  /** 房主指定某位後備立刻接手（計畫性交接）。這位在期限內出示金鑰，就不必等寬限期、也不必等房主離線。 */
+  handover(conn: RelayConn, payload: unknown): RelaySimpleAck {
+    const peer = this.touch(conn);
+    if (!peer || peer.role?.kind !== 'host') return { ok: false, code: 'not_host' };
+    const parsed = RelayHandoverSchema.safeParse(payload);
+    if (!parsed.success) return { ok: false, code: 'invalid_message' };
+    const { room } = peer.role;
+    if (!room.succession.includes(parsed.data.target)) return { ok: false, code: 'bad_takeover' };
+    room.handover = {
+      target: parsed.data.target,
+      until: this.options.scheduler.now() + (this.options.handoverTtlMs ?? HANDOVER_TTL_MS),
+    };
+    return { ok: true };
+  }
+
+  /**
+   * 後備房主要求成為新房主。伺服器只驗證「金鑰雜湊在登記的順序裡」與「時間到了」，不看任何遊戲內容：
+   * - 故障接手：房主不在線上（意外斷線，或停泊中有人找不到他），且已超過「寬限＋(順位−1)×間隔」。
+   * - 計畫性交接：房主事先指定了這位（期限內），立刻成功，原房主的連線被取代。
+   * 成功就換新的房主金鑰、世代加 1；舊金鑰之後只會得到 superseded。
+   */
+  takeover(conn: RelayConn, payload: unknown): RelayTakeoverAck {
+    const peer = this.touch(conn);
+    if (!peer || peer.role) return { ok: false, code: 'invalid_message' };
+    if (!peer.bucket.take()) return { ok: false, code: 'rate_limited' };
+    const parsed = RelayTakeoverSchema.safeParse(payload);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        code: hasOtherVersion(payload) ? 'protocol_mismatch' : 'invalid_message',
+      };
+    }
+    const room = this.rooms.get(parsed.data.code);
+    if (!room) return { ok: false, code: 'room_not_found' };
+    const hash = hashToken(parsed.data.key);
+    const index = room.succession.indexOf(hash);
+    if (index < 0) return { ok: false, code: 'bad_takeover' };
+
+    const now = this.options.scheduler.now();
+    const planned =
+      room.handover !== null && room.handover.target === hash && now <= room.handover.until;
+    if (!planned) {
+      const lost = room.lostAt ?? (room.parked ? room.suspectSince : null);
+      if (room.host !== null && !room.parked) return { ok: false, code: 'host_online' };
+      if (lost === null) return { ok: false, code: 'host_online' };
+      const wait = this.takeoverWaitMs(index);
+      const waited = now - lost;
+      if (waited < wait) return { ok: false, code: 'too_early', retryInMs: wait - waited };
+    }
+
+    // 成立：取代房主
+    const previous = room.host;
+    room.retiredKeys = [...room.retiredKeys, room.hostKey].slice(-MAX_RETIRED_KEYS);
+    room.hostKey = this.options.randomHex(16);
+    room.epoch += 1;
+    room.succession = [];
+    room.handover = null;
+    room.lostAt = null;
+    room.suspectSince = null;
+    room.parked = false;
+    room.cancelGrace();
+    room.host = conn;
+    peer.role = { kind: 'host', room };
+    this.promoteToHost(peer);
+    if (previous && previous.id !== conn.id) {
+      this.detachRole(previous);
+      previous.send(RELAY_EVENTS.closed, { reason: 'superseded' });
+      previous.close();
+    }
+    for (const guest of room.guests.values()) guest.send(RELAY_EVENTS.hostStatus, { online: true });
+    for (const guestId of room.guests.keys()) conn.send(RELAY_EVENTS.guestJoined, { guestId });
+    return { ok: true, code: room.code, hostKey: room.hostKey, epoch: room.epoch };
+  }
+
+  /** 第 index（從 0 起算）順位要等多久才能接手。 */
+  private takeoverWaitMs(index: number): number {
+    return (
+      (this.options.successionGraceMs ?? SUCCESSION_GRACE_MS) +
+      index * (this.options.successionStaggerMs ?? SUCCESSION_STAGGER_MS)
+    );
+  }
+
+  /** 房主不見之後，房間要保留多久才能讓所有後備都有機會接手（沒有後備就是 0）。 */
+  private successionWindowMs(room: Room): number {
+    if (room.succession.length === 0) return 0;
+    return this.takeoverWaitMs(room.succession.length - 1) + SUCCESSION_MARGIN_MS;
   }
 
   // ── 內部 ──────────────────────────────────────────
