@@ -472,3 +472,79 @@ describe('角色切換端點（M9-4）', () => {
     expect(cluster.relay.registry.roomCount).toBe(1);
   });
 });
+
+describe('故障注入（M9-6）', () => {
+  it('大廳階段房主消失：新房主接手後可以繼續準備、開始並打完', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const a = await cluster.roleNode(host.code(), '甲');
+    const b = await cluster.roleNode(host.code(), '乙');
+    await killHost(cluster, host);
+    await cluster.advance(11_000);
+    expect(a.endpoint.role).toBe('host');
+    await a.rehello();
+    await b.rehello();
+    await cluster.advance(1_000);
+    const state = a.page.room() as {
+      hostId: string;
+      players: { id: string; connected: boolean }[];
+    };
+    // 原房主座位離線：房間裡的「房主」權限轉給在線的人，他們可以開始遊戲
+    const nodes = [a, b];
+    const owner = nodes.find((n) => n.page.playerId === state.hostId);
+    expect(owner, '房主權限轉給了在線的玩家').toBeDefined();
+    const other = nodes.find((n) => n !== owner) as (typeof nodes)[number];
+    await other.page.request(EVENTS.roomReady, { ready: true });
+    expect(await (owner as (typeof nodes)[number]).page.request(EVENTS.roomStart, {})).toEqual({
+      ok: true,
+    });
+    await cluster.advance(300_000);
+    const phases = a.page.events.flatMap((m) =>
+      m.t === 'emit' && m.event === 'room:state'
+        ? [(m.payload as { room: { phase: string } | null }).room?.phase ?? 'closed']
+        : [],
+    );
+    expect(phases).toContain('over');
+  });
+
+  it('在對局的各個時間點殺掉房主：接手後都能打完（複本只會落後、不會壞）', async () => {
+    for (const killAt of [0, 400, 1_300, 2_900, 6_100, 12_000]) {
+      const cluster = new Cluster();
+      const host = await cluster.createdHost();
+      const a = await cluster.roleNode(host.code(), '甲');
+      const b = await cluster.roleNode(host.code(), '乙');
+      await host.page.request(EVENTS.roomReady, { ready: true });
+      await host.page.request(EVENTS.roomStart, {});
+      await cluster.advance(killAt);
+      const before = host.relayed.local.host.exportRoom(host.code())?.actions.length ?? 0;
+      await killHost(cluster, host);
+      await cluster.advance(11_000);
+      expect(a.endpoint.role, `killAt=${String(killAt)}`).toBe('host');
+      await a.rehello();
+      await b.rehello();
+      const next = a.hosts[0] as HostNode;
+      const restored = next.relayed.local.host.exportRoom(host.code())?.actions.length ?? 0;
+      // 房主消失前最後一次同步之前的動作一定在；允許最後幾個還沒傳到
+      expect(restored, `killAt=${String(killAt)}`).toBeGreaterThanOrEqual(Math.max(0, before - 3));
+      await cluster.advance(300_000);
+      const phases = a.page.events.flatMap((m) =>
+        m.t === 'emit' && m.event === 'room:state'
+          ? [(m.payload as { room: { phase: string } | null }).room?.phase ?? 'closed']
+          : [],
+      );
+      expect(phases, `killAt=${String(killAt)}`).toContain('over');
+    }
+  });
+
+  it('所有後備都不見：房間在順序視窗結束後關閉，不會留下殭屍房', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const a = await cluster.roleNode(host.code(), '甲');
+    const b = await cluster.roleNode(host.code(), '乙');
+    await killHost(cluster, host);
+    cluster.kill(a.scheduler);
+    cluster.kill(b.scheduler);
+    await cluster.advance(120_000);
+    expect(cluster.relay.registry.roomCount).toBe(0);
+  });
+});

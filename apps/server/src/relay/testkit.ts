@@ -203,7 +203,6 @@ export class Cluster {
     const host = this.host({ noPage: true });
     const hosts: HostNode[] = [host];
     const roles: string[] = [];
-    let code = '';
     const endpoint = createRoleEndpoint<HostSide>({
       initial: hostSideOf(host.relayed),
       scheduler,
@@ -225,7 +224,7 @@ export class Cluster {
     await this.settle();
     await page.hello(nickname);
     await page.request(EVENTS.roomCreate, {});
-    code = host.code();
+    const code = host.code();
     return {
       endpoint,
       page,
