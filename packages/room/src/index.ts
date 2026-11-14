@@ -71,5 +71,11 @@ export type {
 } from './failover/standby.js';
 export type { RelaySocket } from './relay/socket.js';
 
-export { createMemoryRoomStore, HostSaveSchema, parseHostSave, RoomSaver } from './persist.js';
+export {
+  createMemoryRoomStore,
+  HostSaveSchema,
+  parseHostSave,
+  RoomReplicaSchema,
+  RoomSaver,
+} from './persist.js';
 export type { HostSave, RoomStore } from './persist.js';

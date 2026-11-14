@@ -196,6 +196,48 @@ export class Cluster {
     return node;
   }
 
+  /** 一開始就是房主的角色切換節點（網頁的房主就是這樣）：建房後被取代時會降級成客人。 */
+  async roleHost(nickname = '房主'): Promise<RoleNode & { host: HostNode; code: string }> {
+    const scheduler = new FakeScheduler();
+    this.alive.add(scheduler);
+    const host = this.host({ noPage: true });
+    const hosts: HostNode[] = [host];
+    const roles: string[] = [];
+    let code = '';
+    const endpoint = createRoleEndpoint<HostSide>({
+      initial: hostSideOf(host.relayed),
+      scheduler,
+      createGuest: (joinCode, hooks, resuming) =>
+        createGuestEndpoint(this.relay.socket(), joinCode, { scheduler, resuming, ...hooks }),
+      createHost: () => {
+        const node = this.host({ noPage: true });
+        hosts.push(node);
+        return hostSideOf(node.relayed);
+      },
+      onRole: (info) => {
+        roles.push(`${info.role}:${info.standby}`);
+      },
+    });
+    const page = new Page((m) => {
+      endpoint.post(m);
+    }, this.settle);
+    endpoint.listen(page.receive);
+    await this.settle();
+    await page.hello(nickname);
+    await page.request(EVENTS.roomCreate, {});
+    code = host.code();
+    return {
+      endpoint,
+      page,
+      scheduler,
+      hosts,
+      roles,
+      rehello: () => page.hello(nickname, page.token),
+      host,
+      code,
+    };
+  }
+
   /** 客人節點：連到房號、握手、加入房間、準備。 */
   async guest(
     code: string,
@@ -256,8 +298,8 @@ export class Cluster {
       code,
       scheduler,
       ...extra,
-      createGuest: (hooks) =>
-        createGuestEndpoint(this.relay.socket(), code, { scheduler, ...hooks }),
+      createGuest: (joinCode, hooks, resuming) =>
+        createGuestEndpoint(this.relay.socket(), joinCode, { scheduler, resuming, ...hooks }),
       createHost: () => {
         const node = this.host({ noPage: true });
         hosts.push(node);

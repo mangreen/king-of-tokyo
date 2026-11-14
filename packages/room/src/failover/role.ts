@@ -57,10 +57,17 @@ export interface RoleInfo {
 }
 
 export interface RoleEndpointOptions<H extends HostSide> {
-  code: string;
+  /** 房號：客人要加入的房間；房主可以不給（開房後從房間狀態得知），重新整理後接回的房主則要給。 */
+  code?: string;
+  /** 一開始就是房主：已建好、已（或即將）登記的房主。 */
+  initial?: H;
   scheduler: Scheduler;
-  /** 建立（或重建）客人端點；hooks 要原樣併入端點選項。 */
-  createGuest: (hooks: Pick<GuestEndpointOptions, 'onReplica' | 'onHostState'>) => GuestEndpoint;
+  /** 建立（或重建）客人端點；hooks 要原樣併入端點選項；resuming＝降級後重新加入。 */
+  createGuest: (
+    code: string,
+    hooks: Pick<GuestEndpointOptions, 'onReplica' | 'onHostState'>,
+    resuming: boolean,
+  ) => GuestEndpoint;
   /** 建立一個新的房主（尚未登記；接手流程才會 prepare／takeover）。 */
   createHost: () => H;
   onRole?: (info: RoleInfo) => void;
@@ -88,6 +95,9 @@ export function createRoleEndpoint<H extends HostSide>(
   let host: H | null = null;
   let hostReceive: ((message: ToHost) => void) | null = null;
   let playerId: string | undefined;
+  let code: string | undefined = options.code;
+  /** 初始房主要等頁面接上 listen 才連（open 訊息才不會漏掉）。 */
+  let connectInitial = false;
   /** 頁面目前是否處於「已連上」。切換角色前若是連上的，要先讓它看到中斷。 */
   let pageOpen = false;
 
@@ -110,6 +120,9 @@ export function createRoleEndpoint<H extends HostSide>(
     else if (message.t === 'emit' && message.event === 'server:hello') {
       const id = (message.payload as { playerId?: unknown } | null)?.playerId;
       if (typeof id === 'string') playerId = id;
+    } else if (message.t === 'emit' && message.event === 'room:state') {
+      const room = (message.payload as { room?: { code?: unknown } | null } | null)?.room;
+      if (typeof room?.code === 'string') code = room.code;
     }
     handler(message);
   };
@@ -120,7 +133,7 @@ export function createRoleEndpoint<H extends HostSide>(
 
   const startGuest = (resuming: boolean): void => {
     const current = new Standby<H>({
-      code: options.code,
+      code: code as string,
       playerId: () => playerId,
       scheduler: options.scheduler,
       create: options.createHost,
@@ -135,14 +148,18 @@ export function createRoleEndpoint<H extends HostSide>(
       ...(options.staggerMs === undefined ? {} : { staggerMs: options.staggerMs }),
     });
     standby = current;
-    const endpoint = options.createGuest({
-      onReplica: (sync) => {
-        current.onReplica(sync);
+    const endpoint = options.createGuest(
+      code as string,
+      {
+        onReplica: (sync) => {
+          current.onReplica(sync);
+        },
+        onHostState: (state) => {
+          current.onHostState(state);
+        },
       },
-      onHostState: (state) => {
-        current.onHostState(state);
-      },
-    });
+      resuming,
+    );
     guest = endpoint;
     endpoint.listen(toPage);
     if (resuming) notify();
@@ -164,16 +181,14 @@ export function createRoleEndpoint<H extends HostSide>(
     interruptPage(); // 頁面先看到中斷，再看到新連線，才會用 token 重新握手
     role = 'host';
     epoch = newEpoch;
-    host = target;
-    target.onSuperseded(() => {
-      if (host === target) demote();
-    });
+    wireHost(target);
     hostReceive = target.connectPage(toPage);
     notify();
   };
 
   /** 被新房主取代：丟掉本機的房間，重新以客人身分加入。 */
   const demote = (): void => {
+    if (code === undefined) return; // 還沒開過房就不可能被取代
     const old = host;
     host = null;
     hostReceive = null;
@@ -183,7 +198,20 @@ export function createRoleEndpoint<H extends HostSide>(
     startGuest(true);
   };
 
-  startGuest(false);
+  const wireHost = (target: H): void => {
+    host = target;
+    target.onSuperseded(() => {
+      if (host === target) demote();
+    });
+  };
+
+  if (options.initial) {
+    role = 'host';
+    wireHost(options.initial);
+    connectInitial = true;
+  } else {
+    startGuest(false);
+  }
 
   return {
     get role() {
@@ -197,6 +225,11 @@ export function createRoleEndpoint<H extends HostSide>(
     },
     listen(next) {
       handler = next;
+      if (connectInitial && host !== null) {
+        connectInitial = false;
+        hostReceive = host.connectPage(toPage);
+        notify();
+      }
     },
     async handover(targetId) {
       const current = host;

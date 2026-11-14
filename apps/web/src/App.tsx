@@ -8,6 +8,8 @@ import { createClientOptions } from './net/config.js';
 import { describePath, usePathStatus } from './net/pathStatus.js';
 import { describeQuality, useQuality } from './net/quality.js';
 import { setRestoreStatus, useRestoreStatus } from './net/restoreStatus.js';
+import { roleChangeNotice, useRoleStatus, type RoleStatus } from './net/roleStatus.js';
+import { RolePanel } from './views/RolePanel.js';
 import { session } from './session.js';
 import { useGameClient } from './useGameClient.js';
 import { useWakeLock } from './useWakeLock.js';
@@ -23,6 +25,15 @@ export function App() {
   const path = usePathStatus();
   const restored = useRestoreStatus();
   const quality = useQuality();
+  const role = useRoleStatus();
+  const [roleNotice, setRoleNotice] = useState<string | null>(null);
+  const previousRole = useRef<RoleStatus>(null);
+  useEffect(() => {
+    if (role === null) return;
+    const message = roleChangeNotice(previousRole.current, role);
+    previousRole.current = role;
+    if (message !== null) setRoleNotice(message);
+  }, [role]);
   const { state } = client;
   const { connection, room, game } = state;
 
@@ -46,14 +57,15 @@ export function App() {
     if (roomCode !== null) {
       inRoom.current = true;
       session.setP2pRoom({
-        role: clientOptions.target.code === null ? 'host' : 'guest',
+        // 房主換人後以目前的角色為準（接手的客人重新整理時要從存檔還原成房主）
+        role: role !== null ? role.role : clientOptions.target.code === null ? 'host' : 'guest',
         code: roomCode,
       });
     } else if (inRoom.current) {
       inRoom.current = false;
       session.setP2pRoom(null);
     }
-  }, [p2p, roomCode]);
+  }, [p2p, roomCode, role]);
 
   // 房主重新整理但存檔不能用：忘掉舊房間，當作全新的房主（畫面會顯示原因）
   useEffect(() => {
@@ -156,6 +168,9 @@ export function App() {
       {p2p && (
         <div className="notice" role="status" data-testid="p2p-banner">
           房主模式：房間在房主的瀏覽器裡執行，伺服器負責登記房號、協助玩家建立直連，直連不通時轉送訊息。房主重新整理頁面時會從瀏覽器存檔接回同一局；關閉分頁或主動離開，這局才會結束。
+          {role !== null && room !== null && 'playerId' in connection && (
+            <RolePanel role={role} room={room} selfId={connection.playerId} />
+          )}
           {path !== null && <div data-testid="path-status">{describePath(path)}</div>}
         </div>
       )}
@@ -172,6 +187,19 @@ export function App() {
       {connection.status === 'reconnecting' && (
         <div className="notice" role="status">
           連線中斷，重新連線中…（對局由系統暫時代打，連上後會接回你的座位）
+        </div>
+      )}
+      {roleNotice !== null && (
+        <div className="notice" role="alert" data-testid="role-notice">
+          {roleNotice}{' '}
+          <button
+            className="link"
+            onClick={() => {
+              setRoleNotice(null);
+            }}
+          >
+            關閉
+          </button>
         </div>
       )}
       {restored !== null && !restored.ok && (

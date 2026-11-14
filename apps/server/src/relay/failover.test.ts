@@ -449,4 +449,26 @@ describe('角色切換端點（M9-4）', () => {
     expect(a.endpoint.role).toBe('guest');
     expect(host.relayed.bridge.credentials).not.toBeNull();
   });
+
+  it('一開始就是房主的角色端點：被取代後降級成客人，以原 token 接回', async () => {
+    const cluster = new Cluster();
+    const h = await cluster.roleHost('原房主');
+    const a = await cluster.roleNode(h.code, '甲');
+    await cluster.roleNode(h.code, '乙');
+    await h.page.request(EVENTS.roomReady, { ready: true });
+    await h.page.request(EVENTS.roomStart, {});
+    await cluster.advance(1_000);
+    expect(h.endpoint.role).toBe('host');
+
+    h.host.socket.kill(); // 分隔
+    await cluster.advance(11_000);
+    expect(a.endpoint.role).toBe('host');
+    await a.rehello();
+    h.host.socket.connect?.();
+    await cluster.advance(3_000);
+    expect(h.endpoint.role).toBe('guest');
+    await h.rehello();
+    expect(h.page.last('server:hello')).toMatchObject({ resumed: true });
+    expect(cluster.relay.registry.roomCount).toBe(1);
+  });
 });
