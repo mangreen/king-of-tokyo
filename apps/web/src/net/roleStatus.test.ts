@@ -15,7 +15,7 @@ describe('角色顯示', () => {
     expect(roleChangeNotice(null, host)).toBeNull();
     expect(roleChangeNotice(guest, guest)).toBeNull();
     expect(roleChangeNotice(guest, { ...guest, rank: 2 })).toBeNull();
-    expect(roleChangeNotice(guest, host)).toContain('接手');
+    expect(roleChangeNotice(guest, host)).toContain('房主已換成你');
     expect(roleChangeNotice(host, guest)).toContain('換人');
   });
 });
