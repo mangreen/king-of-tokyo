@@ -6,6 +6,7 @@
  * 存檔含種子（牌庫與骰子的全部資訊）與房主金鑰，只能留在房主自己的瀏覽器裡。
  */
 import { z } from 'zod';
+import { CONTRIBUTION_PATTERN } from './audit/ceremony.js';
 import type { RoomReplica } from './replica.js';
 
 export interface HostSave {
@@ -39,6 +40,17 @@ const MemberSchema = z
   })
   .strict();
 
+/** 種子共同產生的紀錄（M10）。 */
+const CeremonySchema = z
+  .object({
+    attempt: z.number().int().min(1).max(1_000_000),
+    hostSecret: z.string().regex(CONTRIBUTION_PATTERN),
+    commit: z.string().regex(/^[0-9a-f]{64}$/),
+    contributions: z.record(z.string().max(64), z.string().regex(CONTRIBUTION_PATTERN)),
+    missing: z.array(z.string().max(64)).max(12),
+  })
+  .strict();
+
 /** 複本的外層形狀（動作日誌的內容交給引擎重放時驗證）。來自本機儲存或後備房主，可能是舊版或損毀。 */
 export const RoomReplicaSchema = z
   .object({
@@ -63,6 +75,7 @@ export const RoomReplicaSchema = z
       .strict()
       .nullable(),
     actions: z.array(z.unknown()).max(20_000),
+    ceremony: CeremonySchema.optional(),
   })
   .strict();
 

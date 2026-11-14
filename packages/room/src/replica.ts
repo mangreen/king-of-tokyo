@@ -11,6 +11,7 @@
  * 或給「後備房主」，不能給一般客人（見 ADR-0007 §3、§4.8）。
  */
 import type { Action, RulesConfig, Seed } from '@kot/rules';
+import type { Ceremony } from './audit/ceremony.js';
 
 export interface ReplicaMember {
   id: string;
@@ -44,6 +45,11 @@ export interface RoomReplica {
   config: RulesConfig | null;
   /** 開局後套用的全部動作（含代管與電腦的動作），依序重放。 */
   actions: Action[];
+  /**
+   * 這局種子的共同產生紀錄（M10）；沒有進行（只有房主一個真人、舊版複本）為 undefined。
+   * 局後客人用它稽核；含各人的亂數貢獻，和種子一樣只給後備房主。
+   */
+  ceremony?: Ceremony | undefined;
 }
 
 /** 還原失敗的原因。 */

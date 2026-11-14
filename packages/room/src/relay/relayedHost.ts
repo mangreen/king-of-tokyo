@@ -3,9 +3,12 @@
  * 頁面第一次要求 room:create 時才向中繼登記房號（沒開房就不佔伺服器的房號與連線）。
  */
 import { EVENTS, type Ack } from '@kot/protocol';
+import type { Seed } from '@kot/rules';
+import { beginCeremony, finishCeremony, type Ceremony } from '../audit/ceremony.js';
 import { createLocalHost, type LocalHost, type LocalHostOptions } from '../local/host.js';
 import type { ToClient, ToHost } from '../local/protocol.js';
 import { RECOVERY_GRACE_MS } from '../host.js';
+import { randomSeed } from '../random.js';
 import { RoomSaver, type RoomStore } from '../persist.js';
 import type { RoomReplica } from '../replica.js';
 import {
@@ -45,15 +48,38 @@ export type RelayedHostOptions = LocalHostOptions & {
   store?: RoomStore;
   /** 還原後的復原寬限（毫秒）。 */
   recoveryGraceMs?: number;
+  /** 種子共同產生（M10）。預設開啟；關掉就和以前一樣由房主單方面抽種子。 */
+  ceremony?: { enabled?: boolean; timeoutMs?: number };
 };
+
+/** 等客人回送貢獻的上限（毫秒）。全部回來就提早結束，所以正常情況只是一個往返。 */
+export const SEED_CEREMONY_TIMEOUT_MS = 5_000;
 
 export function createRelayedHost(options: RelayedHostOptions): RelayedHost {
   const { store } = options;
   // saver 要等 local／bridge 都建好才能讀到內容，所以用延遲取得
   let saver: RoomSaver | null = null;
   let bridgeRef: HostBridge | null = null;
+
+  // ── 種子共同產生（M10）──────────────────────────────
+  const baseSeed = options.newSeed ?? randomSeed;
+  /** 下一次開局要用的種子（儀式算出來的）；用過即丟。 */
+  let pendingSeed: Seed | null = null;
+  /** 目前這局種子的儀式紀錄；只有 seed 與房間的種子相同時才算數（換局後自動失效）。 */
+  let ceremony: { record: Ceremony; seed: Seed } | null = null;
+  let attemptCounter = 0;
+  let ceremonyRunning = false;
+  /** 房主自己的頁面的玩家 id（握手後才知道）；種子的 missing 不把房主自己算進去。 */
+  let hostPlayerId: string | undefined;
+  const ceremonyEnabled = options.ceremony?.enabled !== false;
+
   const local = createLocalHost({
     ...options,
+    newSeed: () => {
+      const seed = pendingSeed ?? baseSeed();
+      pendingSeed = null;
+      return seed;
+    },
     onRoomChange: (code) => {
       saver?.request(code);
       bridgeRef?.pushReplicas(); // 後備房主的複本（M9）
@@ -64,15 +90,93 @@ export function createRelayedHost(options: RelayedHostOptions): RelayedHost {
       options.onRoomClosed?.(code);
     },
   });
-  const bridge = new HostBridge(local, options.socket, {
-    ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),
-    ...options.bridge,
-    canPark: () => local.host.rooms.allSteady,
-    replica: () => {
-      const code = bridgeRef?.code;
-      return code === undefined || code === null ? null : local.host.exportRoom(code);
+  /** 把「開始對局」攔下來：先和客人共同產生種子，再交給房間開局。 */
+  const withCeremony = (
+    send: (message: ToClient) => void,
+    receive: (message: ToHost) => void,
+  ): ((message: ToHost) => void) => {
+    return (message) => {
+      const code = bridgeRef?.code ?? null;
+      if (
+        !ceremonyEnabled ||
+        message.t !== 'event' ||
+        message.event !== EVENTS.roomStart ||
+        code === null ||
+        local.host.exportRoom(code)?.phase !== 'lobby'
+      ) {
+        receive(message);
+        return;
+      }
+      if (ceremonyRunning) {
+        if (message.ackId !== undefined) {
+          send({ t: 'ack', ackId: message.ackId, result: { ok: false, code: 'wrong_state' } });
+        }
+        return;
+      }
+      ceremonyRunning = true;
+      attemptCounter = Math.max(attemptCounter, ceremony?.record.attempt ?? 0) + 1;
+      const begun = beginCeremony(code, attemptCounter);
+      void bridgeRef
+        ?.collectSeed(
+          begun.attempt,
+          begun.commit,
+          options.ceremony?.timeoutMs ?? SEED_CEREMONY_TIMEOUT_MS,
+        )
+        .then((parts) => {
+          ceremonyRunning = false;
+          const before = local.host.exportRoom(code);
+          const expected = (before?.members ?? [])
+            .filter((m) => !m.bot && !m.left && m.id !== hostPlayerId)
+            .map((m) => m.id);
+          if (parts.size > 0 || expected.length > 0) {
+            const done = finishCeremony(code, begun, Object.fromEntries(parts), expected);
+            pendingSeed = done.seed;
+            receive(message);
+            pendingSeed = null;
+            const after = local.host.exportRoom(code);
+            ceremony =
+              after?.seed === done.seed ? { record: done.ceremony, seed: done.seed } : null;
+          } else {
+            // 房間裡只有房主一位真人：沒有人可以一起抽，維持單方面抽種子
+            receive(message);
+            ceremony = null;
+          }
+          bridgeRef?.evaluate();
+        });
+    };
+  };
+
+  /** 複本帶上儀式紀錄（要與複本裡的種子相符）。 */
+  const withRecord = (replica: RoomReplica): RoomReplica =>
+    ceremony !== null && replica.seed === ceremony.seed
+      ? { ...replica, ceremony: ceremony.record }
+      : replica;
+
+  /** 接手或還原：沿用複本裡的儀式紀錄，局後這位房主才拿得出稽核用的資料。 */
+  const adoptCeremony = (replica: RoomReplica): void => {
+    ceremony =
+      replica.ceremony && replica.seed !== null
+        ? { record: replica.ceremony, seed: replica.seed }
+        : null;
+  };
+
+  const bridge = new HostBridge(
+    {
+      ...local,
+      connect: (send) => withCeremony(send, local.connect(send)),
     },
-  });
+    options.socket,
+    {
+      ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),
+      ...options.bridge,
+      canPark: () => local.host.rooms.allSteady,
+      replica: () => {
+        const code = bridgeRef?.code;
+        const replica = code === undefined || code === null ? null : local.host.exportRoom(code);
+        return replica ? withRecord(replica) : null;
+      },
+    },
+  );
   bridgeRef = bridge;
   if (store) {
     saver = new RoomSaver(store, (code) => {
@@ -81,7 +185,7 @@ export function createRelayedHost(options: RelayedHostOptions): RelayedHost {
       if (!creds || creds.code !== code || !replica) return null;
       return {
         version: 1,
-        replica: { ...replica, epoch: bridge.epoch },
+        replica: { ...withRecord(replica), epoch: bridge.epoch },
         hostKey: creds.hostKey,
         savedAt: Date.now(),
         takeoverKeys: bridge.takeoverKeys,
@@ -107,17 +211,26 @@ export function createRelayedHost(options: RelayedHostOptions): RelayedHost {
         options.recoveryGraceMs ?? RECOVERY_GRACE_MS,
       );
       if (!result.ok) return result;
+      adoptCeremony(save.replica);
       if (save.takeoverKeys) bridge.loadTakeoverKeys(save.takeoverKeys);
       bridge.adopt({ code, hostKey: save.hostKey, epoch: save.replica.epoch });
       return { ok: true };
     },
     prepare(replica) {
       const result = local.host.importRoom(replica, options.recoveryGraceMs ?? RECOVERY_GRACE_MS);
+      if (result.ok) adoptCeremony(replica);
       return result.ok ? { ok: true } : result;
     },
     takeover: (code, key) => bridge.takeover(code, key),
-    connectPage(send) {
-      const receive = local.connect(send);
+    connectPage(page) {
+      const send = (message: ToClient): void => {
+        if (message.t === 'emit' && message.event === EVENTS.serverHello) {
+          const id = (message.payload as { playerId?: unknown } | null)?.playerId;
+          if (typeof id === 'string') hostPlayerId = id;
+        }
+        page(message);
+      };
+      const receive = withCeremony(send, local.connect(send));
 
       // 中繼把房間關了（閒置、無法接回…）：告訴頁面，並結束頁面這條連線
       bridge.onStatus((status: BridgeStatus) => {

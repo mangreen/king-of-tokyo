@@ -10,6 +10,8 @@
  * 客人端：GuestEndpoint ＋ Standby（收複本、必要時接手）。
  * 房主端：HostSide（RelayedHost 的包裝；網頁裡跑在 Worker）。被取代（superseded）就降級回客人。
  */
+import { GuestAuditor, type AuditVerifier } from '../audit/guestAuditor.js';
+import type { AuditReport } from '../audit/audit.js';
 import type { GuestEndpoint, GuestEndpointOptions } from '../relay/guestEndpoint.js';
 import type { LocalEndpoint, ToClient, ToHost } from '../local/protocol.js';
 import type { RelayedHost } from '../relay/relayedHost.js';
@@ -65,12 +67,17 @@ export interface RoleEndpointOptions<H extends HostSide> {
   /** 建立（或重建）客人端點；hooks 要原樣併入端點選項；resuming＝降級後重新加入。 */
   createGuest: (
     code: string,
-    hooks: Pick<GuestEndpointOptions, 'onReplica' | 'onHostState'>,
+    hooks: Pick<GuestEndpointOptions, 'onReplica' | 'onHostState' | 'onSeedBegin'>,
     resuming: boolean,
   ) => GuestEndpoint;
   /** 建立一個新的房主（尚未登記；接手流程才會 prepare／takeover）。 */
   createHost: () => H;
   onRole?: (info: RoleInfo) => void;
+  /**
+   * 局後稽核（M10）：客人在對局結束時用房主揭露的種子與日誌重放，比對自己看過的畫面。
+   * 不提供就不稽核（仍會參與開局前的種子共同產生）。
+   */
+  audit?: { verify: AuditVerifier; onReport: (report: AuditReport) => void };
   graceMs?: number;
   staggerMs?: number;
 }
@@ -101,6 +108,14 @@ export function createRoleEndpoint<H extends HostSide>(
   /** 頁面目前是否處於「已連上」。切換角色前若是連上的，要先讓它看到中斷。 */
   let pageOpen = false;
 
+  const auditor = new GuestAuditor({
+    scheduler: options.scheduler,
+    verify: options.audit?.verify ?? (() => Promise.reject(new Error('沒有稽核程式'))),
+    onReport: (report) => {
+      if (alive) options.audit?.onReport(report);
+    },
+  });
+
   const notify = (): void => {
     options.onRole?.(info());
   };
@@ -119,10 +134,16 @@ export function createRoleEndpoint<H extends HostSide>(
     else if (message.t === 'closed' || message.t === 'error') pageOpen = false;
     else if (message.t === 'emit' && message.event === 'server:hello') {
       const id = (message.payload as { playerId?: unknown } | null)?.playerId;
-      if (typeof id === 'string') playerId = id;
+      if (typeof id === 'string') {
+        playerId = id;
+        auditor.setPlayerId(id);
+      }
     } else if (message.t === 'emit' && message.event === 'room:state') {
       const room = (message.payload as { room?: { code?: unknown } | null } | null)?.room;
       if (typeof room?.code === 'string') code = room.code;
+      auditor.onRoomState(message.payload);
+    } else if (message.t === 'emit' && message.event === 'game:update' && role === 'guest') {
+      auditor.onGameUpdate(message.payload);
     }
     handler(message);
   };
@@ -153,7 +174,9 @@ export function createRoleEndpoint<H extends HostSide>(
       {
         onReplica: (sync) => {
           current.onReplica(sync);
+          if (options.audit && role === 'guest') auditor.onReplica(current.mirror.snapshot());
         },
+        onSeedBegin: (begin) => auditor.onSeedBegin(begin),
         onHostState: (state) => {
           current.onHostState(state);
         },
@@ -240,6 +263,7 @@ export function createRoleEndpoint<H extends HostSide>(
     },
     terminate() {
       alive = false;
+      auditor.dispose();
       stopGuest();
       host?.abandon();
       host = null;
