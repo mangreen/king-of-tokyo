@@ -49,6 +49,6 @@ export function roleChangeNotice(
 ): string | null {
   if (before === null || before.role === after.role) return null;
   return after.role === 'host'
-    ? '原本的房主已失聯，你已接手成為新的房主，遊戲會繼續進行。'
+    ? '房主已換成你（原房主失聯或主動交接），遊戲會繼續進行。'
     : '房主已換人，你現在是客人（你的座位保留，遊戲繼續）。';
 }

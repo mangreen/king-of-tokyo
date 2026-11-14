@@ -438,6 +438,9 @@ describe('角色切換端點（M9-4）', () => {
     await a.rehello();
     expect(a.page.last('server:hello')).toMatchObject({ resumed: true });
     expect(cluster.relay.registry.roomCount).toBe(1);
+    // 降級的甲重新成為後備（乙現在是房主）
+    await cluster.advance(2_000);
+    expect(a.endpoint.info()).toMatchObject({ role: 'guest', rank: 1, epoch: 2 });
   });
 
   it('交接給不在線上的人：失敗，原房主繼續', async () => {
@@ -546,5 +549,25 @@ describe('故障注入（M9-6）', () => {
     cluster.kill(b.scheduler);
     await cluster.advance(120_000);
     expect(cluster.relay.registry.roomCount).toBe(0);
+  });
+
+  it('原房主主動交接後降級：重新成為後備（排在原本的後備之後）', async () => {
+    const cluster = new Cluster();
+    const h = await cluster.roleHost('原房主');
+    const a = await cluster.roleNode(h.code, '甲');
+    const b = await cluster.roleNode(h.code, '乙');
+    await h.page.request(EVENTS.roomReady, { ready: true });
+    await h.page.request(EVENTS.roomStart, {});
+    await cluster.advance(1_000);
+    const ok = h.endpoint.handover(a.page.playerId as string);
+    await cluster.advance(1_000);
+    expect(await ok).toBe(true);
+    expect(h.endpoint.role).toBe('guest');
+    await a.rehello();
+    await b.rehello();
+    await h.rehello();
+    await cluster.advance(3_000);
+    expect(b.endpoint.info()).toMatchObject({ role: 'guest', rank: 1 });
+    expect(h.endpoint.info()).toMatchObject({ role: 'guest', rank: 2, epoch: 1 });
   });
 });

@@ -489,9 +489,9 @@ export class HostBridge {
 
   /** 目前的後備順序：已握手、仍在房間裡的真人客人，直連優先。 */
   private currentOrder(replica: RoomReplica): string[] {
-    const humans = new Set(
-      replica.members.filter((m) => !m.bot && !m.left && m.id !== replica.hostId).map((m) => m.id),
-    );
+    // 房主自己的頁面不是中繼客人，不會出現在 guests；「遊戲裡的房主座位」（hostId）則可能是
+    // 交接後降級回來的原房主，他也是合格的後備，所以不能用 hostId 排除
+    const humans = new Set(replica.members.filter((m) => !m.bot && !m.left).map((m) => m.id));
     const candidates: Candidate[] = [];
     for (const entry of this.guests.values()) {
       if (entry.playerId === null || !humans.has(entry.playerId)) continue;
