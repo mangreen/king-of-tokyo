@@ -7,6 +7,7 @@ import {
   type ReplicaSync,
   type RoomReplica,
   type TakeoverTarget,
+  hostSideOf,
 } from '@kot/room';
 import { FakeScheduler } from '@kot/room/testing';
 import { Cluster, type GuestNode, type HostNode } from './testkit.js';
@@ -295,5 +296,157 @@ describe('故障接手（M9-3）', () => {
     expect(statuses).toContain('closed:superseded');
     // 房間仍屬於新房主：舊房主不能再用舊金鑰登記
     expect(cluster.relay.registry.roomCount).toBe(1);
+  });
+});
+
+describe('角色切換端點（M9-4）', () => {
+  it('故障接手：頁面只看到中斷→重新連上，用原 token 接回；房主那一端變成房主', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const code = host.code();
+    const a = await cluster.roleNode(code, '甲');
+    const b = await cluster.roleNode(code, '乙');
+    await host.page.request(EVENTS.roomReady, { ready: true });
+    await host.page.request(EVENTS.roomStart, {});
+    await cluster.advance(2_000);
+    await killHost(cluster, host);
+    await cluster.advance(11_000);
+
+    expect(a.endpoint.role).toBe('host');
+    expect(b.endpoint.role).toBe('guest');
+    expect(a.endpoint.info()).toMatchObject({ role: 'host', epoch: 1 });
+    // 頁面：中斷之後又收到 open
+    const kinds = a.page.events.filter((e) => e.t === 'open' || e.t === 'closed').map((e) => e.t);
+    expect(kinds.slice(-2)).toEqual(['closed', 'open']);
+    const hello = await a.rehello();
+    expect(hello).toMatchObject({ resumed: true });
+    await b.rehello();
+    expect(b.page.last('server:hello')).toMatchObject({ resumed: true });
+    // 接手後新的後備順序登記了：乙是第一順位後備
+    await cluster.advance(1_000);
+    expect(b.endpoint.info().rank).toBe(1);
+    expect(b.endpoint.info().epoch).toBe(1);
+    // 房間照常運作，直到打完
+    await cluster.advance(300_000);
+    const phases = a.page.events.flatMap((m) =>
+      m.t === 'emit' && m.event === 'room:state'
+        ? [(m.payload as { room: { phase: string } | null }).room?.phase ?? 'closed']
+        : [],
+    );
+    expect(phases).toContain('over');
+  });
+
+  it('連續兩次接手：新房主也消失時，下一位（epoch 2）接手', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const code = host.code();
+    const a = await cluster.roleNode(code, '甲');
+    const b = await cluster.roleNode(code, '乙');
+    await host.page.request(EVENTS.roomReady, { ready: true });
+    await host.page.request(EVENTS.roomStart, {});
+    await cluster.advance(1_000);
+    await killHost(cluster, host);
+    await cluster.advance(11_000);
+    expect(a.endpoint.role).toBe('host');
+    await a.rehello();
+    await b.rehello();
+    await cluster.advance(2_000); // 新的後備順序與複本同步完成
+
+    const aHost = a.hosts[0] as HostNode;
+    cluster.kill(a.scheduler);
+    cluster.kill(aHost.scheduler);
+    aHost.socket.kill();
+    await cluster.settle();
+    await cluster.advance(11_000);
+    expect(b.endpoint.role).toBe('host');
+    expect(b.endpoint.info().epoch).toBe(2);
+    await b.rehello();
+    expect(b.page.last('server:hello')).toMatchObject({ resumed: true });
+  });
+
+  it('網路分隔後舊房主回來：降級成客人、以原 token 接回新房主的房間', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const code = host.code();
+    const a = await cluster.roleNode(code, '甲');
+    const b = await cluster.roleNode(code, '乙');
+    await host.page.request(EVENTS.roomReady, { ready: true });
+    await host.page.request(EVENTS.roomStart, {});
+    await cluster.advance(1_000);
+    await killHost(cluster, host);
+    await cluster.advance(11_000);
+    expect(a.endpoint.role).toBe('host');
+    await a.rehello();
+    await b.rehello();
+    await cluster.advance(2_000);
+
+    // 甲（現任房主）網路分隔：乙接手
+    const aHost = a.hosts[0] as HostNode;
+    aHost.socket.kill();
+    await cluster.advance(11_000);
+    expect(b.endpoint.role).toBe('host');
+    expect(b.endpoint.info().epoch).toBe(2);
+    await b.rehello();
+
+    // 甲的網路回來：舊金鑰被拒（superseded），降級成客人並重新加入乙的房間
+    aHost.socket.connect?.();
+    await cluster.advance(3_000);
+    expect(a.endpoint.role).toBe('guest');
+    expect(a.roles.at(-1)).toMatch(/^guest:/);
+    await a.rehello();
+    expect(a.page.last('server:hello')).toMatchObject({ resumed: true });
+    expect(a.page.room()?.phase).toBeDefined();
+    expect(cluster.relay.registry.roomCount).toBe(1);
+    // 甲又成為乙的後備（第一順位）
+    await cluster.advance(2_000);
+    expect(a.endpoint.info()).toMatchObject({ role: 'guest', rank: 1, epoch: 2 });
+  });
+
+  it('計畫性交接：房主在線上也能立刻把房主交給指定的人，不必等寬限期；再交給另一位', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const code = host.code();
+    const a = await cluster.roleNode(code, '甲');
+    const b = await cluster.roleNode(code, '乙');
+    await host.page.request(EVENTS.roomReady, { ready: true });
+    await host.page.request(EVENTS.roomStart, {});
+    await cluster.advance(1_000);
+    const statuses: string[] = [];
+    host.relayed.bridge.onStatus((s) =>
+      statuses.push(s.state === 'closed' ? `closed:${s.reason}` : s.state),
+    );
+
+    const handover = hostSideOf(host.relayed).handover(a.page.playerId as string);
+    await cluster.advance(1_000);
+    expect(await handover).toEqual({ ok: true });
+    expect(a.endpoint.role).toBe('host');
+    expect(a.endpoint.info().epoch).toBe(1);
+    expect(statuses).toContain('closed:superseded');
+    await a.rehello();
+    await b.rehello();
+    expect(a.page.last('server:hello')).toMatchObject({ resumed: true });
+    await cluster.advance(2_000);
+
+    // 現任房主（甲，角色端點）再交給乙：甲降級成客人
+    const ok = a.endpoint.handover(b.page.playerId as string);
+    await cluster.advance(1_000);
+    expect(await ok).toBe(true);
+    expect(b.endpoint.role).toBe('host');
+    expect(b.endpoint.info().epoch).toBe(2);
+    expect(a.endpoint.role).toBe('guest');
+    await b.rehello();
+    await a.rehello();
+    expect(a.page.last('server:hello')).toMatchObject({ resumed: true });
+    expect(cluster.relay.registry.roomCount).toBe(1);
+  });
+
+  it('交接給不在線上的人：失敗，原房主繼續', async () => {
+    const cluster = new Cluster();
+    const host = await cluster.createdHost();
+    const a = await cluster.roleNode(host.code(), '甲');
+    const result = await hostSideOf(host.relayed).handover('nobody');
+    expect(result.ok).toBe(false);
+    expect(a.endpoint.role).toBe('guest');
+    expect(host.relayed.bridge.credentials).not.toBeNull();
   });
 });

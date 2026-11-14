@@ -9,6 +9,11 @@ import {
   type GuestEndpoint,
   type GuestEndpointOptions,
   type HostBridgeOptions,
+  type HostSide,
+  type RoleEndpoint,
+  type RoleEndpointOptions,
+  createRoleEndpoint,
+  hostSideOf,
   type RelayedHost,
   type RelayedHostOptions,
   type Timings,
@@ -120,6 +125,18 @@ export interface GuestNode {
   socket: MemorySocket;
 }
 
+/** 角色切換節點：頁面不知道自己現在是客人還是房主。 */
+export interface RoleNode {
+  endpoint: RoleEndpoint;
+  page: Page;
+  scheduler: FakeScheduler;
+  /** 目前（或最近一次）作為房主的本機節點；還沒當過房主為 null。 */
+  hosts: HostNode[];
+  roles: string[];
+  /** 頁面用原本的 token 重新握手（真正的頁面在收到 open 後會自動做這件事）。 */
+  rehello: () => Promise<Record<string, unknown>>;
+}
+
 export class Cluster {
   readonly clock = new FakeScheduler();
   readonly relay: MemoryRelay;
@@ -145,6 +162,8 @@ export class Cluster {
     options: {
       relayed?: Partial<RelayedHostOptions>;
       bridge?: Omit<HostBridgeOptions, 'canPark'>;
+      /** 不替這個節點接自己的頁面（角色切換端點會自己接）。 */
+      noPage?: boolean;
     } = {},
   ): HostNode {
     const scheduler = new FakeScheduler();
@@ -159,8 +178,10 @@ export class Cluster {
       ...options.relayed,
     });
     const page = new Page(() => undefined, this.settle);
-    const receive = relayed.connectPage(page.receive);
-    (page as unknown as { post: (m: ToHost) => void }).post = receive;
+    if (options.noPage !== true) {
+      const receive = relayed.connectPage(page.receive);
+      (page as unknown as { post: (m: ToHost) => void }).post = receive;
+    }
     return { relayed, page, scheduler, socket, code: () => relayed.bridge.code ?? '' };
   }
 
@@ -216,5 +237,51 @@ export class Cluster {
       this.clock.advance(dt);
       await this.settle();
     }
+  }
+
+  /**
+   * 角色切換的玩家節點：先當客人（握手、加入、準備），房主不見時由 Standby 接手，之後以房主身分運作。
+   * nickname 用來重新握手；token 由頁面自己記得。
+   */
+  async roleNode(
+    code: string,
+    nickname: string,
+    extra: Partial<Pick<RoleEndpointOptions<HostSide>, 'graceMs' | 'staggerMs'>> = {},
+  ): Promise<RoleNode> {
+    const scheduler = new FakeScheduler();
+    this.alive.add(scheduler);
+    const hosts: HostNode[] = [];
+    const roles: string[] = [];
+    const endpoint = createRoleEndpoint<HostSide>({
+      code,
+      scheduler,
+      ...extra,
+      createGuest: (hooks) =>
+        createGuestEndpoint(this.relay.socket(), code, { scheduler, ...hooks }),
+      createHost: () => {
+        const node = this.host({ noPage: true });
+        hosts.push(node);
+        return hostSideOf(node.relayed);
+      },
+      onRole: (info) => {
+        roles.push(`${info.role}:${info.standby}`);
+      },
+    });
+    const page = new Page((m) => {
+      endpoint.post(m);
+    }, this.settle);
+    endpoint.listen(page.receive);
+    await this.settle();
+    await page.hello(nickname);
+    await page.request(EVENTS.roomJoin, { code });
+    await page.request(EVENTS.roomReady, { ready: true });
+    return {
+      endpoint,
+      page,
+      scheduler,
+      hosts,
+      roles,
+      rehello: () => page.hello(nickname, page.token),
+    };
   }
 }

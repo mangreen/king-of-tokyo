@@ -15,9 +15,11 @@ import type { Scheduler } from '../scheduler.js';
 import { ReplicaMirror, type ReplicaSync } from './sync.js';
 
 /** 一次接手嘗試用到的新房主（RelayedHost 的子集，方便測試）。 */
+export type PrepareResult = { ok: true } | { ok: false; reason: string };
+
 export interface TakeoverTarget {
-  /** 把複本還原到本機主機（一次）。 */
-  prepare(replica: RoomReplica): { ok: true } | { ok: false; reason: string };
+  /** 把複本還原到本機主機（一次）。網頁的房主在 Worker 裡，所以可以是非同步。 */
+  prepare(replica: RoomReplica): PrepareResult | Promise<PrepareResult>;
   takeover(code: string, key: string): Promise<TakeoverResult>;
   /** 放棄這次嘗試（沒接手成功就丟掉）。 */
   abandon(): void;
@@ -89,6 +91,13 @@ export class Standby<T extends TakeoverTarget> {
     if (this._state === 'done') return;
     const result = this.mirror.apply(sync);
     if (result === 'gap') this.options.requestReplica();
+    if (sync.handover === true && result === 'ok' && this._state !== 'taking-over') {
+      // 計畫性交接：房主指定我，立刻出示金鑰（伺服器已登記，不必等寬限期）
+      this.cancelTimer();
+      const generation = (this.generation += 1);
+      void this.attempt(generation);
+      return;
+    }
     // 順序或金鑰變了：排程要跟著重算
     if (this._state === 'waiting') this.schedule();
     this.notify();
@@ -175,7 +184,8 @@ export class Standby<T extends TakeoverTarget> {
       this.prepared = false;
     }
     if (!this.prepared) {
-      const prepared = this.target.prepare(replica);
+      const prepared = await this.target.prepare(replica);
+      if (generation !== this.generation) return;
       if (!prepared.ok) {
         this.stop('idle');
         return;
