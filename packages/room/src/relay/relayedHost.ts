@@ -7,7 +7,13 @@ import { createLocalHost, type LocalHost, type LocalHostOptions } from '../local
 import type { ToClient, ToHost } from '../local/protocol.js';
 import { RECOVERY_GRACE_MS } from '../host.js';
 import { RoomSaver, type RoomStore } from '../persist.js';
-import { HostBridge, type BridgeStatus, type HostBridgeOptions } from './hostBridge.js';
+import type { RoomReplica } from '../replica.js';
+import {
+  HostBridge,
+  type BridgeStatus,
+  type HostBridgeOptions,
+  type TakeoverResult,
+} from './hostBridge.js';
 import type { RelaySocket } from './socket.js';
 
 export interface RelayedHost {
@@ -20,28 +26,37 @@ export interface RelayedHost {
    * 要在頁面連上來握手之前呼叫並等待完成；沒有存檔或存檔不能用時回傳原因（這時就當作全新的房主）。
    */
   restore(code: string): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * 後備房主接手（M9）第一步：把複本還原到本機主機（只做一次）。成功後才能呼叫 takeover。
+   * 失敗（複本損毀、卡牌組不符）時回傳原因，呼叫端應放棄這個主機。
+   */
+  prepare(replica: RoomReplica): { ok: true } | { ok: false; reason: string };
+  /** 第二步：向中繼出示接手金鑰。太早（too_early）時可以稍後再呼叫。 */
+  takeover(code: string, key: string): Promise<TakeoverResult>;
   /** 等待目前排隊的存檔寫入完成（測試用）。 */
   flush(): Promise<void>;
 }
 
-export function createRelayedHost(
-  options: LocalHostOptions & {
-    socket: RelaySocket;
-    /** 直連與停泊的設定；不提供 direct 就是純中繼（M6 行為）。 */
-    bridge?: Omit<HostBridgeOptions, 'canPark'>;
-    /** 有提供就會持續存檔，房主重新整理後可以用 restore 接回。 */
-    store?: RoomStore;
-    /** 還原後的復原寬限（毫秒）。 */
-    recoveryGraceMs?: number;
-  },
-): RelayedHost {
+export type RelayedHostOptions = LocalHostOptions & {
+  socket: RelaySocket;
+  /** 直連與停泊的設定；不提供 direct 就是純中繼（M6 行為）。 */
+  bridge?: Omit<HostBridgeOptions, 'canPark'>;
+  /** 有提供就會持續存檔，房主重新整理後可以用 restore 接回。 */
+  store?: RoomStore;
+  /** 還原後的復原寬限（毫秒）。 */
+  recoveryGraceMs?: number;
+};
+
+export function createRelayedHost(options: RelayedHostOptions): RelayedHost {
   const { store } = options;
   // saver 要等 local／bridge 都建好才能讀到內容，所以用延遲取得
   let saver: RoomSaver | null = null;
+  let bridgeRef: HostBridge | null = null;
   const local = createLocalHost({
     ...options,
     onRoomChange: (code) => {
       saver?.request(code);
+      bridgeRef?.pushReplicas(); // 後備房主的複本（M9）
       options.onRoomChange?.(code);
     },
     onRoomClosed: (code) => {
@@ -53,13 +68,24 @@ export function createRelayedHost(
     ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),
     ...options.bridge,
     canPark: () => local.host.rooms.allSteady,
+    replica: () => {
+      const code = bridgeRef?.code;
+      return code === undefined || code === null ? null : local.host.exportRoom(code);
+    },
   });
+  bridgeRef = bridge;
   if (store) {
     saver = new RoomSaver(store, (code) => {
       const creds = bridge.credentials;
       const replica = local.host.exportRoom(code);
       if (!creds || creds.code !== code || !replica) return null;
-      return { version: 1, replica, hostKey: creds.hostKey, savedAt: Date.now() };
+      return {
+        version: 1,
+        replica: { ...replica, epoch: bridge.epoch },
+        hostKey: creds.hostKey,
+        savedAt: Date.now(),
+        takeoverKeys: bridge.takeoverKeys,
+      };
     });
     // 登記成功（拿到房主金鑰）時補存一次：房號在登記前沒有金鑰，存不了
     bridge.onStatus((status) => {
@@ -81,15 +107,23 @@ export function createRelayedHost(
         options.recoveryGraceMs ?? RECOVERY_GRACE_MS,
       );
       if (!result.ok) return result;
-      bridge.adopt({ code, hostKey: save.hostKey });
+      if (save.takeoverKeys) bridge.loadTakeoverKeys(save.takeoverKeys);
+      bridge.adopt({ code, hostKey: save.hostKey, epoch: save.replica.epoch });
       return { ok: true };
     },
+    prepare(replica) {
+      const result = local.host.importRoom(replica, options.recoveryGraceMs ?? RECOVERY_GRACE_MS);
+      return result.ok ? { ok: true } : result;
+    },
+    takeover: (code, key) => bridge.takeover(code, key),
     connectPage(send) {
       const receive = local.connect(send);
 
       // 中繼把房間關了（閒置、無法接回…）：告訴頁面，並結束頁面這條連線
       bridge.onStatus((status: BridgeStatus) => {
         if (status.state !== 'closed') return;
+        // 房主被新房主取代（房主轉移）：不是房間關閉，由角色切換端點接手處理
+        if (status.reason === 'superseded') return;
         send({
           t: 'emit',
           event: EVENTS.serverError,

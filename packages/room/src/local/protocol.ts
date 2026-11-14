@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import type { Ack } from '@kot/protocol';
+import { ReplicaSyncSchema, type ReplicaSync } from '../failover/sync.js';
 
 /** 客戶端 → 房主。 */
 export type ToHost =
@@ -109,16 +110,30 @@ export interface WireSwitch {
   t: 'switch';
 }
 
-export type WireToHost = ToHost | WireRtc | WireSwitch;
-export type WireToClient = Exclude<ToClient, { t: 'error' }> | WireRtc | WireSwitch;
+/** 房主 → 後備：複本同步（M9）。遊戲層不會看到，由客人端點攔截。 */
+export interface WireReplica {
+  t: 'replica';
+  d: ReplicaSync;
+}
+/** 後備 → 房主：我漏了訊息，請從頭重送複本（M9）。 */
+export interface WireReplicaNeed {
+  t: 'replica-need';
+}
+
+export type WireToHost = ToHost | WireRtc | WireSwitch | WireReplicaNeed;
+export type WireToClient = Exclude<ToClient, { t: 'error' }> | WireRtc | WireSwitch | WireReplica;
 
 const WireRtcSchema = z.object({ t: z.literal('rtc'), d: RtcSignalSchema }).strict();
 const WireSwitchSchema = z.object({ t: z.literal('switch') }).strict();
+const WireReplicaSchema = z.object({ t: z.literal('replica'), d: ReplicaSyncSchema }).strict();
+const WireReplicaNeedSchema = z.object({ t: z.literal('replica-need') }).strict();
 
 /** 驗證來自客人的信封（遊戲訊息＋直連控制訊息）。 */
 export function parseWireToHost(data: unknown): WireToHost | null {
   const control = parseControl(data);
   if (control) return control;
+  const need = WireReplicaNeedSchema.safeParse(data);
+  if (need.success) return need.data;
   return parseToHost(data);
 }
 
@@ -126,6 +141,8 @@ export function parseWireToHost(data: unknown): WireToHost | null {
 export function parseWireToClient(data: unknown): WireToClient | null {
   const control = parseControl(data);
   if (control) return control;
+  const replica = WireReplicaSchema.safeParse(data);
+  if (replica.success) return replica.data as WireReplica;
   const parsed = ToClientSchema.safeParse(data);
   return parsed.success ? (parsed.data as WireToClient) : null;
 }

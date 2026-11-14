@@ -48,6 +48,15 @@ export function attachRelay(
     socket.on(RELAY_EVENTS.park, (_payload: unknown, ack?: unknown) => {
       reply(ack, registry.park(conn));
     });
+    socket.on(RELAY_EVENTS.succession, (payload: unknown, ack?: unknown) => {
+      reply(ack, registry.succession(conn, payload));
+    });
+    socket.on(RELAY_EVENTS.takeover, (payload: unknown, ack?: unknown) => {
+      reply(ack, registry.takeover(conn, payload));
+    });
+    socket.on(RELAY_EVENTS.handover, (payload: unknown, ack?: unknown) => {
+      reply(ack, registry.handover(conn, payload));
+    });
     socket.on(RELAY_EVENTS.ping, () => {
       registry.ping(conn);
     });

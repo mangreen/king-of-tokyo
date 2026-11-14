@@ -10,14 +10,17 @@
 import { RELAY_EVENTS, RELAY_PROTOCOL_VERSION, type RelayJoinAck } from '@kot/protocol';
 import { DirectSession } from '../direct/session.js';
 import type { DirectConnector } from '../direct/types.js';
+import type { ReplicaSync } from '../failover/sync.js';
 import {
   parseWireToClient,
-  ToClientSchema,
   type LocalEndpoint,
   type ToClient,
   type ToHost,
+  type WireReplica,
+  type WireReplicaNeed,
   type WireRtc,
   type WireSwitch,
+  type WireToClient,
 } from '../local/protocol.js';
 import { realScheduler, type Scheduler } from '../scheduler.js';
 import type { RelaySocket } from './socket.js';
@@ -43,13 +46,25 @@ export interface GuestEndpointOptions {
    * 或中繼剛重啟）時，也在期限內重試，而不是立刻放棄。
    */
   resuming?: boolean;
+  /** 收到房主送來的複本同步（成為後備房主用；頁面完全看不到）。 */
+  onReplica?: (sync: ReplicaSync) => void;
+  /**
+   * 房主「不見了」或「回來了」。lost：房主的中繼斷線、直連中斷、或找不到房主；
+   * back：房主（或接手的新房主）替我們開了新連線。後備房主靠這個決定何時計時接手。
+   */
+  onHostState?: (state: 'lost' | 'back') => void;
+}
+
+/** 客人端點：LocalEndpoint 加上「要求房主重送複本」。 */
+export interface GuestEndpoint extends LocalEndpoint {
+  requestReplica(): void;
 }
 
 export function createGuestEndpoint(
   socket: RelaySocket,
   code: string,
   options: GuestEndpointOptions = {},
-): LocalEndpoint {
+): GuestEndpoint {
   const scheduler = options.scheduler ?? realScheduler;
   const joinRetryMs = options.joinRetryMs ?? 2_000;
   const joinGiveUpMs = options.joinGiveUpMs ?? 90_000;
@@ -57,12 +72,24 @@ export function createGuestEndpoint(
   let alive = true;
   /** 我們是否預期中繼連線是連著的（已改走直連而刻意關掉時為 false）。 */
   let relayWanted = true;
-  let session: DirectSession<ToHost, ToClient> | null = null;
+  let session: DirectSession<ToHost | WireReplicaNeed, ToClient | WireReplica> | null = null;
   let cancelClose: () => void = () => undefined;
   let cancelRetry: () => void = () => undefined;
 
-  const deliver = (message: ToClient): void => {
-    if (alive) handler(message);
+  let hostLost = false;
+  const setHostState = (state: 'lost' | 'back'): void => {
+    if (state === 'lost' ? hostLost : !hostLost) return;
+    hostLost = state === 'lost';
+    options.onHostState?.(state);
+  };
+
+  const deliver = (message: WireToClient | ToClient): void => {
+    if (!alive) return;
+    if (message.t === 'replica') {
+      options.onReplica?.(message.d);
+      return;
+    }
+    handler(message as ToClient);
   };
 
   const relayEmit = (data: unknown): void => {
@@ -70,40 +97,42 @@ export function createGuestEndpoint(
   };
 
   /** 房主 open 之後才建立：每一條新的閘道連線對應一個新的工作階段。 */
-  const newSession = (): DirectSession<ToHost, ToClient> => {
+  const newSession = (): DirectSession<ToHost | WireReplicaNeed, ToClient | WireReplica> => {
     session?.close();
     cancelClose();
-    const created: DirectSession<ToHost, ToClient> = new DirectSession<ToHost, ToClient>({
-      role: 'guest',
-      connector: options.direct ?? null,
-      scheduler,
-      connectTimeoutMs: options.directTimeoutMs ?? 15_000,
-      sendRelay: (message) => {
-        if (message.t === 'rtc' || message.t === 'switch') {
-          if (socket.connected) relayEmit(message);
-        } else relayEmit(message);
-      },
-      deliver,
-      parse: (value) => {
-        const parsed = ToClientSchema.safeParse(value);
-        return parsed.success ? (parsed.data as ToClient) : null;
-      },
-      onSwitched: () => {
-        options.onPath?.('direct');
-        // 兩個方向都已走直連：稍等一下讓最後的標記送完，再關掉中繼連線
-        if (!socket.pause) return;
-        cancelClose = scheduler.after(options.relayCloseDelayMs ?? 1_000, () => {
-          if (session === created && created.isDirect) {
-            relayWanted = false;
-            socket.pause?.();
-          }
-        });
-      },
-      onLost: () => {
-        if (session !== created) return;
-        resetToRelay();
-      },
-    });
+    const created: DirectSession<ToHost | WireReplicaNeed, ToClient | WireReplica> =
+      new DirectSession<ToHost | WireReplicaNeed, ToClient | WireReplica>({
+        role: 'guest',
+        connector: options.direct ?? null,
+        scheduler,
+        connectTimeoutMs: options.directTimeoutMs ?? 15_000,
+        sendRelay: (message) => {
+          if (message.t === 'rtc' || message.t === 'switch') {
+            if (socket.connected) relayEmit(message);
+          } else relayEmit(message);
+        },
+        deliver,
+        parse: (value) => {
+          const parsed = parseWireToClient(value);
+          // 協商與切換標記只走中繼，不會出現在直連上
+          return parsed === null || parsed.t === 'rtc' || parsed.t === 'switch' ? null : parsed;
+        },
+        onSwitched: () => {
+          options.onPath?.('direct');
+          // 兩個方向都已走直連：稍等一下讓最後的標記送完，再關掉中繼連線
+          if (!socket.pause) return;
+          cancelClose = scheduler.after(options.relayCloseDelayMs ?? 1_000, () => {
+            if (session === created && created.isDirect) {
+              relayWanted = false;
+              socket.pause?.();
+            }
+          });
+        },
+        onLost: () => {
+          if (session !== created) return;
+          resetToRelay();
+        },
+      });
     session = created;
     return created;
   };
@@ -115,6 +144,7 @@ export function createGuestEndpoint(
     session = null;
     cancelClose();
     deliver({ t: 'closed' });
+    setHostState('lost'); // 直連斷了：可能是房主不見了（也可能只是我的網路）；接手與否由伺服器的時序決定
     relayWanted = true;
     if (socket.pause && socket.connect) {
       // 不論中繼是否還連著，都換一條全新的連線，房主那邊才會看到新的客人
@@ -136,6 +166,7 @@ export function createGuestEndpoint(
       }
       const transient =
         ack.code === 'host_offline' || (ack.code === 'room_not_found' && joinedOnce);
+      if (ack.code === 'host_offline') setHostState('lost');
       if (transient && scheduler.now() < joinDeadline) {
         // 房主正在從停泊回到中繼：稍後再試
         cancelRetry();
@@ -172,6 +203,7 @@ export function createGuestEndpoint(
     if (message.t === 'open') {
       newSession();
       options.onPath?.('relay');
+      setHostState('back');
     }
     if (session) session.receive(message);
     else deliver(message);
@@ -182,6 +214,7 @@ export function createGuestEndpoint(
       session?.close();
       session = null;
       deliver({ t: 'closed' });
+      setHostState('lost');
     }
   });
   socket.onEvent(RELAY_EVENTS.closed, () => {
@@ -201,6 +234,12 @@ export function createGuestEndpoint(
       if (!alive) return;
       if (session) session.send(message);
       else relayEmit(message);
+    },
+    requestReplica() {
+      if (!alive) return;
+      const need: WireReplicaNeed = { t: 'replica-need' };
+      if (session) session.send(need);
+      else relayEmit(need);
     },
     listen(next) {
       handler = next;

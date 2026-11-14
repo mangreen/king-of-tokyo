@@ -1,4 +1,4 @@
-import { createGuestEndpoint } from '@kot/room';
+import { createGuestEndpoint, createRoleEndpoint, realScheduler, type HostSide } from '@kot/room';
 import { parseDirectConfig, rtcSupported } from './direct.js';
 import { setPathStatus } from './pathStatus.js';
 import { setRestoreStatus } from './restoreStatus.js';
@@ -7,7 +7,8 @@ import { createRtcConnector } from './rtcConnector.js';
 import { resolveServerUrl } from '../serverUrl.js';
 import type { GameClientOptions } from '../useGameClient.js';
 import { localLinkFactory } from './localLink.js';
-import { createWorkerEndpoint } from './localWorker.js';
+import { createWorkerEndpoint, createWorkerHostSide } from './localWorker.js';
+import { setRoleEndpoint, setRoleStatus } from './roleStatus.js';
 import { parseMode, type Mode } from './mode.js';
 import { createRelaySocket } from './relaySocket.js';
 import { socketLinkFactory } from './socketLink.js';
@@ -57,39 +58,50 @@ export function createClientOptions(
         const code = target.code;
         const resumeCode = target.resume;
         target.resume = null; // 只有重新整理後的第一次連線要還原
-        const factory =
-          code === null
-            ? localLinkFactory(() =>
-                createWorkerEndpoint({
-                  relayUrl: url,
-                  ...(resumeCode === null
-                    ? {}
-                    : {
-                        resume: resumeCode,
-                        onRestore: (result) => {
-                          setRestoreStatus(
-                            result.ok
-                              ? { ok: true }
-                              : { ok: false, reason: result.reason ?? '未知原因' },
-                          );
-                        },
-                      }),
-                  ...(connector === undefined ? {} : { direct: connector }),
-                  onPath: (info) => {
-                    setPathStatus({ role: 'host', ...info });
-                  },
-                }),
-              )
-            : localLinkFactory(() =>
-                createGuestEndpoint(createRelaySocket(url, { lazy: false }), code, {
-                  // 重新整理後的接回：房號暫時找不到（房主也在重新整理）時要重試
-                  resuming: resumeCode === code,
-                  ...(connector === undefined ? {} : { direct: connector }),
-                  onPath: (path) => {
-                    setPathStatus({ role: 'guest', path });
-                  },
-                }),
-              );
+        const directOptions = connector === undefined ? {} : { direct: connector };
+        // 頁面永遠連到一個角色切換端點：客人（可能接手成為房主）或房主（可能被取代而降級）
+        const factory = localLinkFactory(() => {
+          const makeHost = (resume?: string): HostSide =>
+            createWorkerHostSide({
+              relayUrl: url,
+              ...directOptions,
+              ...(resume === undefined
+                ? {}
+                : {
+                    resume,
+                    onRestore: (result) => {
+                      setRestoreStatus(
+                        result.ok
+                          ? { ok: true }
+                          : { ok: false, reason: result.reason ?? '未知原因' },
+                      );
+                    },
+                  }),
+              onPath: (info) => {
+                setPathStatus({ role: 'host', ...info });
+              },
+            });
+          const endpoint = createRoleEndpoint<HostSide>({
+            ...(code === null ? { initial: makeHost(resumeCode ?? undefined) } : {}),
+            // 房號：客人要加入的房間；重新整理後接回的房主也要知道（接回時若已被取代，要以客人身分加入）
+            ...((code ?? resumeCode) === null ? {} : { code: (code ?? resumeCode) as string }),
+            scheduler: realScheduler,
+            createGuest: (joinCode, hooks, resuming) =>
+              createGuestEndpoint(createRelaySocket(url, { lazy: false }), joinCode, {
+                // 重新整理後的接回：房號暫時找不到（房主也在重新整理）時要重試
+                resuming: resuming || resumeCode === joinCode,
+                ...directOptions,
+                ...hooks,
+                onPath: (path) => {
+                  setPathStatus({ role: 'guest', path });
+                },
+              }),
+            createHost: () => makeHost(),
+            onRole: setRoleStatus,
+          });
+          setRoleEndpoint(endpoint);
+          return endpoint;
+        });
         return factory(handlers);
       },
       // 保存身分與所在房間：重新整理後房主從存檔還原、客人用 token 接回座位（M8）

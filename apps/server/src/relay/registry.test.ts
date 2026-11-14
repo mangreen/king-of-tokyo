@@ -5,7 +5,7 @@ import {
   type RelayErrorCode,
   type RelayServerEvents,
 } from '@kot/protocol';
-import { cryptoRandomInt, randomHex } from '@kot/room';
+import { cryptoRandomInt, hashToken, randomHex } from '@kot/room';
 import { FakeScheduler } from '@kot/room/testing';
 import { RelayRegistry, type RelayConn, type RelayOptions } from './registry.js';
 
@@ -228,6 +228,7 @@ describe('中繼：斷線、接回、關房', () => {
       ok: true,
       code,
       hostKey,
+      epoch: 0,
     });
     expect(guest.of(RELAY_EVENTS.hostStatus)).toEqual([{ online: false }, { online: true }]);
     expect(back.of(RELAY_EVENTS.guestJoined)).toEqual([{ guestId: 'g1' }]); // 重新告知現有客人
@@ -314,6 +315,7 @@ describe('中繼：停泊（客人都直連後，房主不佔伺服器連線）'
       ok: true,
       code,
       hostKey,
+      epoch: 0,
     });
     // 接回後不再是停泊狀態：再次意外斷線只有短寬限
     registry.disconnected(back);
@@ -345,6 +347,7 @@ describe('中繼：停泊（客人都直連後，房主不佔伺服器連線）'
       ok: true,
       code: 'ABCDE',
       hostKey,
+      epoch: 0,
     });
     expect(registry.roomCount).toBe(1);
     // 已登記的房號：restore 不能搶（金鑰不同就是 bad_host_key）
@@ -393,5 +396,221 @@ describe('中繼：閒置', () => {
     const c = conn();
     scheduler.advance(10_000_000);
     expect(c.closed).toBe(false);
+  });
+});
+
+// ── 房主轉移（M9）─────────────────────────────────────
+
+const keyOf = (n: number): string => String(n).repeat(32).slice(0, 32); // 0..9 → 32 個相同字元的十六進位
+
+describe('中繼：房主轉移', () => {
+  /** 房主＋兩位客人（g1、g2），並登記後備順序：key1 → key2。 */
+  function room(overrides: Partial<RelayOptions> = {}) {
+    const ctx = setup({
+      idleKickMs: 0,
+      hostGraceMs: 500,
+      successionGraceMs: 10_000,
+      successionStaggerMs: 3_000,
+      maxGuests: 4,
+      ...overrides,
+    });
+    const host = ctx.conn();
+    const { code, hostKey } = open(ctx.registry, host);
+    const guests = [ctx.conn(), ctx.conn()];
+    for (const g of guests) ctx.registry.join(g, { relayVersion: V, code });
+    const order = [hashToken(keyOf(1)), hashToken(keyOf(2))];
+    expect(ctx.registry.succession(host, { order })).toEqual({ ok: true });
+    return { ...ctx, host, code, hostKey, guests, order };
+  }
+  const take = (r: ReturnType<typeof room>, conn: FakeConn, key: number) =>
+    r.registry.takeover(conn, { relayVersion: V, code: r.code, key: keyOf(key) });
+
+  it('登記順序只有房主能做；格式錯誤被拒', () => {
+    const r = room();
+    expect(r.registry.succession(r.guests[0] as FakeConn, { order: [] })).toEqual({
+      ok: false,
+      code: 'not_host',
+    });
+    expect(r.registry.succession(r.host, { order: ['x'] })).toEqual({
+      ok: false,
+      code: 'invalid_message',
+    });
+  });
+
+  it('房主還在線上：任何人都不能接手（host_online）；沒登記或金鑰不對是 bad_takeover', () => {
+    const r = room();
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'host_online' });
+    expect(take(r, r.conn(), 7)).toEqual({ ok: false, code: 'bad_takeover' });
+    expect(
+      r.registry.takeover(r.conn(), { relayVersion: V, code: 'ZZZZZ', key: keyOf(1) }),
+    ).toEqual({
+      ok: false,
+      code: 'room_not_found',
+    });
+  });
+
+  it('時序由伺服器強制：第一順位等 10 秒、第二順位等 13 秒；太早會告知還要等多久', () => {
+    const r = room();
+    r.registry.disconnected(r.host);
+    r.scheduler.advance(9_000);
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'too_early', retryInMs: 1_000 });
+    expect(take(r, r.conn(), 2)).toEqual({ ok: false, code: 'too_early', retryInMs: 4_000 });
+    r.scheduler.advance(1_000);
+    // 房間要撐過最後一順位的接手時間（遠比一般的 500ms 寬限久）
+    expect(r.registry.roomCount).toBe(1);
+    const taker = r.conn();
+    const ack = take(r, taker, 1);
+    expect(ack).toMatchObject({ ok: true, code: r.code, epoch: 1 });
+    expect((ack as { hostKey: string }).hostKey).not.toBe(r.hostKey);
+  });
+
+  it('第一順位沒出現：第二順位在 13 秒時接手；第一順位之後再來只會被擋（host_online）', () => {
+    const r = room();
+    r.registry.disconnected(r.host);
+    r.scheduler.advance(12_999);
+    expect(take(r, r.conn(), 2)).toMatchObject({ ok: false, code: 'too_early' });
+    r.scheduler.advance(1);
+    expect(take(r, r.conn(), 2)).toMatchObject({ ok: true, epoch: 1 });
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'bad_takeover' }); // 順序在轉移後清空，新房主要重新登記
+  });
+
+  it('接手後：客人收到房主上線、新房主收到所有客人；舊房主帶舊金鑰回來得到 superseded', () => {
+    const r = room();
+    r.registry.disconnected(r.host);
+    r.scheduler.advance(10_000);
+    const taker = r.conn();
+    const ack = take(r, taker, 1) as { ok: true; hostKey: string };
+    expect(r.guests[0]?.of(RELAY_EVENTS.hostStatus)).toEqual([{ online: false }, { online: true }]);
+    expect(taker.of(RELAY_EVENTS.guestJoined)).toEqual([{ guestId: 'g1' }, { guestId: 'g2' }]);
+    // 新房主可以轉發訊息
+    r.registry.toGuest(taker, { guestId: 'g1', data: { hi: 1 } });
+    expect(r.guests[0]?.of(RELAY_EVENTS.fromHost)).toEqual([{ data: { hi: 1 } }]);
+    // 舊房主（網路恢復）：舊金鑰被擋，知道自己被取代了
+    expect(
+      r.registry.hostOpen(r.conn(), { relayVersion: V, code: r.code, hostKey: r.hostKey }),
+    ).toEqual({
+      ok: false,
+      code: 'superseded',
+    });
+    // 新金鑰才是房主
+    expect(
+      r.registry.hostOpen(r.conn(), { relayVersion: V, code: r.code, hostKey: ack.hostKey }),
+    ).toMatchObject({ ok: true, epoch: 1 });
+  });
+
+  it('房主在寬限內自己回來（重新整理）：不需要轉移，之後後備也不能接手', () => {
+    const r = room();
+    r.registry.disconnected(r.host);
+    r.scheduler.advance(5_000);
+    expect(
+      r.registry.hostOpen(r.conn(), { relayVersion: V, code: r.code, hostKey: r.hostKey }),
+    ).toMatchObject({
+      ok: true,
+      epoch: 0,
+    });
+    r.scheduler.advance(60_000);
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'host_online' });
+  });
+
+  it('沒有後備順序：維持原本的短寬限，逾時關房', () => {
+    const r = room();
+    r.registry.succession(r.host, { order: [] });
+    r.registry.disconnected(r.host);
+    r.scheduler.advance(600);
+    expect(r.registry.roomCount).toBe(0);
+  });
+
+  it('沒人接手：撐過最後一順位的時間後關房，客人被告知', () => {
+    const r = room();
+    r.registry.disconnected(r.host);
+    r.scheduler.advance(13_000 + 10_000 + 1);
+    expect(r.registry.roomCount).toBe(0);
+    expect(r.guests[0]?.of(RELAY_EVENTS.closed)).toEqual([{ reason: 'host_left' }]);
+  });
+
+  it('停泊中的房間：沒人懷疑時不能接手；有客人（直連斷了）找不到房主後才開始計時', () => {
+    const r = room({ parkTtlMs: 3_600_000 });
+    // 客人都改走直連後房主停泊（這裡直接讓客人離開中繼）
+    for (const g of r.guests) r.registry.disconnected(g);
+    expect(r.registry.park(r.host)).toEqual({ ok: true });
+    r.registry.disconnected(r.host);
+    r.scheduler.advance(60_000);
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'host_online' });
+    // 直連斷掉的客人來找房主：host_offline，並開始計時
+    expect(r.registry.join(r.conn(), { relayVersion: V, code: r.code })).toEqual({
+      ok: false,
+      code: 'host_offline',
+    });
+    r.scheduler.advance(4_000);
+    expect(take(r, r.conn(), 1)).toMatchObject({ ok: false, code: 'too_early', retryInMs: 6_000 });
+    r.scheduler.advance(6_000);
+    expect(take(r, r.conn(), 1)).toMatchObject({ ok: true, epoch: 1 });
+  });
+
+  it('停泊的房主在懷疑期間回來：清除懷疑，之後不能接手', () => {
+    const r = room({ parkTtlMs: 3_600_000 });
+    for (const g of r.guests) r.registry.disconnected(g);
+    r.registry.park(r.host);
+    r.registry.disconnected(r.host);
+    r.registry.join(r.conn(), { relayVersion: V, code: r.code });
+    r.scheduler.advance(5_000);
+    expect(
+      r.registry.hostOpen(r.conn(), { relayVersion: V, code: r.code, hostKey: r.hostKey }).ok,
+    ).toBe(true);
+    r.scheduler.advance(60_000);
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'host_online' });
+  });
+
+  it('計畫性交接：指定的後備立刻成功，原房主的連線被取代並中斷；不必等寬限', () => {
+    const r = room();
+    expect(r.registry.handover(r.host, { target: r.order[1] })).toEqual({ ok: true });
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'host_online' }); // 沒被指定的人不行
+    const taker = r.conn();
+    expect(take(r, taker, 2)).toMatchObject({ ok: true, epoch: 1 });
+    expect(r.host.of(RELAY_EVENTS.closed)).toEqual([{ reason: 'superseded' }]);
+    expect(r.host.closed).toBe(true);
+    expect(taker.of(RELAY_EVENTS.guestJoined)).toHaveLength(2);
+    // 原房主不能再當房主
+    expect(r.registry.toGuest(r.host, { guestId: 'g1', data: 1 })).toBeUndefined();
+    expect(r.host.errors()).toContain('not_host');
+  });
+
+  it('計畫性交接逾期沒人接手：視同沒發生，原房主繼續', () => {
+    const r = room({ handoverTtlMs: 5_000 });
+    r.registry.handover(r.host, { target: r.order[0] as string });
+    r.scheduler.advance(5_001);
+    expect(take(r, r.conn(), 1)).toEqual({ ok: false, code: 'host_online' });
+    expect(r.host.closed).toBe(false);
+  });
+
+  it('交接對象必須在登記的順序裡；只有房主能發起', () => {
+    const r = room();
+    expect(r.registry.handover(r.host, { target: hashToken('nope') })).toEqual({
+      ok: false,
+      code: 'bad_takeover',
+    });
+    expect(r.registry.handover(r.guests[0] as FakeConn, { target: r.order[0] as string })).toEqual({
+      ok: false,
+      code: 'not_host',
+    });
+  });
+
+  it('接手請求有速率限制', () => {
+    const r = room();
+    const stranger = r.conn();
+    const results = Array.from({ length: 60 }, () => take(r, stranger, 7));
+    expect(results.some((x) => !x.ok && x.code === 'rate_limited')).toBe(true);
+  });
+
+  it('伺服器登記遺失後 restore：房主帶回自己的世代', () => {
+    const { registry, conn } = setup({ idleKickMs: 0 });
+    const ack = registry.hostOpen(conn(), {
+      relayVersion: V,
+      code: 'ABCDE',
+      hostKey: 'a'.repeat(32),
+      restore: true,
+      epoch: 3,
+    });
+    expect(ack).toMatchObject({ ok: true, epoch: 3 });
   });
 });

@@ -14,6 +14,8 @@ export interface HostSave {
   /** 中繼房主金鑰：用來接回同一個房號。 */
   hostKey: string;
   savedAt: number;
+  /** 後備房主的接手金鑰（玩家 id → 金鑰）。 */
+  takeoverKeys?: Record<string, string>;
 }
 
 export interface RoomStore {
@@ -37,37 +39,42 @@ const MemberSchema = z
   })
   .strict();
 
-/** 存檔的外層形狀（動作日誌的內容交給引擎重放時驗證）。存檔來自本機儲存，但可能是舊版或損毀。 */
+/** 複本的外層形狀（動作日誌的內容交給引擎重放時驗證）。來自本機儲存或後備房主，可能是舊版或損毀。 */
+export const RoomReplicaSchema = z
+  .object({
+    version: z.literal(1),
+    epoch: z.number().int().min(0),
+    code: z.string().min(1).max(16),
+    cardSetId: z.string().min(1).max(64),
+    cardSetHash: z.string().min(1).max(128),
+    phase: z.enum(['lobby', 'playing', 'over']),
+    hostId: z.string().min(1).max(64),
+    botSerial: z.number().int().min(0),
+    members: z.array(MemberSchema).max(12),
+    seed: z.union([z.number(), z.string()]).nullable(),
+    config: z
+      .object({
+        playerCount: z.number().int(),
+        startingHp: z.number().int(),
+        victoryPoints: z.number().int(),
+        diceCount: z.number().int(),
+        maxRolls: z.number().int(),
+      })
+      .strict()
+      .nullable(),
+    actions: z.array(z.unknown()).max(20_000),
+  })
+  .strict();
+
+/** 存檔的外層形狀。 */
 export const HostSaveSchema = z
   .object({
     version: z.literal(1),
     hostKey: z.string().regex(/^[0-9a-f]{32}$/),
     savedAt: z.number(),
-    replica: z
-      .object({
-        version: z.literal(1),
-        epoch: z.number().int().min(0),
-        code: z.string().min(1).max(16),
-        cardSetId: z.string().min(1).max(64),
-        cardSetHash: z.string().min(1).max(128),
-        phase: z.enum(['lobby', 'playing', 'over']),
-        hostId: z.string().min(1).max(64),
-        botSerial: z.number().int().min(0),
-        members: z.array(MemberSchema).max(12),
-        seed: z.union([z.number(), z.string()]).nullable(),
-        config: z
-          .object({
-            playerCount: z.number().int(),
-            startingHp: z.number().int(),
-            victoryPoints: z.number().int(),
-            diceCount: z.number().int(),
-            maxRolls: z.number().int(),
-          })
-          .strict()
-          .nullable(),
-        actions: z.array(z.unknown()).max(20_000),
-      })
-      .strict(),
+    replica: RoomReplicaSchema,
+    /** 後備房主的接手金鑰（玩家 id → 金鑰）；重新整理後沿用，後備手上的金鑰才不會失效。 */
+    takeoverKeys: z.record(z.string().max(64), z.string().regex(/^[0-9a-f]{32}$/)).optional(),
   })
   .strict();
 

@@ -225,6 +225,9 @@ function startHost(
     bridge: host.bridge,
     relayed: host,
     kill: () => {
+      // 頁面整個消失：連線斷掉之後也不會再自己連回來（否則橋接端偵測到直連中斷時會「unpark」
+      // 重新連線，變成一個殭屍房主搶先接走客人，之後新房主接管時客人會收到兩次 open）
+      socket.connect = () => undefined;
       socket.pause?.();
     },
     restored,

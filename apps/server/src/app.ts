@@ -75,6 +75,9 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
 
   const io = new SocketServer<ClientToServerEvents, ServerToClientEvents>(fastify.server, {
     maxHttpBufferSize: MAX_MESSAGE_BYTES,
+    // 房主轉移要靠「房主不見」的偵測：預設 25+20 秒太慢，改成最久約 14 秒發現斷線
+    pingInterval: 8_000,
+    pingTimeout: 6_000,
     cors: { origin: config.allowedOrigins },
     // CORS 只約束瀏覽器；這裡額外在伺服器端檢查 Origin。
     // 沒有 Origin 標頭的請求（非瀏覽器客戶端，如測試工具）允許通過，
