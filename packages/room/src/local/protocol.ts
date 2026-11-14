@@ -120,13 +120,47 @@ export interface WireReplicaNeed {
   t: 'replica-need';
 }
 
-export type WireToHost = ToHost | WireRtc | WireSwitch | WireReplicaNeed;
-export type WireToClient = Exclude<ToClient, { t: 'error' }> | WireRtc | WireSwitch | WireReplica;
+/** 房主 → 客人：開始對局前的種子共同產生（M10）。承諾 commit 公布後，客人回送自己的亂數。 */
+export interface WireSeedBegin {
+  t: 'seed-begin';
+  d: { attempt: number; commit: string };
+}
+/** 客人 → 房主：我對這次種子產生的貢獻（只送給房主，不廣播）。 */
+export interface WireSeedPart {
+  t: 'seed-part';
+  d: { attempt: number; r: string };
+}
+
+export type WireToHost = ToHost | WireRtc | WireSwitch | WireReplicaNeed | WireSeedPart;
+export type WireToClient =
+  Exclude<ToClient, { t: 'error' }> | WireRtc | WireSwitch | WireReplica | WireSeedBegin;
 
 const WireRtcSchema = z.object({ t: z.literal('rtc'), d: RtcSignalSchema }).strict();
 const WireSwitchSchema = z.object({ t: z.literal('switch') }).strict();
 const WireReplicaSchema = z.object({ t: z.literal('replica'), d: ReplicaSyncSchema }).strict();
 const WireReplicaNeedSchema = z.object({ t: z.literal('replica-need') }).strict();
+const WireSeedBeginSchema = z
+  .object({
+    t: z.literal('seed-begin'),
+    d: z
+      .object({
+        attempt: z.number().int().min(1).max(1_000_000),
+        commit: z.string().regex(/^[0-9a-f]{64}$/),
+      })
+      .strict(),
+  })
+  .strict();
+const WireSeedPartSchema = z
+  .object({
+    t: z.literal('seed-part'),
+    d: z
+      .object({
+        attempt: z.number().int().min(1).max(1_000_000),
+        r: z.string().regex(/^[0-9a-f]{32}$/),
+      })
+      .strict(),
+  })
+  .strict();
 
 /** 驗證來自客人的信封（遊戲訊息＋直連控制訊息）。 */
 export function parseWireToHost(data: unknown): WireToHost | null {
@@ -134,6 +168,8 @@ export function parseWireToHost(data: unknown): WireToHost | null {
   if (control) return control;
   const need = WireReplicaNeedSchema.safeParse(data);
   if (need.success) return need.data;
+  const part = WireSeedPartSchema.safeParse(data);
+  if (part.success) return part.data;
   return parseToHost(data);
 }
 
@@ -143,6 +179,8 @@ export function parseWireToClient(data: unknown): WireToClient | null {
   if (control) return control;
   const replica = WireReplicaSchema.safeParse(data);
   if (replica.success) return replica.data as WireReplica;
+  const begin = WireSeedBeginSchema.safeParse(data);
+  if (begin.success) return begin.data;
   const parsed = ToClientSchema.safeParse(data);
   return parsed.success ? (parsed.data as WireToClient) : null;
 }

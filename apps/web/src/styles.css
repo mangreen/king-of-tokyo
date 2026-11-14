@@ -1035,3 +1035,31 @@ main.wide {
   padding: 2px 10px;
   font-size: 0.85rem;
 }
+
+.audit {
+  margin-top: 0.5rem;
+  font-size: 0.9em;
+}
+.audit summary {
+  cursor: pointer;
+}
+.audit ul {
+  margin: 0.25rem 0 0 1.2rem;
+  padding: 0;
+}
+.audit-result {
+  background: #fffaf0;
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+}
+.audit-ok {
+  color: #1b6e3c;
+}
+.audit-warn {
+  color: #8a5a00;
+}
+.audit-bad {
+  color: #b3261e;
+}

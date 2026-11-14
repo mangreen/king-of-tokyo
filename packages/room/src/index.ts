@@ -49,7 +49,7 @@ export type {
   HostPathInfo,
   TakeoverResult,
 } from './relay/hostBridge.js';
-export { createRelayedHost } from './relay/relayedHost.js';
+export { createRelayedHost, SEED_CEREMONY_TIMEOUT_MS } from './relay/relayedHost.js';
 export type { RelayedHost, RelayedHostOptions } from './relay/relayedHost.js';
 export { ReplicaMirror, ReplicaSender, ReplicaSyncSchema, REPLICA_BATCH } from './failover/sync.js';
 export type { ReplicaSync } from './failover/sync.js';
@@ -79,3 +79,31 @@ export {
   RoomSaver,
 } from './persist.js';
 export type { HostSave, RoomStore } from './persist.js';
+
+export {
+  AUDIT_SETTLE_MS,
+  auditGame,
+  beginCeremony,
+  canonicalJson,
+  commitOf,
+  digestOf,
+  finishCeremony,
+  GuestAuditor,
+  mixSeed,
+  ObservationRecorder,
+  verifyCeremony,
+  viewDigest,
+} from './audit/index.js';
+export type {
+  AuditCheck,
+  AuditCheckId,
+  AuditInput,
+  AuditReport,
+  AuditVerifier,
+  CardResolver,
+  Ceremony,
+  CeremonyCheck,
+  CheckStatus,
+  GuestAuditorOptions,
+  MyCeremonyPart,
+} from './audit/index.js';

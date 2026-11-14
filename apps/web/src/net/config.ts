@@ -1,5 +1,7 @@
 import { createGuestEndpoint, createRoleEndpoint, realScheduler, type HostSide } from '@kot/room';
 import { parseDirectConfig, rtcSupported } from './direct.js';
+import { createAuditVerifier } from './auditRunner.js';
+import { setAuditReport } from './auditStatus.js';
 import { setPathStatus } from './pathStatus.js';
 import { setRestoreStatus } from './restoreStatus.js';
 import { session } from '../session.js';
@@ -98,6 +100,8 @@ export function createClientOptions(
               }),
             createHost: () => makeHost(),
             onRole: setRoleStatus,
+            // 局後稽核（M10）：客人在背景 Worker 重放整場，核對房主給過的畫面
+            audit: { verify: createAuditVerifier(), onReport: setAuditReport },
           });
           setRoleEndpoint(endpoint);
           return endpoint;
