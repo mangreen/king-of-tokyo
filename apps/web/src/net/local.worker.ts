@@ -40,6 +40,9 @@ let proxy: ReturnType<typeof createProxyConnector> | null = null;
 let relayed: RelayedHost | null = null;
 let pageSend: ((message: ToClient) => void) | null = null;
 let manual = false;
+/** start() 還沒做完時（動態載入、還原存檔）先到的控制訊息：排隊，做完再依序處理。 */
+let ready = false;
+const pendingCtl: WorkerCtl[] = [];
 
 async function start(init: WorkerInit): Promise<void> {
   const send = (message: ToClient): void => {
@@ -84,6 +87,8 @@ async function start(init: WorkerInit): Promise<void> {
     );
   }
   if (!manual) receive = host.connectPage(send);
+  ready = true;
+  for (const ctl of pendingCtl.splice(0)) control(ctl);
 }
 
 /** 頁面的控制訊息（manual 模式）：接上頁面、還原複本、接手、交接。 */
@@ -147,7 +152,8 @@ scope.onmessage = (event) => {
     return;
   }
   if (message.t === 'ctl') {
-    control(message);
+    if (ready) control(message);
+    else pendingCtl.push(message);
     return;
   }
   // 主執行緒轉來的直連事件（協商資料、通道開關、訊框）
