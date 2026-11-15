@@ -5,6 +5,7 @@
 import type { Socket } from 'socket.io';
 import type { EVENTS } from '@kot/protocol';
 import {
+  type ChatMessage,
   type GameCardsMessage,
   type GameUpdateMessage,
   type RoomStateMessage,
@@ -24,6 +25,7 @@ export interface ClientToServerEvents {
   [EVENTS.roomRemoveBot]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.roomStart]: (payload: unknown, ack?: unknown) => void;
   [EVENTS.gameAction]: (payload: unknown, ack?: unknown) => void;
+  [EVENTS.chatSend]: (payload: unknown, ack?: unknown) => void;
 }
 
 export interface ServerToClientEvents {
@@ -32,6 +34,7 @@ export interface ServerToClientEvents {
   [EVENTS.roomState]: (payload: RoomStateMessage) => void;
   [EVENTS.gameUpdate]: (payload: GameUpdateMessage) => void;
   [EVENTS.gameCards]: (payload: GameCardsMessage) => void;
+  [EVENTS.chatMessage]: (payload: ChatMessage) => void;
 }
 
 export type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;

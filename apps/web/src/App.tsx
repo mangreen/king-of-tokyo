@@ -137,6 +137,8 @@ export function App() {
         cards={state.cards}
         log={state.log}
         feed={state.feed}
+        chat={state.chat}
+        onChat={client.sendChat}
         onAct={client.act}
         onLeave={leave}
       />

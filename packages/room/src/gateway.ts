@@ -5,6 +5,7 @@
  */
 import type { ZodType } from 'zod';
 import {
+  ChatSendSchema,
   ClientHelloSchema,
   EVENTS,
   EmptyPayloadSchema,
@@ -16,6 +17,7 @@ import {
   RoomRemoveBotSchema,
   type Ack,
   type CardSetInfo,
+  type ChatMessage,
   type GameCardsMessage,
   type GameUpdateMessage,
   type RoomSnapshot,
@@ -36,6 +38,7 @@ export interface ServerEventMap {
   [EVENTS.roomState]: RoomStateMessage;
   [EVENTS.gameUpdate]: GameUpdateMessage;
   [EVENTS.gameCards]: GameCardsMessage;
+  [EVENTS.chatMessage]: ChatMessage;
 }
 
 /** 一條連線（任何傳輸）。 */
@@ -80,6 +83,7 @@ type GameEvents =
   | typeof EVENTS.roomAddBot
   | typeof EVENTS.roomRemoveBot
   | typeof EVENTS.gameAction
+  | typeof EVENTS.chatSend
   | typeof EVENTS.clientResync
   | typeof EVENTS.clientPing;
 
@@ -99,6 +103,9 @@ export class Gateway {
     },
     gameUpdate: (playerId: string, message: GameUpdateMessage) => {
       this.conns.get(playerId)?.emit(EVENTS.gameUpdate, message);
+    },
+    chat: (playerId: string, message: ChatMessage) => {
+      this.conns.get(playerId)?.emit(EVENTS.chatMessage, message);
     },
   };
 
@@ -323,6 +330,11 @@ export class Gateway {
     on(EVENTS.gameAction, GameActionSchema, (who, input) => {
       const room = rooms.roomOf(who.id);
       return room ? room.act(who.id, input) : { ok: false, code: 'not_in_room' };
+    });
+
+    on(EVENTS.chatSend, ChatSendSchema, (who, { text }) => {
+      const room = rooms.roomOf(who.id);
+      return room ? room.chat(who.id, text) : { ok: false, code: 'not_in_room' };
     });
 
     return map;

@@ -71,6 +71,9 @@ export function createGameHost(options: GameHostOptions): GameHost {
     gameUpdate: (...args: Parameters<Gateway['publisher']['gameUpdate']>) => {
       gateway?.publisher.gameUpdate(...args);
     },
+    chat: (...args: Parameters<Gateway['publisher']['chat']>) => {
+      gateway?.publisher.chat(...args);
+    },
   };
 
   const rooms = new RoomManager({

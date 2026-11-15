@@ -35,6 +35,32 @@ describe('SettingsPanel（設定面板）', () => {
     expect(html.indexOf('彈幕設定')).toBeGreaterThan(html.indexOf('商店飛碟與卡牌特效'));
   });
 
+  it('彈幕設定：開關、透明度與大小拉桿（顯示目前值）、預覽按鈕', () => {
+    const html = render({
+      prefs: { ...defaultPrefs(false), danmakuOpacity: 0.4, danmakuSize: 30 },
+      onPreviewDanmaku: () => undefined,
+    });
+    expect(html).toContain('聊天訊息在 3D 場景上顯示為彈幕');
+    expect(html).toMatch(/type="range"[^>]*aria-label="彈幕文字透明度"/);
+    expect(html).toMatch(/type="range"[^>]*aria-label="彈幕文字大小"/);
+    expect(html).toContain('40%');
+    expect(html).toContain('30px');
+    expect(html).toContain('預覽彈幕');
+    expect(render()).not.toContain('預覽彈幕');
+  });
+
+  it('彈幕關閉時，拉桿與預覽按鈕不能用；3D 關閉時提醒彈幕只顯示在 3D 上', () => {
+    const off = render({
+      prefs: { ...defaultPrefs(false), danmaku: false },
+      onPreviewDanmaku: () => undefined,
+    });
+    expect(off.match(/<input[^>]*type="range"[^>]*disabled=""/g)?.length).toBe(2);
+    expect(off).toMatch(/<button[^>]*disabled=""[^>]*>預覽彈幕/);
+    expect(render({ prefs: { ...defaultPrefs(false), enabled: false } })).toContain(
+      '彈幕只會顯示在 3D 場景上',
+    );
+  });
+
   it('系統要求減少動態：鏡頭動態與跟隨不能勾', () => {
     const html = render({ reduced: true });
     expect(html).toContain('系統已要求減少動態');

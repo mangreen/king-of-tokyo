@@ -1153,3 +1153,91 @@ main.wide {
   margin: 0;
   flex: none;
 }
+
+/* 聊天分頁 */
+.chat-panel {
+  display: grid;
+  gap: 0.5rem;
+}
+.chat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 11rem;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+.chat-list li {
+  overflow-wrap: anywhere;
+}
+.chat-list li.mine .chat-text {
+  font-weight: 600;
+}
+.chat-name {
+  margin-right: 0.4rem;
+  -webkit-text-stroke: 0.3px rgba(0, 0, 0, 0.35);
+}
+.chat-form {
+  display: flex;
+  gap: 0.4rem;
+}
+.chat-form input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.chat-note {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+/* 設定：滑桿列 */
+.settings label.slider {
+  display: grid;
+  grid-template-columns: 6.5em 1fr 3.5em;
+  align-items: center;
+  gap: 0.5rem;
+}
+.settings label.slider input[type='range'] {
+  width: 100%;
+  margin: 0;
+}
+.settings label.slider output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 3D 場景上的聊天彈幕：右上進、左上出，不擋操作 */
+.danmaku-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  --dm-opacity: 0.75;
+}
+.danmaku-item {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  font-weight: 700;
+  line-height: 1.4;
+  opacity: var(--dm-opacity);
+  text-shadow:
+    0 0 3px rgba(0, 0, 0, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.8);
+  transform: translateX(var(--dm-from));
+  animation-name: danmaku-fly;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  will-change: transform;
+}
+@keyframes danmaku-fly {
+  from {
+    transform: translateX(var(--dm-from));
+  }
+  to {
+    transform: translateX(var(--dm-to));
+  }
+}

@@ -26,6 +26,7 @@ import {
   MIN_PLAYERS,
   type AckErrorCode,
   type CardSetInfo,
+  type ChatMessage,
   type GameActionInput,
   type GameCardsMessage,
   type GameUpdateMessage,
@@ -45,7 +46,12 @@ export interface Publisher {
   /** 這場對局的完整卡牌目錄（開局與重連時送出）。 */
   gameCards(playerId: string, message: GameCardsMessage): void;
   gameUpdate(playerId: string, message: GameUpdateMessage): void;
+  /** 房內聊天訊息（不是對局狀態，不保留歷史）。 */
+  chat(playerId: string, message: ChatMessage): void;
 }
+
+/** 同一位玩家兩則聊天之間的最短間隔（毫秒）。 */
+export const CHAT_MIN_INTERVAL_MS = 600;
 
 export interface Timings {
   /** 輪到在線玩家擲骰／停止的時限。 */
@@ -141,6 +147,9 @@ export class Room {
 
   /** 還原後的寬限截止時間（scheduler.now() 為基準）；0＝沒有。 */
   private recoveryUntil = 0;
+
+  /** 玩家上次發話的時間（scheduler.now()），用來限制洗版。不存檔。 */
+  private readonly lastChatAt = new Map<string, number>();
 
   constructor(
     readonly code: string,
@@ -539,6 +548,29 @@ export class Room {
       this.deps.publisher.gameCards(playerId, this.cardsMessage);
       this.deps.publisher.gameUpdate(playerId, this.buildUpdate(member, []));
     }
+  }
+
+  // ── 聊天 ───────────────────────────────────────────────
+
+  /** 廣播給房內所有真人（含發話者）；大廳與對局中都能用，不改變任何對局狀態。 */
+  chat(playerId: string, text: string): Result {
+    const member = this.find(playerId);
+    if (!member || member.left || member.bot) return fail('not_in_room');
+    const now = this.deps.scheduler.now();
+    const last = this.lastChatAt.get(playerId);
+    if (last !== undefined && now - last < CHAT_MIN_INTERVAL_MS) return fail('rate_limited');
+    this.lastChatAt.set(playerId, now);
+    const message: ChatMessage = {
+      from: member.id,
+      nickname: member.nickname,
+      seat: member.seat,
+      text,
+      at: now,
+    };
+    for (const other of this.members) {
+      if (!other.left && !other.bot) this.deps.publisher.chat(other.id, message);
+    }
+    return OK;
   }
 
   // ── 對局 ───────────────────────────────────────────────

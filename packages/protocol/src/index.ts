@@ -14,6 +14,9 @@ export type { ClientHello, ErrorCode, ServerError, ServerHello } from './message
 export {
   ACK_ERROR_CODES,
   CardSetIdSchema,
+  CHAT_MAX_LENGTH,
+  ChatMessageSchema,
+  ChatSendSchema,
   EmptyPayloadSchema,
   GameActionSchema,
   MAX_PLAYERS,
@@ -31,6 +34,8 @@ export type {
   Ack,
   AckErrorCode,
   CardSetInfo,
+  ChatMessage,
+  ChatSendInput,
   GameActionInput,
   GameCardsMessage,
   GameUpdateMessage,
