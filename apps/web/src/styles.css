@@ -336,12 +336,17 @@ main.wide {
   left: 8px;
   z-index: 4;
 }
-.scene-corner button {
+.scene-corner button,
+.leave-top button {
   min-height: 0;
   padding: 0.25rem 0.7rem;
   font-size: 0.85rem;
   background: color-mix(in srgb, var(--card) 90%, transparent);
   touch-action: manipulation;
+}
+.game > .leave-top {
+  max-width: none;
+  margin: 0.4rem 0;
 }
 .map-controls {
   position: absolute;

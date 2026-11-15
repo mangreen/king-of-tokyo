@@ -150,9 +150,9 @@ export function GameView({
         <Suspense
           fallback={
             <>
+              <div className="leave-top">{leaveButton}</div>
               <p className="muted scene-loading">載入 3D 場景…（操作可先使用）</p>
               {renderHud('flat')}
-              <p>{leaveButton}</p>
             </>
           }
         >
@@ -168,6 +168,7 @@ export function GameView({
         </Suspense>
       ) : (
         <>
+          <div className="leave-top">{leaveButton}</div>
           <p className="muted">
             {canGL ? '3D 場景已關閉。' : '這個瀏覽器不支援 WebGL，已使用純文字介面。'}{' '}
             {canGL && (
@@ -184,7 +185,6 @@ export function GameView({
             )}
           </p>
           {renderHud('flat')}
-          <p>{leaveButton}</p>
         </>
       )}
     </div>
