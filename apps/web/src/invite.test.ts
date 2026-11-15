@@ -24,9 +24,12 @@ describe('邀請連結', () => {
     expect(inviteUrl('http://localhost:5173/', 'ABCDE')).toBe('http://localhost:5173/?room=ABCDE');
   });
 
-  it('房主模式的邀請連結保留 mode=p2p；其他模式參數不保留', () => {
+  it('預設（房主模式）的邀請連結不帶 mode；伺服器模式要保留 mode=server；離線不保留', () => {
     expect(inviteUrl('https://a.test/?mode=p2p&room=OLD12', 'K7M2P')).toBe(
-      'https://a.test/?mode=p2p&room=K7M2P',
+      'https://a.test/?room=K7M2P',
+    );
+    expect(inviteUrl('https://a.test/?mode=server&room=OLD12', 'K7M2P')).toBe(
+      'https://a.test/?mode=server&room=K7M2P',
     );
     expect(inviteUrl('https://a.test/?mode=offline', 'K7M2P')).toBe('https://a.test/?room=K7M2P');
   });

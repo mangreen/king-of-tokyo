@@ -10,6 +10,7 @@ import { describeQuality, useQuality } from './net/quality.js';
 import { setRestoreStatus, useRestoreStatus } from './net/restoreStatus.js';
 import { roleChangeNotice, useRoleStatus, type RoleStatus } from './net/roleStatus.js';
 import { AuditPanel } from './views/AuditPanel.js';
+import { HostNotice } from './views/HostNotice.js';
 import { RolePanel } from './views/RolePanel.js';
 import { session } from './session.js';
 import { useGameClient } from './useGameClient.js';
@@ -167,14 +168,16 @@ export function App() {
         </div>
       )}
       {p2p && (
-        <div className="notice" role="status" data-testid="p2p-banner">
-          房主模式：房間在房主的瀏覽器裡執行，伺服器負責登記房號、協助玩家建立直連，直連不通時轉送訊息。房主重新整理頁面時會從瀏覽器存檔接回同一局；關閉分頁或主動離開，這局才會結束。
+        <HostNotice role={role?.role ?? null} phase={room?.phase ?? null}>
+          <p>
+            房主模式：房間在房主的瀏覽器裡執行，伺服器負責登記房號、協助玩家建立直連，直連不通時轉送訊息。房主重新整理頁面時會從瀏覽器存檔接回同一局；關閉分頁或主動離開，這局才會結束。
+          </p>
           {role !== null && room !== null && 'playerId' in connection && (
             <RolePanel role={role} room={room} selfId={connection.playerId} />
           )}
           {path !== null && <div data-testid="path-status">{describePath(path)}</div>}
           <AuditPanel phase={room?.phase ?? null} isHost={role?.role === 'host'} />
-        </div>
+        </HostNotice>
       )}
       {hostPage && inGame && (wakeLock === 'unsupported' || wakeLock === 'denied') && (
         <div className="notice" role="status" data-testid="wake-lock-hint">
