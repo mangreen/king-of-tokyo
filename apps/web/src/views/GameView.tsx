@@ -103,6 +103,9 @@ export function GameView({
   );
   const prompt = promptText(state);
 
+  const leaveLabel = state.phase === 'over' ? '返回大廳' : '離開對局';
+  const leaveButton = <button onClick={onLeave}>{leaveLabel}</button>;
+
   const renderHud = (mode: 'overlay' | 'flat') => (
     <GameHud
       mode={mode}
@@ -149,6 +152,7 @@ export function GameView({
             <>
               <p className="muted scene-loading">載入 3D 場景…（操作可先使用）</p>
               {renderHud('flat')}
+              <p>{leaveButton}</p>
             </>
           }
         >
@@ -159,6 +163,7 @@ export function GameView({
             onPrefs={setPrefs}
             seed={seed}
             hud={renderHud('overlay')}
+            corner={leaveButton}
           />
         </Suspense>
       ) : (
@@ -179,12 +184,9 @@ export function GameView({
             )}
           </p>
           {renderHud('flat')}
+          <p>{leaveButton}</p>
         </>
       )}
-
-      <p>
-        <button onClick={onLeave}>{state.phase === 'over' ? '返回大廳' : '離開對局'}</button>
-      </p>
     </div>
   );
 }

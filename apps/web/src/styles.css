@@ -330,6 +330,19 @@ main.wide {
   pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 60%, rgba(30, 20, 10, 0.3) 100%);
 }
+.scene-corner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+}
+.scene-corner button {
+  min-height: 0;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+  touch-action: manipulation;
+}
 .map-controls {
   position: absolute;
   right: 8px;
