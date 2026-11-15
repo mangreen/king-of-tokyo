@@ -19,6 +19,7 @@ export function useAuditReport(): AuditReport | null {
       };
     },
     () => current,
+    () => current,
   );
 }
 

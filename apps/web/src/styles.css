@@ -1063,3 +1063,17 @@ main.wide {
 .audit-bad {
   color: #b3261e;
 }
+
+.host-notice summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.host-notice-hint {
+  font-weight: 400;
+  font-size: 0.8em;
+  opacity: 0.85;
+  margin-left: 0.5em;
+}
+.host-notice p {
+  margin: 0.5rem 0;
+}
