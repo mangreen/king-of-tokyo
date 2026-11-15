@@ -103,6 +103,9 @@ export function GameView({
   );
   const prompt = promptText(state);
 
+  const leaveLabel = state.phase === 'over' ? '返回大廳' : '離開對局';
+  const leaveButton = <button onClick={onLeave}>{leaveLabel}</button>;
+
   const renderHud = (mode: 'overlay' | 'flat') => (
     <GameHud
       mode={mode}
@@ -147,6 +150,7 @@ export function GameView({
         <Suspense
           fallback={
             <>
+              <div className="leave-top">{leaveButton}</div>
               <p className="muted scene-loading">載入 3D 場景…（操作可先使用）</p>
               {renderHud('flat')}
             </>
@@ -159,10 +163,12 @@ export function GameView({
             onPrefs={setPrefs}
             seed={seed}
             hud={renderHud('overlay')}
+            corner={leaveButton}
           />
         </Suspense>
       ) : (
         <>
+          <div className="leave-top">{leaveButton}</div>
           <p className="muted">
             {canGL ? '3D 場景已關閉。' : '這個瀏覽器不支援 WebGL，已使用純文字介面。'}{' '}
             {canGL && (
@@ -181,10 +187,6 @@ export function GameView({
           {renderHud('flat')}
         </>
       )}
-
-      <p>
-        <button onClick={onLeave}>{state.phase === 'over' ? '返回大廳' : '離開對局'}</button>
-      </p>
     </div>
   );
 }

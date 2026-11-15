@@ -16,6 +16,8 @@ interface Props {
   hud?: ReactNode;
   /** 讓 demo／測試拿到渲染器。 */
   onReady?: (renderer: SceneRenderer | null) => void;
+  /** 放在場景左上角的按鈕（離開對局／返回大廳）；3D 開著時不必捲到頁面底部。 */
+  corner?: ReactNode;
 }
 
 const QUALITY_LABEL: Record<QualitySetting, string> = {
@@ -29,7 +31,16 @@ const QUALITY_LABEL: Record<QualitySetting, string> = {
  * 3D 場景（Three.js）。動態載入，所以不會拖慢大廳；遊戲邏輯與操作仍在 DOM 裡，
  * 場景只是把伺服器事件「演出來」。場景壞掉或沒有 WebGL 時整個遊戲仍可玩。
  */
-export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onReady }: Props) {
+export default function Scene3D({
+  snapshot,
+  feed,
+  prefs,
+  onPrefs,
+  seed,
+  hud,
+  onReady,
+  corner,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -197,6 +208,7 @@ export default function Scene3D({ snapshot, feed, prefs, onPrefs, seed, hud, onR
               </button>
             </div>
           )}
+          {corner && <div className="scene-corner">{corner}</div>}
           <div className="map-controls" role="group" aria-label="地圖視角">
             <button
               aria-label="放大"
