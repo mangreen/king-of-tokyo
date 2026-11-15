@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameEvent } from '@kot/rules';
 import { defaultPrefs, prefersReducedMotion, savePrefs, type ScenePrefs } from './prefs.js';
 import Scene3D from './Scene3D.js';
+import type { CardDef } from '@kot/rules';
+import originalCardSet from '../../../../card-sets/original/set.json';
+import { THEME_STYLE, themeOf, type CardTheme } from './cardFx.js';
 import type { SceneRenderer, SceneSnapshot } from './SceneRenderer.js';
 import type { FeedBatch } from './feed.js';
 
@@ -18,11 +21,18 @@ declare global {
 
 const NAMES = ['小蜥', '大猿', '機甲', '章魚', '巨蟹', '飛龍'];
 
+const CARDS = (originalCardSet as { cards: CardDef[] }).cards;
+/** 每種特效主題挑一張代表牌（展示頁用）。 */
+const SAMPLE_BY_THEME = new Map<CardTheme, CardDef>();
+for (const c of CARDS) if (!SAMPLE_BY_THEME.has(themeOf(c))) SAMPLE_BY_THEME.set(themeOf(c), c);
+const MARKET = CARDS.slice(0, 3).map((c) => c.id);
+
 function initial(players: number, kinds: number[]): SceneSnapshot {
   return {
     playerCount: players,
     activeSeat: 0,
     mySeat: 0,
+    market: MARKET,
     monsters: Array.from({ length: players }, (_, seat) => ({
       seat,
       name: NAMES[seat] ?? `座位 ${String(seat)}`,
@@ -178,6 +188,40 @@ export default function Demo() {
       },
     ],
     [
+      '買牌（飛碟）',
+      () => {
+        const bought = MARKET[1] ?? '';
+        const fresh = CARDS[10]?.id ?? '';
+        push(
+          [
+            { type: 'card_bought', seat: 0, cardId: bought, cost: 3, from: null },
+            { type: 'card_revealed', cardId: fresh },
+          ],
+          (s) => ({ ...s, market: [MARKET[0] ?? '', fresh, MARKET[2] ?? ''] }),
+        );
+      },
+    ],
+    [
+      '清商店（飛碟）',
+      () => {
+        const old = snapRef.current.market ?? MARKET;
+        const fresh = CARDS.slice(20, 23).map((c) => c.id);
+        push(
+          [
+            { type: 'market_swept', seat: 0, discarded: [...old] },
+            ...fresh.map((cardId) => ({ type: 'card_revealed' as const, cardId })),
+          ],
+          (s) => ({ ...s, market: fresh }),
+        );
+      },
+    ],
+    ...[...SAMPLE_BY_THEME.entries()].map(([theme, card]): [string, () => void] => [
+      `${THEME_STYLE[theme].icon}${card.name}`,
+      () => {
+        push([{ type: 'card_used', seat: 0, cardId: card.id }]);
+      },
+    ]),
+    [
       '重置',
       () => {
         setSnap(
@@ -203,6 +247,7 @@ export default function Demo() {
           setPrefs(p);
         }}
         seed={12345}
+        cards={CARDS}
         onReady={(r) => {
           window.__kotScene = r;
         }}

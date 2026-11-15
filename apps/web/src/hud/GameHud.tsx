@@ -5,6 +5,7 @@ import type { ActionGroup, LabelContext } from '../actions.js';
 import { Countdown } from '../views/Countdown.js';
 import type { EventBatch } from '../state.js';
 import { latestVersion, takeNew } from '../scene/feed.js';
+import { THEME_STYLE, themeOf } from '../scene/cardFx.js';
 import { noticesFor, shopNotice } from './notices.js';
 import { shouldHoldEndTurn } from './shopGate.js';
 import { ToastHost, type Toast } from './Toasts.js';
@@ -100,6 +101,7 @@ export function GameHud(p: HudProps) {
         mySeat: p.mySeat,
         nameOf: p.nameOf,
         cardName: (id) => p.env.cards[id]?.name ?? id,
+        cardIcon: (id) => THEME_STYLE[themeOf(p.env.cards[id])].icon,
         victoryPoints: state.config.victoryPoints,
         vpNow: (seat) => state.monsters.find((m) => m.seat === seat)?.vp ?? 0,
       }).map((n): Toast => ({ ...n, key: `${String(b.version)}-${n.id}` })),

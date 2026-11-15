@@ -17,6 +17,8 @@ export interface NoticeContext {
   mySeat: number | null;
   nameOf: (seat: number) => string;
   cardName: (id: string) => string;
+  /** 卡牌圖示（依特效主題）；沒提供就用通用圖示。 */
+  cardIcon?: (id: string) => string;
   victoryPoints: number;
   /** 事件之後（目前）的 VP；用來判斷「快贏了」。 */
   vpNow: (seat: number) => number;
@@ -36,6 +38,77 @@ const LOC = { city: '東京市', bay: '東京灣' } as const;
  * 重大事件：輪到自己、淘汰、復活、重擊、自己血量見底、進入東京、接近／達成勝利分數、
  * 買牌、中毒或縮小、額外回合、東京灣關閉。
  */
+/** 一次使用卡牌對「我」造成的變化（只算這張牌效果範圍內的事件）。 */
+export interface CardImpact {
+  hp: number;
+  vp: number;
+  energy: number;
+  eliminated: boolean;
+}
+
+/**
+ * 從 card_used 之後的事件，統計對指定座位的影響：
+ * 一直算到下一張牌、下一次買牌、回合邊界或下一次骰面攻擊為止。
+ */
+export function impactOf(
+  events: readonly GameEvent[],
+  from: number,
+  seat: number | null,
+): CardImpact {
+  const r: CardImpact = { hp: 0, vp: 0, energy: 0, eliminated: false };
+  if (seat === null) return r;
+  for (let i = from + 1; i < events.length; i++) {
+    const e = events[i];
+    if (!e) break;
+    if (
+      e.type === 'card_used' ||
+      e.type === 'card_bought' ||
+      e.type === 'turn_started' ||
+      e.type === 'turn_ended' ||
+      e.type === 'smash'
+    )
+      break;
+    switch (e.type) {
+      case 'damage_taken':
+        if (e.seat === seat) r.hp -= e.amount;
+        break;
+      case 'healed':
+        if (e.seat === seat) r.hp += e.amount;
+        break;
+      case 'vp_gained':
+        if (e.seat === seat) r.vp += e.amount;
+        break;
+      case 'vp_lost':
+        if (e.seat === seat) r.vp -= e.amount;
+        break;
+      case 'energy_gained':
+        if (e.seat === seat) r.energy += e.amount;
+        break;
+      case 'energy_spent':
+        if (e.seat === seat) r.energy -= e.amount;
+        break;
+      case 'eliminated':
+        if (e.seat === seat) r.eliminated = true;
+        break;
+      default:
+        break;
+    }
+  }
+  return r;
+}
+
+const signed = (n: number): string => (n > 0 ? `+${String(n)}` : String(n));
+
+/** 「HP -3、⭐ +2、⚡ -1」；沒有變化回傳空字串。 */
+export function describeImpact(i: CardImpact): string {
+  const parts: string[] = [];
+  if (i.hp !== 0) parts.push(`HP ${signed(i.hp)}`);
+  if (i.vp !== 0) parts.push(`⭐ ${signed(i.vp)}`);
+  if (i.energy !== 0) parts.push(`⚡ ${signed(i.energy)}`);
+  if (i.eliminated) parts.push('被淘汰');
+  return parts.join('、');
+}
+
 export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Notice[] {
   const out: Notice[] = [];
   const mine = (seat: number): boolean => seat === c.mySeat;
@@ -44,7 +117,7 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
     out.push({ ...n, id: String(out.length) });
   };
 
-  for (const e of events) {
+  for (const [idx, e] of events.entries()) {
     switch (e.type) {
       case 'turn_started':
         if (mine(e.seat)) push({ kind: 'good', icon: '🎲', text: '輪到你了！' });
@@ -113,6 +186,26 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
           text: `${who(e.seat)}買下 ${c.cardName(e.cardId)}`,
         });
         break;
+      case 'card_used': {
+        const impact = impactOf(events, idx, c.mySeat);
+        const summary = describeImpact(impact);
+        const gain = impact.hp > 0 || impact.vp > 0 || impact.energy > 0;
+        // 自己用牌：有收穫就是好事（花能量是代價不算壞事）；別人用牌：任何損失都要警覺
+        const bad = mine(e.seat)
+          ? impact.eliminated
+          : impact.hp < 0 || impact.vp < 0 || impact.energy < 0 || impact.eliminated;
+        const good = !bad && gain;
+        const base = `${who(e.seat)}使用了【${c.cardName(e.cardId)}】`;
+        let tail: string;
+        if (summary !== '') tail = `，${mine(e.seat) ? '你' : '對你'}：${summary}`;
+        else tail = mine(e.seat) ? '' : '，對你沒有影響';
+        push({
+          kind: bad ? 'danger' : good ? 'good' : 'info',
+          icon: c.cardIcon?.(e.cardId) ?? '🃏',
+          text: base + tail,
+        });
+        break;
+      }
       case 'counter_gained':
         if (mine(e.seat)) {
           push({
