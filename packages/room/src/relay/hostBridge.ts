@@ -30,6 +30,8 @@ import {
   type WireReplica,
   type WireReplicaNeed,
   type WireRtc,
+  type WireSeedBegin,
+  type WireSeedPart,
   type WireSwitch,
 } from '../local/protocol.js';
 import { randomHex } from '../random.js';
@@ -84,9 +86,21 @@ export const DIRECT_TIMEOUT_MS = 15_000;
 /** 伺服器的停泊期限是 15 分鐘；這裡 6 分鐘刷新一次，留足背景分頁計時器被延後的餘裕。 */
 export const PARK_REFRESH_MS = 6 * 60_000;
 
+type HostSend = ToClient | WireReplica | WireSeedBegin;
+type HostRecv = ToHost | WireReplicaNeed | WireSeedPart;
+
+/** 一次進行中的種子共同產生：等客人回送貢獻。 */
+interface SeedRound {
+  attempt: number;
+  parts: Map<string, string>;
+  /** 還在等的玩家 id；全部回來就提早結束。 */
+  waiting: Set<string>;
+  done: () => void;
+}
+
 interface GuestEntry {
   receive: (message: ToHost) => void;
-  session: DirectSession<ToClient | WireReplica, ToHost | WireReplicaNeed>;
+  session: DirectSession<HostSend, HostRecv>;
   /** 握手後才知道這位客人是哪個玩家。 */
   playerId: string | null;
   /** 加入的先後（後備順序用）。 */
@@ -117,6 +131,7 @@ export class HostBridge {
   private registeredOrder = '';
   private guestSerial = 0;
   private handoverWaiter: ((ok: boolean) => void) | null = null;
+  private seedRound: SeedRound | null = null;
 
   constructor(
     private readonly local: LocalHost,
@@ -402,6 +417,7 @@ export class HostBridge {
   /** 關閉：中斷中繼連線（伺服器會通知客人房主離開）。 */
   close(): void {
     this.done = true;
+    this.seedRound?.done();
     this.cancelRefresh();
     for (const guestId of [...this.guests.keys()]) this.detachGuest(guestId);
     this.socket.disconnect();
@@ -480,6 +496,53 @@ export class HostBridge {
     );
   }
 
+  // ── 種子共同產生（M10）──────────────────────────────
+
+  /**
+   * 對所有已握手的真人客人發出承諾，收集他們回送的貢獻（只在房主手上，不轉發給別人）。
+   * 全部回來或逾時就結束；回傳「玩家 id → 貢獻」。沒有客人時立刻回傳空的。
+   */
+  collectSeed(attempt: number, commit: string, timeoutMs: number): Promise<Map<string, string>> {
+    this.seedRound?.done();
+    return new Promise((resolve) => {
+      const waiting = new Set<string>();
+      for (const entry of this.guests.values())
+        if (entry.playerId !== null) waiting.add(entry.playerId);
+      const round: SeedRound = {
+        attempt,
+        parts: new Map(),
+        waiting,
+        done: () => undefined,
+      };
+      const cancel = this.scheduler.after(timeoutMs, () => {
+        round.done();
+      });
+      round.done = () => {
+        cancel();
+        if (this.seedRound === round) this.seedRound = null;
+        resolve(round.parts);
+      };
+      this.seedRound = round;
+      if (waiting.size === 0) {
+        round.done();
+        return;
+      }
+      const begin: WireSeedBegin = { t: 'seed-begin', d: { attempt, commit } };
+      for (const entry of this.guests.values()) {
+        if (entry.playerId !== null) entry.session.send(begin);
+      }
+    });
+  }
+
+  private onSeedPart(entry: GuestEntry, message: WireSeedPart): void {
+    const round = this.seedRound;
+    if (!round || entry.playerId === null || message.d.attempt !== round.attempt) return;
+    if (!round.waiting.has(entry.playerId) || round.parts.has(entry.playerId)) return;
+    round.parts.set(entry.playerId, message.d.r);
+    round.waiting.delete(entry.playerId);
+    if (round.waiting.size === 0) round.done();
+  }
+
   // ── 複本與後備順序（M9）────────────────────────────
 
   private currentReplica(): RoomReplica | null {
@@ -537,45 +600,48 @@ export class HostBridge {
     const relayEmit = (data: unknown): void => {
       this.socket.emit(RELAY_EVENTS.toGuest, { guestId, data });
     };
-    const session: DirectSession<ToClient | WireReplica, ToHost | WireReplicaNeed> =
-      new DirectSession<ToClient | WireReplica, ToHost | WireReplicaNeed>({
-        role: 'host',
-        connector: this.options.direct ?? null,
-        scheduler: this.scheduler,
-        connectTimeoutMs: this.options.directTimeoutMs ?? DIRECT_TIMEOUT_MS,
-        // 協商資料與切換標記只在中繼還連著時有意義；斷線期間不要讓 socket.io 把它們緩存起來重送
-        sendRelay: (message) => {
-          if (message.t === 'rtc' || message.t === 'switch') {
-            if (this.socket.connected) relayEmit(message);
-          } else relayEmit(message);
-        },
-        deliver: (message) => {
-          const entry = this.guests.get(guestId);
-          if (!entry) return;
-          if (message.t === 'replica-need') {
-            // 後備說他漏了訊息：從頭重送
-            entry.sender.reset();
-            this.pushReplicas();
-            return;
-          }
-          entry.receive(message);
-        },
-        parse: (value) => {
-          const parsed = parseWireToHost(value);
-          // 協商與切換標記只走中繼
-          return parsed === null || parsed.t === 'rtc' || parsed.t === 'switch' ? null : parsed;
-        },
-        onSwitched: () => {
-          this.notifyPath();
-          this.evaluate();
-        },
-        onLost: () => {
-          // 直連中斷：遺失了哪些訊息無從得知，當作這位客人斷線；他會經中繼重新加入並接回座位
-          this.detachGuest(guestId); // 會通知連線方式
-          if (this.parked) this.unpark();
-          else this.evaluate();
-        },
-      });
+    const session: DirectSession<HostSend, HostRecv> = new DirectSession<HostSend, HostRecv>({
+      role: 'host',
+      connector: this.options.direct ?? null,
+      scheduler: this.scheduler,
+      connectTimeoutMs: this.options.directTimeoutMs ?? DIRECT_TIMEOUT_MS,
+      // 協商資料與切換標記只在中繼還連著時有意義；斷線期間不要讓 socket.io 把它們緩存起來重送
+      sendRelay: (message) => {
+        if (message.t === 'rtc' || message.t === 'switch') {
+          if (this.socket.connected) relayEmit(message);
+        } else relayEmit(message);
+      },
+      deliver: (message) => {
+        const entry = this.guests.get(guestId);
+        if (!entry) return;
+        if (message.t === 'replica-need') {
+          // 後備說他漏了訊息：從頭重送
+          entry.sender.reset();
+          this.pushReplicas();
+          return;
+        }
+        if (message.t === 'seed-part') {
+          this.onSeedPart(entry, message);
+          return;
+        }
+        entry.receive(message);
+      },
+      parse: (value) => {
+        const parsed = parseWireToHost(value);
+        // 協商與切換標記只走中繼
+        return parsed === null || parsed.t === 'rtc' || parsed.t === 'switch' ? null : parsed;
+      },
+      onSwitched: () => {
+        this.notifyPath();
+        this.evaluate();
+      },
+      onLost: () => {
+        // 直連中斷：遺失了哪些訊息無從得知，當作這位客人斷線；他會經中繼重新加入並接回座位
+        this.detachGuest(guestId); // 會通知連線方式
+        if (this.parked) this.unpark();
+        else this.evaluate();
+      },
+    });
     const send = (message: ToClient): void => {
       session.send(message);
       if (message.t === 'emit' && message.event === EVENTS.serverHello) {
@@ -613,6 +679,10 @@ export class HostBridge {
     this.guests.delete(guestId);
     entry.session.close();
     entry.receive({ t: 'close' });
+    const round = this.seedRound;
+    if (round && entry.playerId !== null && round.waiting.delete(entry.playerId)) {
+      if (round.waiting.size === 0) round.done();
+    }
     this.notifyPath();
   }
 

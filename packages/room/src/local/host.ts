@@ -4,6 +4,7 @@
  */
 import type { LoadedCardSet } from '@kot/cardsets/pure';
 import type { GatewayConn, ServerEventMap } from '../gateway.js';
+import type { Seed } from '@kot/rules';
 import { createGameHost, type GameHost } from '../host.js';
 import type { Timings } from '../room.js';
 import { realScheduler, type Scheduler } from '../scheduler.js';
@@ -14,6 +15,8 @@ export interface LocalHostOptions {
   /** 測試可注入假時鐘；預設用真實計時器。 */
   scheduler?: Scheduler;
   timings?: Timings;
+  /** 開局種子的來源（預設為 CSPRNG；房主模式用它換成「共同產生」的種子）。 */
+  newSeed?: () => Seed;
   /** 房間內容改變／關閉時通知（持久化用）。 */
   onRoomChange?: (code: string) => void;
   onRoomClosed?: (code: string) => void;
@@ -34,6 +37,7 @@ export function createLocalHost(options: LocalHostOptions): LocalHost {
     maxRooms: 1,
     idleKickMs: 0,
     ...(options.timings === undefined ? {} : { timings: options.timings }),
+    ...(options.newSeed === undefined ? {} : { newSeed: options.newSeed }),
     ...(options.onRoomChange === undefined ? {} : { onRoomChange: options.onRoomChange }),
     ...(options.onRoomClosed === undefined ? {} : { onRoomClosed: options.onRoomClosed }),
   });

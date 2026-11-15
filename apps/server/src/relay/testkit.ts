@@ -4,11 +4,13 @@
  */
 import { EVENTS, PROTOCOL_VERSION, type Ack, type RoomSnapshot } from '@kot/protocol';
 import {
+  auditGame,
   createGuestEndpoint,
   createRelayedHost,
   type GuestEndpoint,
   type GuestEndpointOptions,
   type HostBridgeOptions,
+  type AuditReport,
   type HostSide,
   type RoleEndpoint,
   type RoleEndpointOptions,
@@ -24,6 +26,24 @@ import { FakeScheduler } from '@kot/room/testing';
 import { testCardSet } from '@kot/room/testing-fs';
 import { createMemoryRelay, type MemoryRelay, type MemorySocket } from './memoryRelay.js';
 import type { RelayOptions } from './registry.js';
+
+/** 稽核用的卡牌組解析（與房主用同一份測試卡組）。 */
+function resolveCards(id: string) {
+  const loaded = testCardSet();
+  if (loaded.set.id !== id) return null;
+  const cards = Object.fromEntries(loaded.set.cards.map((card) => [card.id, card]));
+  return { hash: loaded.hash, env: { cards } };
+}
+
+/** 角色端點的稽核設定：報告收進陣列。 */
+function auditOptions(reports: AuditReport[]): NonNullable<RoleEndpointOptions<HostSide>['audit']> {
+  return {
+    verify: (input) => auditGame(input, resolveCards),
+    onReport: (report) => {
+      reports.push(report);
+    },
+  };
+}
 
 export const TIMINGS: Timings = {
   decisionMs: 1000,
@@ -133,6 +153,8 @@ export interface RoleNode {
   /** 目前（或最近一次）作為房主的本機節點；還沒當過房主為 null。 */
   hosts: HostNode[];
   roles: string[];
+  /** 局後稽核的結果（每局一份）。 */
+  reports: AuditReport[];
   /** 頁面用原本的 token 重新握手（真正的頁面在收到 open 後會自動做這件事）。 */
   rehello: () => Promise<Record<string, unknown>>;
 }
@@ -203,9 +225,11 @@ export class Cluster {
     const host = this.host({ noPage: true });
     const hosts: HostNode[] = [host];
     const roles: string[] = [];
+    const reports: AuditReport[] = [];
     const endpoint = createRoleEndpoint<HostSide>({
       initial: hostSideOf(host.relayed),
       scheduler,
+      audit: auditOptions(reports),
       createGuest: (joinCode, hooks, resuming) =>
         createGuestEndpoint(this.relay.socket(), joinCode, { scheduler, resuming, ...hooks }),
       createHost: () => {
@@ -231,6 +255,7 @@ export class Cluster {
       scheduler,
       hosts,
       roles,
+      reports,
       rehello: () => page.hello(nickname, page.token),
       host,
       code,
@@ -293,9 +318,11 @@ export class Cluster {
     this.alive.add(scheduler);
     const hosts: HostNode[] = [];
     const roles: string[] = [];
+    const reports: AuditReport[] = [];
     const endpoint = createRoleEndpoint<HostSide>({
       code,
       scheduler,
+      audit: auditOptions(reports),
       ...extra,
       createGuest: (joinCode, hooks, resuming) =>
         createGuestEndpoint(this.relay.socket(), joinCode, { scheduler, resuming, ...hooks }),
@@ -322,6 +349,7 @@ export class Cluster {
       scheduler,
       hosts,
       roles,
+      reports,
       rehello: () => page.hello(nickname, page.token),
     };
   }

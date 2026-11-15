@@ -9,6 +9,7 @@ import { describePath, usePathStatus } from './net/pathStatus.js';
 import { describeQuality, useQuality } from './net/quality.js';
 import { setRestoreStatus, useRestoreStatus } from './net/restoreStatus.js';
 import { roleChangeNotice, useRoleStatus, type RoleStatus } from './net/roleStatus.js';
+import { AuditPanel } from './views/AuditPanel.js';
 import { RolePanel } from './views/RolePanel.js';
 import { session } from './session.js';
 import { useGameClient } from './useGameClient.js';
@@ -172,6 +173,7 @@ export function App() {
             <RolePanel role={role} room={room} selfId={connection.playerId} />
           )}
           {path !== null && <div data-testid="path-status">{describePath(path)}</div>}
+          <AuditPanel phase={room?.phase ?? null} isHost={role?.role === 'host'} />
         </div>
       )}
       {hostPage && inGame && (wakeLock === 'unsupported' || wakeLock === 'denied') && (
