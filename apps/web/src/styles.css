@@ -400,28 +400,6 @@ main.wide {
   overflow: hidden;
   z-index: 2;
 }
-.scene-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  align-items: center;
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
-}
-.scene-controls label {
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-.scene-controls select {
-  font: inherit;
-  padding: 0.15rem 0.4rem;
-  border: 2px solid var(--line);
-  border-radius: 6px;
-  background: var(--card);
-  color: var(--fg);
-}
 .scene-skip {
   position: absolute;
   right: 10px;
@@ -1094,4 +1072,84 @@ main.wide {
 }
 .host-notice p {
   margin: 0.5rem 0;
+}
+
+/* 登入頁：選擇玩法（線上／離線單機） */
+.mode-picker {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+}
+.mode-picker legend {
+  padding: 0 0.4rem;
+  font-weight: 700;
+}
+.mode-picker label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.4rem 0.5rem;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mode-picker label.on {
+  border-color: var(--line);
+  background: color-mix(in srgb, #ffd23f 35%, var(--card));
+}
+.mode-picker label span {
+  display: grid;
+}
+.mode-picker input {
+  margin-top: 0.25rem;
+}
+
+/* 3D 場景右下角：全螢幕與關閉 3D（文字按鈕，靠右對齊在縮放按鈕下方） */
+.map-controls {
+  align-items: flex-end;
+}
+.map-controls button.wide {
+  width: auto;
+  height: auto;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+/* 設定面板 */
+.settings {
+  display: grid;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+.settings fieldset {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.4rem 0.75rem 0.7rem;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+}
+.settings legend {
+  padding: 0 0.4rem;
+  font-weight: 700;
+}
+.settings label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.settings select {
+  font: inherit;
+  padding: 0.15rem 0.4rem;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg);
+}
+.settings input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+  flex: none;
 }

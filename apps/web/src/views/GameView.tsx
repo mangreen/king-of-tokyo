@@ -1,10 +1,20 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type { Action, CardDef } from '@kot/rules';
 import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
 import { envOf, groupActions, myActions } from '../actions.js';
-import { GameHud } from '../hud/GameHud.js';
+import { GameHud, type HudTab } from '../hud/GameHud.js';
+import { SettingsPanel } from '../hud/SettingsPanel.js';
 import { nextSpins } from '../scene/dice.js';
-import { loadPrefs, savePrefs, seedFromCode, webglAvailable } from '../scene/prefs.js';
+import {
+  loadPrefs,
+  prefersReducedMotion,
+  savePrefs,
+  seedFromCode,
+  watchReducedMotion,
+  webglAvailable,
+  type ScenePrefs,
+} from '../scene/prefs.js';
+import type { QualityTier } from '../scene/quality.js';
 import { toSnapshot } from '../scene/snapshot.js';
 import type { EventBatch } from '../state.js';
 
@@ -45,6 +55,15 @@ export function GameView({
 }: Props) {
   const { state } = game;
   const [prefs, setPrefs] = useState(loadPrefs);
+  const [tier, setTier] = useState<QualityTier | null>(null);
+  const [hudTab, setHudTab] = useState<HudTab>('players');
+  const [reduced, setReduced] = useState(prefersReducedMotion);
+  useEffect(() => watchReducedMotion(setReduced), []);
+  const updatePrefs = (patch: Partial<ScenePrefs>): void => {
+    const next = { ...prefs, ...patch };
+    savePrefs(next);
+    setPrefs(next);
+  };
   // 每顆骰子的轉動次數：新的一批事件有重擲／改骰時加一（render 期間依 version 推導，不用 effect）
   const [spins, setSpins] = useState<{ version: number; counts: number[] }>(() => ({
     version: game.version,
@@ -131,6 +150,17 @@ export function GameView({
       sweep={sweep}
       groups={hudGroups}
       onAct={onAct}
+      initialTab={hudTab}
+      onTabChange={setHudTab}
+      settings={
+        <SettingsPanel
+          prefs={prefs}
+          onChange={updatePrefs}
+          canGL={canGL}
+          reduced={reduced}
+          tier={tier}
+        />
+      }
     />
   );
 
@@ -165,6 +195,7 @@ export function GameView({
             hud={renderHud('overlay')}
             corner={leaveButton}
             cards={cards}
+            onTier={setTier}
           />
         </Suspense>
       ) : (

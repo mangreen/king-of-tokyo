@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { parseInvite, withoutInvite } from './invite.js';
+import { modeUrl } from './net/mode.js';
 import { GameView } from './views/GameView.js';
 import { Lobby } from './views/Lobby.js';
 import { Login } from './views/Login.js';
@@ -91,7 +92,17 @@ export function App() {
 
   let body;
   if (connection.status === 'idle') {
-    body = <Login onLogin={login} inviteCode={invite} hostMode={p2p} />;
+    body = (
+      <Login
+        onLogin={login}
+        inviteCode={invite}
+        hostMode={p2p}
+        mode={clientOptions.mode}
+        onModeChange={(m) => {
+          window.location.assign(modeUrl(window.location.href, m));
+        }}
+      />
+    );
   } else if (connection.status === 'error') {
     body = (
       <div className="card">
