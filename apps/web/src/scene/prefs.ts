@@ -10,6 +10,8 @@ export interface ScenePrefs {
   follow: boolean;
   /** 怪獸各自的攻擊特效（吐息、雷射、噴火…）。 */
   attackFx: boolean;
+  /** 商店飛碟與卡牌使用特效。 */
+  cardFx: boolean;
 }
 
 const KEY = 'kot.scene.prefs.v1';
@@ -22,6 +24,7 @@ export function defaultPrefs(reducedMotion: boolean): ScenePrefs {
     follow: true,
     // 系統要求減少動態時，閃爍的光柱特效預設關閉（仍可手動開啟）
     attackFx: !reducedMotion,
+    cardFx: !reducedMotion,
   };
 }
 
@@ -39,6 +42,7 @@ export function parsePrefs(raw: string | null, reducedMotion: boolean): ScenePre
       cameraMotion: typeof o['cameraMotion'] === 'boolean' ? o['cameraMotion'] : base.cameraMotion,
       follow: typeof o['follow'] === 'boolean' ? o['follow'] : base.follow,
       attackFx: typeof o['attackFx'] === 'boolean' ? o['attackFx'] : base.attackFx,
+      cardFx: typeof o['cardFx'] === 'boolean' ? o['cardFx'] : base.cardFx,
     };
   } catch {
     return base;

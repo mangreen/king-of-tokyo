@@ -16,13 +16,15 @@ import {
   type Material,
   type Texture,
 } from 'three';
-import type { GameEvent } from '@kot/rules';
+import type { CardDef, GameEvent } from '@kot/rules';
 import { MonsterActor } from './actor.js';
 import { buildCity, type CityBuild } from './city.js';
+import { CardFaces, CardFxSystem } from './cardShow.js';
 import { directEvents, type Cue } from './director.js';
 import { AttackFxSystem, attackStyleOf } from './attackFx.js';
 import { CrackSystem, DebrisSystem, DustSystem, ShieldSystem, ShockwaveSystem } from './effects.js';
 import { Holds } from './holds.js';
+import { UfoShow } from './ufo.js';
 import {
   BAY_SPOT,
   CITY_SPOT,
@@ -78,6 +80,8 @@ export interface SceneSnapshot {
   /** 目前行動中的座位（顯示腳下光環）。 */
   activeSeat: number | null;
   mySeat: number | null;
+  /** 商店目前翻開的牌（飛碟演出時光束裡飄的牌）。 */
+  market?: readonly string[];
 }
 
 export interface RendererOptions {
@@ -91,6 +95,10 @@ export interface RendererOptions {
   follow?: boolean;
   /** 怪獸各自的攻擊特效（預設開）。 */
   attackFx?: boolean;
+  /** 商店飛碟與卡牌特效（預設開）。 */
+  cardFx?: boolean;
+  /** 查卡牌資料（卡面與特效主題用）；卡牌組晚到時用 setCards 更新。 */
+  cards?: ((id: string) => CardDef | undefined) | undefined;
   seed: number;
   onTierChange?: (tier: QualityTier) => void;
   onFatal?: (reason: string) => void;
@@ -129,6 +137,8 @@ const FLOAT_COLORS = {
 export class SceneRenderer {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
+  /** 飛碟另外用一個場景疊在最上層（先清深度）：不被城市建築擋住。 */
+  private readonly overlayScene = new Scene();
   private readonly camera = new PerspectiveCamera(OVERVIEW_POSE.fov, 1, 0.5, 240);
   private readonly world = new Group();
   private readonly fx = new Group();
@@ -142,6 +152,11 @@ export class SceneRenderer {
   private cracks: CrackSystem;
   private attackFx!: AttackFxSystem;
   private shields: ShieldSystem;
+  private readonly faces: CardFaces;
+  private cardFx!: CardFxSystem;
+  private ufo!: UfoShow;
+  private cardFxOn: boolean;
+  private cardOf: ((id: string) => CardDef | undefined) | undefined;
   private readonly blobTex: Texture = makeSoftDotTexture();
   private readonly blobs = new Map<number, Mesh>();
   private readonly marker: Mesh;
@@ -312,6 +327,9 @@ export class SceneRenderer {
     this.tier = startTier(opts.quality);
     this.cameraMotion = opts.cameraMotion;
     this.follow = opts.follow ?? true;
+    this.cardFxOn = opts.cardFx ?? true;
+    this.cardOf = opts.cards;
+    this.faces = new CardFaces((id) => this.cardOf?.(id));
     const q = QUALITY[this.tier];
 
     try {
@@ -371,6 +389,22 @@ export class SceneRenderer {
       opts.attackFx ?? true,
     );
     this.fx.add(this.dust.points, this.debris.mesh);
+    this.cardFx = new CardFxSystem(this.fx, {
+      dust: this.dust,
+      debris: this.debris,
+      waves: this.waves,
+      shields: this.shields,
+      faces: this.faces,
+      scale: () => QUALITY[this.tier].dust / QUALITY.high.dust,
+      shake: (amount) => {
+        if (this.cameraMotion) this.shake = Math.max(this.shake, amount);
+      },
+    });
+    this.cardFx.setEnabled(this.cardFxOn);
+    const ufoSun = new DirectionalLight('#fff6e0', 2.2);
+    ufoSun.position.set(-6, 10, 14);
+    this.overlayScene.add(new HemisphereLight('#e6f1ff', '#a69ac8', 1.5), ufoSun);
+    this.ufo = new UfoShow(this.overlayScene, this.faces);
 
     const markerGeo = new RingGeometry(1.9, 2.3, 40);
     markerGeo.rotateX(-Math.PI / 2);
@@ -421,6 +455,19 @@ export class SceneRenderer {
     this.attackFx.setEnabled(on);
   }
 
+  /** 開關商店飛碟與卡牌特效。 */
+  setCardFx(on: boolean): void {
+    this.cardFxOn = on;
+    this.cardFx.setEnabled(on);
+    if (!on) this.ufo.clear();
+  }
+
+  /** 卡牌組載入後（或換卡牌組）更新卡面與特效主題。 */
+  setCards(lookup: ((id: string) => CardDef | undefined) | undefined): void {
+    this.cardOf = lookup;
+    this.faces.setLookup((id) => this.cardOf?.(id));
+  }
+
   setCameraMotion(on: boolean): void {
     this.cameraMotion = on;
     if (!on) {
@@ -451,7 +498,7 @@ export class SceneRenderer {
 
   /** 播放一批事件。回傳是否有演出（供 UI 顯示「跳過」）。 */
   play(events: readonly GameEvent[]): boolean {
-    const { cues, duration } = directEvents(events);
+    const { cues, duration } = directEvents(events, (id) => this.cardOf?.(id));
     if (cues.length === 0) return false;
     const tail = this.playing.reduce((m, p) => Math.max(m, p.endAt), this.simMs);
     const startAt = Math.max(this.simMs, tail);
@@ -473,6 +520,8 @@ export class SceneRenderer {
     }
     this.shotSpec = null;
     this.attackFx.clear();
+    this.cardFx.clear();
+    this.ufo.clear();
     this.holds.clear();
     if (this.snapshot) for (const m of this.snapshot.monsters) this.syncSeat(m.seat, true);
     this.refreshTags();
@@ -523,6 +572,9 @@ export class SceneRenderer {
     this.cracks.dispose();
     this.attackFx.dispose();
     this.shields.dispose();
+    this.cardFx.dispose();
+    this.ufo.dispose();
+    this.faces.dispose();
     this.blobTex.dispose();
     this.marker.geometry.dispose();
     (this.marker.material as Material).dispose();
@@ -779,19 +831,12 @@ export class SceneRenderer {
         this.float(a, `🛡-${String(cue.amount)}`, '#7de3ff', 'medium');
         break;
       }
-      case 'card': {
-        const a = this.actor(cue.seat);
-        if (a)
-          this.dust.emit(a.x, 2.6, a.z, {
-            count: 10,
-            spread: 2.2,
-            up: 2,
-            size: 1.2,
-            color: seatColor(cue.seat),
-            life: 0.9,
-          });
+      case 'card':
+        this.runCard(cue);
         break;
-      }
+      case 'ufo':
+        this.runUfo(cue);
+        break;
       case 'victory': {
         for (const seat of cue.seats) {
           const a = this.actor(seat);
@@ -806,6 +851,54 @@ export class SceneRenderer {
         if (this.cameraMotion) this.shotSpec = { spec: cue.spec, start: this.simMs, dur: cue.dur };
         break;
     }
+  }
+
+  /** 商店飛碟：買牌（牌飛向買家）或清商店（舊牌被帶走）。 */
+  private runUfo(cue: Extract<Cue, { kind: 'ufo' }>): void {
+    if (!this.cardFxOn) return;
+    const buyer = this.actor(cue.seat);
+    const market = this.snapshot?.market ?? [];
+    const shown =
+      cue.reason === 'sweep'
+        ? cue.swept
+        : [
+            ...(cue.picked === null ? [] : [cue.picked]),
+            // 商店現況扣掉這批新補進來的牌＝買牌前留在商店裡的牌
+            ...market.filter((id) => id !== cue.picked && !cue.revealed.includes(id)),
+          ];
+    this.ufo.start({
+      picked: cue.picked,
+      shown,
+      target: buyer ? { x: buyer.x, y: buyer.rig.height + 1.2, z: buyer.z } : { x: 0, y: 4, z: 0 },
+      dur: cue.dur / 1000,
+    });
+  }
+
+  /** 卡牌：使用＝依內容的 3D 特效（流星、閃電、治療光柱…）；收下＝亮一下。 */
+  private runCard(cue: Extract<Cue, { kind: 'card' }>): void {
+    const a = this.actor(cue.seat);
+    if (!a) return;
+    if (!this.cardFxOn || cue.mode === 'bought') {
+      this.dust.emit(a.x, 2.6, a.z, {
+        count: 10,
+        spread: 2.2,
+        up: 2,
+        size: 1.2,
+        color: seatColor(cue.seat),
+        life: 0.9,
+      });
+      if (this.cardFxOn) this.cardFx.pop(cue.cardId, a.x, a.z, a.rig.height * 0.8, false);
+      return;
+    }
+    const alive = [...this.actors.values()].filter((x) => x.alive);
+    const spot = (x: MonsterActor): { x: number; z: number } => ({ x: x.x, z: x.z });
+    this.cardFx.play(
+      cue.theme,
+      spot(a),
+      alive.filter((x) => x.seat !== cue.seat).map(spot),
+      alive.map(spot),
+    );
+    this.cardFx.pop(cue.cardId, a.x, a.z, a.rig.height * 0.9, true);
   }
 
   private landed(_actor: MonsterActor, spot: Spot): void {
@@ -933,12 +1026,20 @@ export class SceneRenderer {
     this.shields.update(sdt);
     this.updateMarker(time);
     this.updateCamera(dt);
+    this.cardFx.update(sdt, this.camera);
+    this.ufo.update(sdt, this.camera, time);
     if (this.city) {
       this.city.waterTexture.offset.x = (time * 0.012) % 1;
       this.city.landmarks.update(time);
     }
 
     this.renderer.render(this.scene, this.camera);
+    if (this.ufo.playing) {
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.overlayScene, this.camera);
+      this.renderer.autoClear = true;
+    }
     this.positionTags();
     this.frames++;
   };

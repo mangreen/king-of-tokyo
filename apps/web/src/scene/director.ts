@@ -1,4 +1,5 @@
 import type { DamageCause, GameEvent } from '@kot/rules';
+import { themeOf, type CardLookup, type CardTheme } from './cardFx.js';
 import type { ShotSpec } from './shots.js';
 
 /**
@@ -29,7 +30,29 @@ export type Cue =
   | { kind: 'ko'; at: number; seat: number; by: number | null }
   | { kind: 'pickup'; at: number; seat: number; what: 'energy' | 'heal' | 'vp'; amount: number }
   | { kind: 'shield'; at: number; seat: number; amount: number }
-  | { kind: 'card'; at: number; seat: number; cardId: string }
+  | {
+      kind: 'card';
+      at: number;
+      seat: number;
+      cardId: string;
+      /** bought＝買到手的收下動畫；used＝使用／觸發效果（依卡牌內容演出）。 */
+      mode: 'bought' | 'used';
+      theme: CardTheme;
+    }
+  | {
+      kind: 'ufo';
+      at: number;
+      dur: number;
+      /** 誰在買牌／清商店。 */
+      seat: number;
+      reason: 'buy' | 'sweep';
+      /** 買到的牌（飛向買家）；清商店時為 null。 */
+      picked: string | null;
+      /** 清商店時被清掉的牌（光束裡飄的就是它們）。 */
+      swept: string[];
+      /** 同一批事件裡新翻開的牌（補進商店的牌，演出時還不該出現在光束裡）。 */
+      revealed: string[];
+    }
   | { kind: 'victory'; at: number; seats: number[] }
   | { kind: 'shot'; at: number; dur: number; spec: ShotSpec };
 
@@ -45,6 +68,14 @@ export const LUNGE_DURATION = 700;
 /** 單一批事件最長播放時間；超過就整體加速。 */
 export const MAX_DURATION = 7000;
 export const MIN_SPEEDUP = 0.4;
+/** 商店飛碟整段演出（飛入 → 光束展示三張牌 → 買到的牌飛向買家 → 飛走）。 */
+export const UFO_DURATION = 3600;
+/** 飛碟演出進行到這個比例時，買到的牌抵達買家。 */
+export const UFO_DELIVER_AT = 0.68;
+/** 飛碟出場後，時間軸往後推多少毫秒才接後續事件（演出本身不必等完）。 */
+export const UFO_HOLD = 1500;
+/** 卡牌特效播出後，等多久才接後續事件（傷害／回復在特效之後才跳出）。 */
+export const CARD_USE_HOLD = 650;
 
 export function powerOf(amount: number): Power {
   if (amount >= 5) return 'heavy';
@@ -61,6 +92,7 @@ const cueEnd = (c: Cue): number => {
   switch (c.kind) {
     case 'lunge':
     case 'shot':
+    case 'ufo':
     case 'hitstop':
       return c.at + c.dur;
     default:
@@ -75,10 +107,12 @@ interface PendingAttack {
   end: number;
 }
 
-export function directEvents(events: readonly GameEvent[]): Timeline {
+export function directEvents(events: readonly GameEvent[], cardOf?: CardLookup): Timeline {
   const cues: Cue[] = [];
   let t = 0;
   let pending: PendingAttack | null = null;
+  /** 最近一次飛碟：後面緊接的「翻開新牌」事件要記在它身上。 */
+  let lastUfo: Extract<Cue, { kind: 'ufo' }> | null = null;
 
   /** 撲擊告一段落：時間軸推進到撞擊後。 */
   const flush = (): void => {
@@ -92,6 +126,7 @@ export function directEvents(events: readonly GameEvent[]): Timeline {
     switch (e.type) {
       case 'turn_started':
         flush();
+        lastUfo = null;
         cues.push({ kind: 'focus', at: t, seat: e.seat });
         t += 350;
         break;
@@ -213,11 +248,70 @@ export function directEvents(events: readonly GameEvent[]): Timeline {
         t += 120;
         break;
 
-      case 'card_bought':
+      case 'market_swept': {
+        flush();
+        lastUfo = {
+          kind: 'ufo',
+          at: t,
+          dur: UFO_DURATION,
+          seat: e.seat,
+          reason: 'sweep',
+          picked: null,
+          swept: [...e.discarded],
+          revealed: [],
+        };
+        cues.push(lastUfo);
+        t += UFO_HOLD;
+        break;
+      }
+
+      case 'card_revealed':
+        lastUfo?.revealed.push(e.cardId);
+        break;
+
+      case 'card_bought': {
+        flush();
+        const theme = themeOf(cardOf?.(e.cardId));
+        if (e.from === null) {
+          // 從商店買：飛碟把牌送到買家手上，牌抵達時才演「收下」
+          lastUfo = {
+            kind: 'ufo',
+            at: t,
+            dur: UFO_DURATION,
+            seat: e.seat,
+            reason: 'buy',
+            picked: e.cardId,
+            swept: [],
+            revealed: [],
+          };
+          cues.push(lastUfo);
+          cues.push({
+            kind: 'card',
+            at: t + Math.round(UFO_DURATION * UFO_DELIVER_AT),
+            seat: e.seat,
+            cardId: e.cardId,
+            mode: 'bought',
+            theme,
+          });
+          t += UFO_HOLD;
+        } else {
+          cues.push({ kind: 'card', at: t, seat: e.seat, cardId: e.cardId, mode: 'bought', theme });
+          t += 200;
+        }
+        break;
+      }
+
       case 'card_used':
         flush();
-        cues.push({ kind: 'card', at: t, seat: e.seat, cardId: e.cardId });
-        t += 200;
+        cues.push({
+          kind: 'card',
+          at: t,
+          seat: e.seat,
+          cardId: e.cardId,
+          mode: 'used',
+          theme: themeOf(cardOf?.(e.cardId)),
+        });
+        t += CARD_USE_HOLD;
         break;
 
       case 'game_over': {
@@ -244,7 +338,8 @@ export function directEvents(events: readonly GameEvent[]): Timeline {
     const k = Math.max(MIN_SPEEDUP, MAX_DURATION / duration);
     for (const c of cues) {
       c.at = Math.round(c.at * k);
-      if (c.kind === 'lunge' || c.kind === 'shot') c.dur = Math.round(c.dur * k);
+      if (c.kind === 'lunge' || c.kind === 'shot' || c.kind === 'ufo')
+        c.dur = Math.round(c.dur * k);
     }
     duration = cues.reduce((m, c) => Math.max(m, cueEnd(c)), 0);
   }

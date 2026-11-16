@@ -6,7 +6,7 @@ import { monsterKindOf } from './roster.js';
 /** 把房間與遊戲狀態轉成場景需要的最小快照（純函式）。 */
 export function toSnapshot(
   room: Pick<RoomSnapshot, 'players'>,
-  state: Pick<GameState, 'config' | 'monsters'>,
+  state: Pick<GameState, 'config' | 'monsters'> & Partial<Pick<GameState, 'market'>>,
   actorSeat: number | null,
   selfId: string,
 ): SceneSnapshot {
@@ -18,6 +18,7 @@ export function toSnapshot(
     playerCount: state.config.playerCount,
     activeSeat: actorSeat,
     mySeat: room.players.find((p) => p.id === selfId)?.seat ?? null,
+    market: state.market?.faceUp ?? [],
     monsters: state.monsters.map((m) => ({
       seat: m.seat,
       name: nameOf(m.seat),

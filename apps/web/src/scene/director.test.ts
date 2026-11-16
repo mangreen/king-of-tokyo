@@ -8,7 +8,11 @@ import {
   hitstopFor,
   powerOf,
   type Cue,
+  UFO_DELIVER_AT,
+  UFO_DURATION,
+  UFO_HOLD,
 } from './director.js';
+import type { CardDef } from '@kot/rules';
 
 const kinds = (cues: Cue[]): string[] => cues.map((c) => c.kind);
 const of = <K extends Cue['kind']>(cues: Cue[], kind: K): Extract<Cue, { kind: K }>[] =>
@@ -145,5 +149,112 @@ describe('directEvents', () => {
     expect(powerOf(5)).toBe('heavy');
     expect(hitstopFor('light')).toBeGreaterThanOrEqual(60);
     expect(hitstopFor('heavy')).toBeLessThanOrEqual(120);
+  });
+
+  describe('商店飛碟與卡牌特效', () => {
+    const lookup = (id: string): CardDef | undefined =>
+      id === 'quake'
+        ? {
+            id,
+            name: '地震',
+            cost: 5,
+            kind: 'discard',
+            text: '',
+            effectId: 'instant',
+            params: { ops: [{ op: 'damageAll', n: 2 }] },
+          }
+        : undefined;
+
+    it('從商店買牌：飛碟登場，牌抵達買家時才演「收下」，補進的牌記在飛碟上', () => {
+      const { cues, duration } = directEvents(
+        [
+          { type: 'card_bought', seat: 1, cardId: 'quake', cost: 5, from: null },
+          { type: 'card_revealed', cardId: 'new-1' },
+          { type: 'energy_gained', seat: 1, amount: 1 },
+        ],
+        lookup,
+      );
+      const [ufo] = of(cues, 'ufo');
+      expect(ufo).toMatchObject({
+        seat: 1,
+        reason: 'buy',
+        picked: 'quake',
+        swept: [],
+        revealed: ['new-1'],
+        at: 0,
+        dur: UFO_DURATION,
+      });
+      const [card] = of(cues, 'card');
+      expect(card).toMatchObject({ mode: 'bought', cardId: 'quake', theme: 'meteor' });
+      expect(card?.at).toBe(Math.round(UFO_DURATION * UFO_DELIVER_AT));
+      // 後續事件不必等飛碟飛完，但要等它出場
+      expect(of(cues, 'pickup')[0]?.at).toBe(UFO_HOLD);
+      expect(duration).toBeGreaterThanOrEqual(UFO_DURATION);
+    });
+
+    it('清商店（花 2 能量）：飛碟帶走舊的三張牌', () => {
+      const { cues } = directEvents([
+        { type: 'market_swept', seat: 2, discarded: ['a', 'b', 'c'] },
+        { type: 'card_revealed', cardId: 'd' },
+        { type: 'card_revealed', cardId: 'e' },
+        { type: 'card_revealed', cardId: 'f' },
+      ]);
+      expect(of(cues, 'ufo')).toEqual([
+        {
+          kind: 'ufo',
+          at: 0,
+          dur: UFO_DURATION,
+          seat: 2,
+          reason: 'sweep',
+          picked: null,
+          swept: ['a', 'b', 'c'],
+          revealed: ['d', 'e', 'f'],
+        },
+      ]);
+      expect(of(cues, 'card')).toEqual([]);
+    });
+
+    it('向別的怪獸買牌：沒有飛碟，直接收下', () => {
+      const { cues } = directEvents([
+        { type: 'card_bought', seat: 0, cardId: 'x', cost: 3, from: 2 },
+      ]);
+      expect(of(cues, 'ufo')).toEqual([]);
+      expect(of(cues, 'card')[0]).toMatchObject({ mode: 'bought', theme: 'generic' });
+    });
+
+    it('使用卡牌：依卡牌內容挑主題；查不到卡牌時用通用特效', () => {
+      const used = directEvents([{ type: 'card_used', seat: 3, cardId: 'quake' }], lookup).cues;
+      expect(of(used, 'card')[0]).toMatchObject({ mode: 'used', seat: 3, theme: 'meteor' });
+      const unknown = directEvents([{ type: 'card_used', seat: 3, cardId: '???' }]).cues;
+      expect(of(unknown, 'card')[0]?.theme).toBe('generic');
+    });
+
+    it('連買兩張牌：各自一架飛碟，不會把補牌記到錯的那架', () => {
+      const { cues } = directEvents([
+        { type: 'card_bought', seat: 0, cardId: 'a', cost: 1, from: null },
+        { type: 'card_revealed', cardId: 'n1' },
+        { type: 'turn_started', seat: 1, round: 2 } as never,
+        { type: 'card_bought', seat: 1, cardId: 'b', cost: 1, from: null },
+        { type: 'card_revealed', cardId: 'n2' },
+      ]);
+      const ufos = of(cues, 'ufo');
+      expect(ufos.map((u) => u.revealed)).toEqual([['n1'], ['n2']]);
+      expect(ufos[1]?.at).toBeGreaterThan(ufos[0]?.at ?? 0);
+    });
+
+    it('時間太長時飛碟演出一起被壓縮', () => {
+      const events: GameEvent[] = Array.from({ length: 6 }, (_, i) => ({
+        type: 'card_bought',
+        seat: i % 3,
+        cardId: `c${String(i)}`,
+        cost: 1,
+        from: null,
+      }));
+      const { cues, duration } = directEvents(events);
+      expect(duration).toBeLessThanOrEqual(MAX_DURATION + 1);
+      const first = of(cues, 'ufo')[0];
+      expect(first?.dur).toBeLessThan(UFO_DURATION);
+      expect(first?.dur).toBeGreaterThanOrEqual(Math.round(UFO_DURATION * MIN_SPEEDUP));
+    });
   });
 });

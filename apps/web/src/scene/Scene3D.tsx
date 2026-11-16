@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { CardDef } from '@kot/rules';
+import { cardLookup } from './cardFx.js';
 import { latestVersion, takeNew, type FeedBatch } from './feed.js';
 import { prefersReducedMotion, savePrefs, watchReducedMotion, type ScenePrefs } from './prefs.js';
 import { followClick, followTitle, followUi } from './followState.js';
@@ -18,6 +20,8 @@ interface Props {
   onReady?: (renderer: SceneRenderer | null) => void;
   /** 放在場景左上角的按鈕（離開對局／返回大廳）；3D 開著時不必捲到頁面底部。 */
   corner?: ReactNode;
+  /** 卡牌資料：卡面與特效主題用（還沒載入時為 null，先演通用特效）。 */
+  cards?: readonly CardDef[] | null;
 }
 
 const QUALITY_LABEL: Record<QualitySetting, string> = {
@@ -40,6 +44,7 @@ export default function Scene3D({
   hud,
   onReady,
   corner,
+  cards,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -47,6 +52,11 @@ export default function Scene3D({
   const [fullscreen, setFullscreen] = useState(false);
   const [customView, setCustomView] = useState(false);
   const rendererRef = useRef<SceneRenderer | null>(null);
+  const lookup = useMemo(
+    () => (cards === undefined || cards === null ? undefined : cardLookup(cards)),
+    [cards],
+  );
+  const lookupRef = useRef(lookup);
   const snapshotRef = useRef(snapshot);
   const feedRef = useRef(feed);
   const lastPlayed = useRef<number | null>(null);
@@ -83,6 +93,8 @@ export default function Scene3D({
         cameraMotion: motion,
         follow,
         attackFx: prefs.attackFx,
+        cardFx: prefs.cardFx,
+        cards: lookupRef.current,
         seed,
         onTierChange: setTier,
         onFatal: (reason) => {
@@ -124,6 +136,16 @@ export default function Scene3D({
   useEffect(() => {
     rendererRef.current?.setAttackFx(prefs.attackFx);
   }, [prefs.attackFx]);
+
+  useEffect(() => {
+    rendererRef.current?.setCardFx(prefs.cardFx);
+  }, [prefs.cardFx]);
+
+  // 卡牌組通常在場景之後才到：到了就更新卡面與特效主題
+  useEffect(() => {
+    lookupRef.current = lookup;
+    rendererRef.current?.setCards(lookup);
+  }, [lookup]);
 
   // 先登記新事件（play 會加上 hold），再套用快照：這樣快照裡「結算後」的狀態
   // 會被 hold 擋住，等對應的演出播到才更新畫面。
@@ -316,6 +338,16 @@ export default function Scene3D({
             }}
           />{' '}
           怪獸招式特效（吐息、雷射、噴火…）
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={prefs.cardFx}
+            onChange={(e) => {
+              update({ cardFx: e.target.checked });
+            }}
+          />{' '}
+          商店飛碟與卡牌特效
         </label>
         {typeof document !== 'undefined' && document.fullscreenEnabled && (
           <button className="link" onClick={toggleFullscreen}>

@@ -164,6 +164,7 @@ export function GameView({
             seed={seed}
             hud={renderHud('overlay')}
             corner={leaveButton}
+            cards={cards}
           />
         </Suspense>
       ) : (

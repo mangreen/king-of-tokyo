@@ -10,6 +10,7 @@ describe('scene prefs', () => {
       cameraMotion: true,
       follow: true,
       attackFx: true,
+      cardFx: true,
     });
     expect(parsePrefs(null, true).cameraMotion).toBe(false);
     expect(defaultPrefs(false).enabled).toBe(true);
@@ -24,6 +25,7 @@ describe('scene prefs', () => {
       cameraMotion: false,
       follow: false,
       attackFx: true,
+      cardFx: true,
     });
     expect(parsePrefs('{"attackFx":false}', false).attackFx).toBe(false);
     // 舊版偏好沒有 follow 欄位 → 預設開啟
