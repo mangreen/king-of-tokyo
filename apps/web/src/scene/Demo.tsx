@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameEvent } from '@kot/rules';
+import { SettingsPanel } from '../hud/SettingsPanel.js';
 import { defaultPrefs, prefersReducedMotion, savePrefs, type ScenePrefs } from './prefs.js';
 import Scene3D from './Scene3D.js';
 import type { CardDef } from '@kot/rules';
@@ -278,6 +279,17 @@ export default function Demo() {
       <p className="muted" style={{ textAlign: 'center' }}>
         {stats}
       </p>
+      <SettingsPanel
+        prefs={prefs}
+        onChange={(patch) => {
+          const next = { ...prefs, ...patch };
+          savePrefs(next);
+          setPrefs(next);
+        }}
+        canGL
+        reduced={prefersReducedMotion()}
+        tier={null}
+      />
       <div className="row" style={{ justifyContent: 'center' }}>
         {actions.map(([label, run]) => (
           <button key={label} onClick={run}>

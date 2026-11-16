@@ -1,8 +1,32 @@
+import { createHash } from 'node:crypto';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+import { buildServiceWorker } from './src/pwa/buildSw.js';
+
+/** 建置時產生 /sw.js：把所有建置檔案存進瀏覽器，之後沒網路也能開啟離線模式。 */
+function serviceWorker(): Plugin {
+  return {
+    name: 'kot-service-worker',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const files = Object.keys(bundle)
+        .filter((f) => !f.endsWith('.map'))
+        .sort();
+      const version = createHash('sha1').update(files.join('\n')).digest('hex').slice(0, 10);
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sw.js',
+        source: buildServiceWorker(
+          version,
+          files.map((f) => `/${f}`),
+        ),
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), serviceWorker()],
   server: {
     host: '0.0.0.0',
     port: 5173,

@@ -5,7 +5,7 @@ import { latestVersion, takeNew, type FeedBatch } from './feed.js';
 import { prefersReducedMotion, savePrefs, watchReducedMotion, type ScenePrefs } from './prefs.js';
 import { followClick, followTitle, followUi } from './followState.js';
 import { SceneRenderer, type SceneSnapshot } from './SceneRenderer.js';
-import type { QualitySetting, QualityTier } from './quality.js';
+import type { QualityTier } from './quality.js';
 
 interface Props {
   snapshot: SceneSnapshot;
@@ -22,14 +22,9 @@ interface Props {
   corner?: ReactNode;
   /** 卡牌資料：卡面與特效主題用（還沒載入時為 null，先演通用特效）。 */
   cards?: readonly CardDef[] | null;
+  /** 自動畫質目前降到哪一級（設定面板顯示用）。 */
+  onTier?: (tier: QualityTier | null) => void;
 }
-
-const QUALITY_LABEL: Record<QualitySetting, string> = {
-  auto: '自動',
-  high: '高',
-  medium: '中',
-  low: '低',
-};
 
 /**
  * 3D 場景（Three.js）。動態載入，所以不會拖慢大廳；遊戲邏輯與操作仍在 DOM 裡，
@@ -45,6 +40,7 @@ export default function Scene3D({
   onReady,
   corner,
   cards,
+  onTier,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -72,6 +68,9 @@ export default function Scene3D({
   const followState = followUi(prefs.follow, motion, customView);
 
   useEffect(() => watchReducedMotion(setReduced), []);
+  useEffect(() => {
+    onTier?.(tier);
+  }, [tier, onTier]);
 
   // 重建渲染器時要讀「最新的」快照與事件，所以放在 ref 裡（在 effect 中更新，不在 render 中）
   useEffect(() => {
@@ -260,6 +259,24 @@ export default function Scene3D({
             >
               🎥
             </button>
+            {typeof document !== 'undefined' && document.fullscreenEnabled && (
+              <button
+                className="wide"
+                aria-label={fullscreen ? '離開全螢幕' : '全螢幕'}
+                onClick={toggleFullscreen}
+              >
+                {fullscreen ? '離開全螢幕' : '全螢幕'}
+              </button>
+            )}
+            <button
+              className="wide"
+              aria-label="關閉 3D"
+              onClick={() => {
+                update({ enabled: false });
+              }}
+            >
+              關閉 3D
+            </button>
             {customView && (
               <button
                 className="reset"
@@ -287,81 +304,6 @@ export default function Scene3D({
           )}
         </div>
         {hud}
-      </div>
-      <div className="scene-controls">
-        <label>
-          畫質{' '}
-          <select
-            value={prefs.quality}
-            onChange={(e) => {
-              update({ quality: e.target.value as QualitySetting });
-            }}
-          >
-            {(Object.keys(QUALITY_LABEL) as QualitySetting[]).map((q) => (
-              <option key={q} value={q}>
-                {QUALITY_LABEL[q]}
-              </option>
-            ))}
-          </select>
-          {prefs.quality === 'auto' && tier !== null && (
-            <span className="muted">（已降為{QUALITY_LABEL[tier]}）</span>
-          )}
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={motion}
-            disabled={reduced}
-            onChange={(e) => {
-              update({ cameraMotion: e.target.checked });
-            }}
-          />{' '}
-          鏡頭動態與震動{reduced ? '（系統已要求減少動態）' : ''}
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={followState.active}
-            disabled={!motion}
-            onChange={() => {
-              toggleFollow();
-            }}
-          />{' '}
-          鏡頭跟隨行動中的怪獸
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={prefs.attackFx}
-            onChange={(e) => {
-              update({ attackFx: e.target.checked });
-            }}
-          />{' '}
-          怪獸招式特效（吐息、雷射、噴火…）
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={prefs.cardFx}
-            onChange={(e) => {
-              update({ cardFx: e.target.checked });
-            }}
-          />{' '}
-          商店飛碟與卡牌特效
-        </label>
-        {typeof document !== 'undefined' && document.fullscreenEnabled && (
-          <button className="link" onClick={toggleFullscreen}>
-            {fullscreen ? '離開全螢幕' : '全螢幕'}
-          </button>
-        )}
-        <button
-          className="link"
-          onClick={() => {
-            update({ enabled: false });
-          }}
-        >
-          關閉 3D
-        </button>
       </div>
     </section>
   );

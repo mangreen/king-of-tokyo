@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { Action, GameState, Monster, RulesEnv } from '@kot/rules';
 import type { GameActionInput, RoomSnapshot } from '@kot/protocol';
 import type { ActionGroup, LabelContext } from '../actions.js';
@@ -23,7 +23,7 @@ import { endRules } from './rulesText.js';
 
 const MAX_TOASTS = 4;
 
-export type HudTab = 'players' | 'shop' | 'log' | 'rules' | 'mine';
+export type HudTab = 'players' | 'shop' | 'log' | 'rules' | 'mine' | 'settings';
 
 const TABS: { key: HudTab; label: string }[] = [
   { key: 'players', label: '👥 玩家' },
@@ -31,6 +31,7 @@ const TABS: { key: HudTab; label: string }[] = [
   { key: 'log', label: '📜 事件' },
   { key: 'rules', label: '📖 規則' },
   { key: 'mine', label: '🃏 我的卡牌' },
+  { key: 'settings', label: '⚙ 設定' },
 ];
 
 export interface HudProps {
@@ -63,6 +64,11 @@ export interface HudProps {
   onAct: (a: GameActionInput) => void;
   /** 工具列右側的額外按鈕（例如全螢幕、離開）。 */
   tools?: ReactNode;
+  /** 「設定」分頁的內容（由 GameView 提供，因為偏好設定存在那裡）。 */
+  settings?: ReactNode;
+  /** 3D 開關會讓 HUD 重新掛載：由外層記住目前的分頁，切換後仍停在原處。 */
+  initialTab?: HudTab;
+  onTabChange?: (tab: HudTab) => void;
 }
 
 /**
@@ -72,7 +78,11 @@ export interface HudProps {
  */
 export function GameHud(p: HudProps) {
   const { state } = p;
-  const [tab, setTab] = useState<HudTab>('players');
+  const [tab, setTab] = useState<HudTab>(p.initialTab ?? 'players');
+  const { onTabChange } = p;
+  useEffect(() => {
+    onTabChange?.(tab);
+  }, [tab, onTabChange]);
   // 輪到我買牌時自動打開商店一次；離開買牌階段時若是自動打開的就收起來
   const [auto, setAuto] = useState<{ key: string | null; opened: boolean }>({
     key: null,
@@ -242,6 +252,7 @@ export function GameHud(p: HudProps) {
           {tab === 'log' && <LogPanel log={p.log} rules={rules} />}
           {tab === 'rules' && <RulesPanel state={state} nameOf={p.nameOf} />}
           {tab === 'mine' && <MyCardsPanel monster={me} env={p.env} />}
+          {tab === 'settings' && p.settings}
         </div>
       </div>
       {p.tools}
