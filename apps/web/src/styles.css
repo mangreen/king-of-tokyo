@@ -1103,8 +1103,16 @@ main.wide {
 .mode-picker label span {
   display: grid;
 }
-.mode-picker input {
-  margin-top: 0.25rem;
+.mode-picker label span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 全域 input 是 width:100% 加內距，單選鈕要還原成原本大小，否則文字會被擠到右邊 */
+.mode-picker input[type='radio'] {
+  width: auto;
+  flex: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
 }
 
 /* 3D 場景右下角：全螢幕與關閉 3D（文字按鈕，靠右對齊在縮放按鈕下方） */
@@ -1240,4 +1248,18 @@ main.wide {
   to {
     transform: translateX(var(--dm-to));
   }
+}
+
+/* 登入頁：欄位與按鈕之間留固定間距 */
+.login-form {
+  display: grid;
+  gap: 0.7rem;
+}
+.login-form > h2,
+.login-form > p,
+.login-form > fieldset {
+  margin: 0;
+}
+.login-form > button.primary {
+  justify-self: start;
 }
