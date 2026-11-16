@@ -17,7 +17,8 @@ export function isShopOpen(state: GameState, env: RulesEnv): boolean {
 /** 把房間與遊戲狀態轉成場景需要的最小快照（純函式）。 */
 export function toSnapshot(
   room: Pick<RoomSnapshot, 'players'>,
-  state: Pick<GameState, 'config' | 'monsters'> & Partial<Pick<GameState, 'market'>>,
+  state: Pick<GameState, 'config' | 'monsters'> &
+    Partial<Pick<GameState, 'market' | 'phase' | 'outcome'>>,
   actorSeat: number | null,
   selfId: string,
   /** 商店開著：買牌階段而且有東西可買（飛碟入場的條件）。 */
@@ -32,6 +33,7 @@ export function toSnapshot(
     activeSeat: actorSeat,
     mySeat: room.players.find((p) => p.id === selfId)?.seat ?? null,
     shop: shopOpen ? (state.market?.faceUp ?? []) : null,
+    winners: state.phase === 'over' ? (state.outcome?.winners ?? []) : [],
     monsters: state.monsters.map((m) => ({
       seat: m.seat,
       name: nameOf(m.seat),

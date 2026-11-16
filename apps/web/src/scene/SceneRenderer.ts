@@ -21,6 +21,7 @@ import { MonsterActor } from './actor.js';
 import { buildCity, type CityBuild } from './city.js';
 import { CardFaces, CardFxSystem } from './cardShow.js';
 import { directEvents, UFO_DELIVER_AT, type Cue } from './director.js';
+import { buildCrown, headBounds, type Crown } from './crown.js';
 import { AttackFxSystem, attackStyleOf } from './attackFx.js';
 import { CrackSystem, DebrisSystem, DustSystem, ShieldSystem, ShockwaveSystem } from './effects.js';
 import { Holds } from './holds.js';
@@ -43,10 +44,13 @@ import {
   type QualityTier,
 } from './quality.js';
 import {
+  MONSTER_SCALE,
   OVERVIEW_POSE,
+  VICTORY_SWITCH_MS,
   blendPose,
   poseFor,
   smoothstep,
+  victoryPose,
   type CameraPose,
   type ShotSpec,
 } from './shots.js';
@@ -85,6 +89,8 @@ export interface SceneSnapshot {
    * 飛碟跟著它入場、停留、離場，不是等買了牌才出現。
    */
   shop?: readonly string[] | null;
+  /** 遊戲結束時的勝者座位（空或省略＝還在進行中）：戴皇冠、持續慶祝，鏡頭鎖定勝者。 */
+  winners?: readonly number[];
 }
 
 export interface RendererOptions {
@@ -162,6 +168,9 @@ export class SceneRenderer {
   private ufo!: UfoShow;
   /** 商店開始連續開著的時間（模擬毫秒）；關著＝null。 */
   private shopSince: number | null = null;
+  /** 勝利者頭上的皇冠（座位 → 皇冠）。 */
+  private crowns = new Map<number, Crown>();
+  private celebrate = { confetti: 0, wave: 0, spark: 0, roar: 0 };
   private cardFxOn: boolean;
   private cardOf: ((id: string) => CardDef | undefined) | undefined;
   private readonly blobTex: Texture = makeSoftDotTexture();
@@ -558,6 +567,7 @@ export class SceneRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.clearCrowns();
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
     this.io?.disconnect();
@@ -599,6 +609,7 @@ export class SceneRenderer {
   // ── 世界建構 ─────────────────────────────────────
 
   private rebuildWorld(playerCount: number): void {
+    this.clearCrowns();
     for (const a of this.actors.values()) {
       this.world.remove(a.rig.root);
       a.dispose();
@@ -1053,6 +1064,7 @@ export class SceneRenderer {
     this.attackFx.update(sdt, this.camera);
     this.shields.update(sdt);
     this.updateMarker(time);
+    this.updateCelebration(sdt, time);
     this.updateCamera(dt);
     this.cardFx.update(sdt, this.camera);
     this.syncShop();
@@ -1093,6 +1105,80 @@ export class SceneRenderer {
     if (this.shotSpec && this.simMs - this.shotSpec.start > this.shotSpec.dur) this.shotSpec = null;
   }
 
+  /** 正在慶祝的勝者（遊戲結束、結算演出播完、本人還在場上）。 */
+  private celebrants(): number[] {
+    const winners = this.snapshot?.winners ?? [];
+    if (winners.length === 0 || this.playing.length > 0) return [];
+    return winners.filter((seat) => this.actors.has(seat));
+  }
+
+  private clearCrowns(): void {
+    for (const c of this.crowns.values()) {
+      c.group.removeFromParent();
+      c.dispose();
+    }
+    this.crowns.clear();
+  }
+
+  /** 勝利慶祝：勝者戴上皇冠，持續撒彩帶、噴金色光點、放金色衝擊波，偶爾咆哮。 */
+  private updateCelebration(dt: number, time: number): void {
+    const seats = this.celebrants();
+    for (const [seat, c] of this.crowns) {
+      if (seats.includes(seat)) continue;
+      c.group.removeFromParent();
+      c.dispose();
+      this.crowns.delete(seat);
+    }
+    if (seats.length === 0) return;
+    const q = QUALITY[this.tier];
+    const t = this.celebrate;
+    t.confetti += dt;
+    t.wave += dt;
+    t.spark += dt;
+    t.roar += dt;
+    for (const seat of seats) {
+      const a = this.actors.get(seat);
+      if (!a) continue;
+      let crown = this.crowns.get(seat);
+      if (!crown) {
+        // 戴在頭上：依頭的大小決定皇冠尺寸，跟著頭轉；量不到頭就放在身高上方
+        const box = headBounds(a.rig.head);
+        if (box) {
+          const size = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
+          const scale = Math.min(1, Math.max(0.4, (size * 0.5) / 0.95));
+          crown = buildCrown(seatColor(seat), box.max.y + 0.2 * scale, scale);
+          crown.group.position.x = (box.min.x + box.max.x) / 2;
+          crown.group.position.z = (box.min.z + box.max.z) / 2;
+          a.rig.head.add(crown.group);
+        } else {
+          crown = buildCrown(seatColor(seat), a.rig.height / MONSTER_SCALE + 0.35);
+          a.rig.root.add(crown.group);
+        }
+        this.crowns.set(seat, crown);
+      }
+      crown.update(time);
+      if (t.confetti >= 0.4) {
+        this.debris.burst(a.x, a.rig.height + 0.3, a.z, Math.ceil(q.debris * 0.5), 6, CONFETTI);
+      }
+      if (t.spark >= 0.1) {
+        this.dust.emit(a.x, a.rig.height + 0.4, a.z, {
+          count: 2,
+          spread: 2.4,
+          up: 2.6,
+          size: 0.9,
+          color: '#ffe27a',
+          life: 1.2,
+        });
+      }
+      if (t.wave >= 1.6) this.waves.fire(a.x, a.z, 8, '#ffe27a', 1.1);
+      if (t.roar >= 6) a.roar();
+    }
+    if (t.confetti >= 0.4) t.confetti = 0;
+    if (t.spark >= 0.1) t.spark = 0;
+    if (t.wave >= 1.6) t.wave = 0;
+    if (t.roar >= 6) t.roar = 0;
+  }
+
   private updateMarker(time: number): void {
     const seat = this.snapshot?.activeSeat ?? null;
     const a = seat === null ? undefined : this.actor(seat);
@@ -1123,7 +1209,16 @@ export class SceneRenderer {
     };
     let desired = this.overviewPose();
     let rate = 2.2;
-    if (this.viewCustom) {
+    const winners = this.celebrants();
+    const winner =
+      winners[Math.floor(this.simMs / VICTORY_SWITCH_MS) % Math.max(1, winners.length)];
+    const wa = winner === undefined ? undefined : this.actors.get(winner);
+    if (wa && this.cameraMotion) {
+      // 遊戲結束：所有人的鏡頭鎖定勝者（不理會自己拖過的視角與跟隨開關），繞著他慢慢轉；
+      // 多位勝者每 7 秒換一位。「減少動態」時不動鏡頭，只保留皇冠與特效。
+      desired = victoryPose({ x: wa.x, z: wa.z, yaw: wa.yaw }, this.simMs);
+      rate = 2.4;
+    } else if (this.viewCustom) {
       // 玩家掌控視角：不播自動鏡頭；拖曳中幾乎即時跟手
       desired = applyView(desired, clampView(this.view));
       rate = this.interacting ? 22 : 9;
@@ -1166,7 +1261,7 @@ export class SceneRenderer {
     for (const [seat, el] of this.tags) {
       const a = this.actors.get(seat);
       if (!a) continue;
-      const p = this.project(a.x, a.rig.height + 1.1, a.z);
+      const p = this.project(a.x, a.rig.height + (this.crowns.has(seat) ? 2.6 : 1.1), a.z);
       el.style.opacity = p.ok ? '' : '0';
       el.style.transform = `translate(${p.sx.toFixed(1)}px, ${p.sy.toFixed(1)}px) translate(-50%, -100%)`;
     }
