@@ -56,6 +56,10 @@ export interface HudProps {
   spins: number[];
   canToggle: boolean;
   canRoll: boolean;
+  /** 本回合擲骰次數上限（含額外重擲與加擲卡）。 */
+  rollMax: number;
+  /** 次數用完後仍可「重擲 3」時要保留的骰子；否則 null。 */
+  threesKeep: number[] | null;
   canStop: boolean;
   onToggle: (i: number) => void;
   // 動作
@@ -208,6 +212,8 @@ export function GameHud(p: HudProps) {
             spins={p.spins}
             canToggle={p.canToggle}
             canRoll={p.canRoll}
+            rollMax={p.rollMax}
+            threesKeep={p.threesKeep}
             canStop={p.canStop}
             onToggle={p.onToggle}
             groups={p.groups}

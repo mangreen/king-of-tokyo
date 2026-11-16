@@ -68,6 +68,18 @@ export function num(def: CardDef, key: string, fallback = 0): number {
   return typeof v === 'number' ? v : fallback;
 }
 
+/**
+ * 本回合（目前行動座位）可擲骰的次數上限：基本次數＋已使用的額外重擲（煙霧彈、能量重擲）
+ * ＋持有加擲卡。R-CARD-21。引擎、合法動作、電腦玩家與介面都用這一個算法。
+ */
+export function rollLimitOf(g: G): number {
+  let limit = g.s.config.maxRolls + g.s.turn.bonusRolls;
+  for (const o of ownedOf(g, g.s.turn.seat)) {
+    limit += effectOf(o.def)?.extraRolls?.(o) ?? 0;
+  }
+  return limit;
+}
+
 /** 座位持有的所有卡（依購買順序）。複製卡沒有目標時沒有效果，不列入 effective 清單。 */
 export function ownedOf(g: G, seat: number): Owned[] {
   const m = getMonster(g.s, seat);

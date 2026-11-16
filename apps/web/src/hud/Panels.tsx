@@ -267,6 +267,8 @@ interface ActionProps {
   spins: number[];
   canToggle: boolean;
   canRoll: boolean;
+  rollMax: number;
+  threesKeep: number[] | null;
   canStop: boolean;
   onToggle: (i: number) => void;
   groups: ActionGroup[];
@@ -282,7 +284,6 @@ export function ActionPanel(p: ActionProps) {
   const { state, myTurn, kept } = p;
   const [help, setHelp] = useState(false);
   const { rollsUsed, dice } = state.turn;
-  const maxRolls = state.config.maxRolls;
   const rules = ruleConfigOf(state);
   const actorMonster = state.monsters.find((m) => m.seat === p.actorSeat);
   const inTokyo = actorMonster ? actorMonster.location !== null : null;
@@ -313,7 +314,8 @@ export function ActionPanel(p: ActionProps) {
       </div>
       {state.phase === 'roll' && (
         <p className="muted small">
-          已擲 {rollsUsed} / {maxRolls} 次{p.canToggle && '；點骰子可「保留」，其餘會重擲'}
+          已擲 {rollsUsed} / {p.rollMax} 次{p.canToggle && '；點骰子可「保留」，其餘會重擲'}
+          {p.threesKeep && '；次數用完，但持有的卡讓你還能重擲 3'}
         </p>
       )}
       <div className="row">
@@ -323,10 +325,13 @@ export function ActionPanel(p: ActionProps) {
               className="primary"
               disabled={!p.canRoll}
               onClick={() => {
-                p.onAct({ type: 'roll', keep: rollsUsed === 0 ? [] : [...kept] });
+                p.onAct({
+                  type: 'roll',
+                  keep: p.threesKeep ?? (rollsUsed === 0 ? [] : [...kept]),
+                });
               }}
             >
-              {rollsUsed === 0 ? '擲骰' : '重擲'}
+              {rollsUsed === 0 ? '擲骰' : p.threesKeep ? '重擲 3' : '重擲'}
             </button>
             <button
               disabled={!p.canStop}

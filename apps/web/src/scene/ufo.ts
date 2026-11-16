@@ -18,14 +18,15 @@ import {
   Vector2,
   Vector3,
 } from 'three';
-import { UFO_DELIVER_AT } from './director.js';
 import { disposeCardMesh, makeCardMesh, type CardFaces } from './cardShow.js';
 
 /**
  * 商店飛碟（原創造型：淡紫色碟身、藍色玻璃罩、黃色圓燈、碟身側面的閃電徽章）。
- * 演出：從畫面右上飛入 → 停在城市上空打出黃色光束 → 光束裡飄著商店的三張牌 →
- * 買到的那張飛向買家（清商店時三張被吸回飛碟）→ 飛碟往左上飛走。
- * 純視覺；動畫只看進度 p（0–1），所以事件太多、時間軸被壓縮時整段會等比例變快。
+ * 演出（跟著「商店能不能買」走，不是等買了才出現）：輪到某人的買牌階段、商店有東西可買時，
+ * 飛碟從畫面右上飛入，停在城市上空打出黃色光束，光束裡飄著商店翻開的牌；
+ * 買到的那張飛向買家，商店補進新牌時新牌滑進光束；清商店時舊牌被吸回碟身、換上新牌；
+ * 買牌階段結束（或買不起了）飛碟往左上飛走。
+ * 純視覺；牌的飛行只看進度（秒數由演出時間軸給，事件多時整段會等比例變快）。
  */
 
 /**
@@ -50,22 +51,34 @@ const lerp = (a: number, b: number, k: number): number => a + (b - a) * k;
 const seg = (p: number, a: number, b: number): number =>
   Math.min(1, Math.max(0, (p - a) / (b - a)));
 
-export interface UfoStart {
-  /** 買到的牌（清商店時為 null）。 */
-  picked: string | null;
-  /** 光束裡要展示的牌（買牌：買到的＋商店裡其他的；清商店：被清掉的）。最多三張。 */
-  shown: string[];
+export interface UfoDelivery {
+  /** 買到的牌（要飛向買家）。 */
+  picked: string;
   /** 買家頭上的位置（牌飛去的終點）。 */
   target: { x: number; y: number; z: number };
-  /** 整段演出秒數。 */
+  /** 牌飛行的秒數。 */
   dur: number;
 }
 
+/** 飛入、飛走的秒數；牌淡入、被吸回的秒數。 */
+const ENTER_S = 0.9;
+const LEAVE_S = 0.7;
+const CARD_IN_S = 0.4;
+const CARD_OUT_S = 0.4;
+
 interface Slot {
+  id: string;
   mesh: Mesh;
-  picked: boolean;
+  /** 目前（平滑移動中）與目標的左右位置。 */
   x: number;
+  toX: number;
   phase: number;
+  /** 0→1 淡入。 */
+  appear: number;
+  /** 被移出商店：吸回碟身的進度（0–1）；null＝還在商店裡。 */
+  removing: number | null;
+  /** 買到：飛向買家。 */
+  flight: { t: number; dur: number; target: { x: number; y: number; z: number } } | null;
 }
 
 /** 閃電徽章的外形。 */
@@ -89,9 +102,15 @@ export class UfoShow {
   private readonly badge = new Group();
   private readonly beam: Mesh;
   private readonly lights: Mesh[] = [];
-  private readonly slots: Slot[] = [];
   private readonly owned: { dispose(): void }[] = [];
-  private state: { t: number; dur: number; start: UfoStart } | null = null;
+  private want = false;
+  /** 飛入進度（秒）與飛走進度（秒）。 */
+  private enterT = 0;
+  private leaveT = 0;
+  private readonly leaveFrom = new Vector2(HOVER_NDC.x, HOVER_NDC.y);
+  private readonly ndc = new Vector2(ENTER_NDC.x, ENTER_NDC.y);
+  private cards: string[] = [];
+  private readonly slots: Slot[] = [];
   private readonly tmp = new Vector3();
   private readonly home = new Vector3();
   private readonly right = new Vector3();
@@ -224,39 +243,105 @@ export class UfoShow {
     parent.add(this.root);
   }
 
+  /** 飛碟（或飛行中的牌）還在畫面上。 */
   get playing(): boolean {
-    return this.state !== null;
+    return this.root.visible;
   }
 
-  start(opts: UfoStart): void {
-    this.clearSlots();
-    const shown = opts.shown.slice(0, 3);
-    // 買到的牌放中間，其他的分在兩側
-    const order: { id: string; picked: boolean }[] = [];
-    const others = shown.filter((id) => id !== opts.picked);
-    if (opts.picked !== null) {
-      order.push({ id: opts.picked, picked: true });
-      others.forEach((id, i) => {
-        order.splice(i === 0 ? 0 : order.length, 0, { id, picked: false });
-      });
-    } else {
-      for (const id of shown) order.push({ id, picked: false });
+  /** 有牌正飛向買家（這時商店的牌不要先換掉）。 */
+  get delivering(): boolean {
+    return this.slots.some((s) => s.flight !== null);
+  }
+
+  /** 商店開著：飛碟入場（已在場就只更新光束裡的牌）。cards＝商店翻開的牌，最多三張。 */
+  dock(cards: readonly string[]): void {
+    if (
+      this.want &&
+      cards.length === this.cards.length &&
+      cards.every((c, i) => c === this.cards[i])
+    ) {
+      return;
     }
-    const xs = order.length === 3 ? SLOT_X : order.length === 2 ? [-1.8, 1.8] : [0];
-    order.forEach((o, i) => {
-      const mesh = makeCardMesh(this.faces.texture(o.id));
+    if (!this.want) {
+      this.want = true;
+      // 飛走到一半又開了：跳過大半的飛入動畫直接接回來
+      this.enterT = this.leaveT > 0 ? ENTER_S * 0.7 : 0;
+      this.leaveT = 0;
+      this.root.visible = true;
+    }
+    this.setCards(cards.slice(0, 3));
+  }
+
+  /** 商店關了：牌被吸回碟身，飛碟往左上飛走。 */
+  undock(): void {
+    if (!this.want) return;
+    this.want = false;
+    this.leaveT = 0.0001;
+    this.leaveFrom.copy(this.ndc);
+  }
+
+  /** 商店的牌換了（買走、補牌、清商店）：舊牌吸回碟身、新牌滑進光束。 */
+  private setCards(next: readonly string[]): void {
+    this.cards = [...next];
+    const xs = next.length === 3 ? SLOT_X : next.length === 2 ? [-1.8, 1.8] : [0];
+    for (const s of this.slots) {
+      if (s.flight === null && s.removing === null && !next.includes(s.id)) s.removing = 0;
+    }
+    next.forEach((id, i) => {
+      const toX = xs[i] ?? 0;
+      const have = this.slots.find((s) => s.id === id && s.removing === null && s.flight === null);
+      if (have) {
+        have.toX = toX;
+        return;
+      }
+      const mesh = makeCardMesh(this.faces.texture(id));
       mesh.visible = false;
       this.parent.add(mesh);
-      this.slots.push({ mesh, picked: o.picked, x: xs[i] ?? 0, phase: i * 1.7 });
+      this.slots.push({
+        id,
+        mesh,
+        x: toX,
+        toX,
+        phase: i * 1.7,
+        appear: 0,
+        removing: null,
+        flight: null,
+      });
     });
-    this.state = { t: 0, dur: Math.max(0.3, opts.dur), start: opts };
-    this.root.visible = true;
   }
 
-  /** 立即結束（跳過演出）。 */
+  /** 買到一張牌：牌從光束飛向買家（牌不在光束裡時，從光束中央出發）。 */
+  deliver(opts: UfoDelivery): void {
+    if (!this.root.visible) return;
+    let slot = this.slots.find((s) => s.id === opts.picked && s.flight === null);
+    if (!slot) {
+      const mesh = makeCardMesh(this.faces.texture(opts.picked));
+      mesh.visible = false;
+      this.parent.add(mesh);
+      slot = {
+        id: opts.picked,
+        mesh,
+        x: 0,
+        toX: 0,
+        phase: 0,
+        appear: 1,
+        removing: null,
+        flight: null,
+      };
+      this.slots.push(slot);
+    }
+    slot.removing = null;
+    slot.appear = 1;
+    slot.flight = { t: 0, dur: Math.max(0.2, opts.dur), target: opts.target };
+  }
+
+  /** 立即結束（跳過演出、關閉特效）。 */
   clear(): void {
-    this.state = null;
+    this.want = false;
+    this.enterT = 0;
+    this.leaveT = 0;
     this.root.visible = false;
+    this.beam.visible = false;
     this.clearSlots();
   }
 
@@ -269,11 +354,12 @@ export class UfoShow {
   }
 
   update(dt: number, camera: PerspectiveCamera, time: number): void {
-    const st = this.state;
-    if (!st) return;
-    st.t += dt;
-    const p = st.t / st.dur;
-    if (p >= 1) {
+    if (!this.root.visible) return;
+    if (this.want) this.enterT = Math.min(ENTER_S, this.enterT + dt);
+    else this.leaveT += dt;
+    const enter = easeOut(this.enterT / ENTER_S);
+    const leave = this.want ? 0 : easeIn(this.leaveT / LEAVE_S);
+    if (!this.want && this.leaveT >= LEAVE_S && !this.delivering) {
       this.clear();
       return;
     }
@@ -283,12 +369,16 @@ export class UfoShow {
     this.fwd.setFromMatrixColumn(camera.matrixWorld, 2).negate();
 
     // ── 飛碟本體（鏡頭空間：飛入 → 停住 → 飛走） ──
-    const enter = easeOut(seg(p, 0, 0.22));
-    const leave = easeIn(seg(p, 0.76, 1));
     const hover = enter >= 1 && leave === 0 ? Math.sin(time * 2.4) * 0.02 : 0;
-    const nx = lerp(lerp(ENTER_NDC.x, HOVER_NDC.x, enter), EXIT_NDC.x, leave);
-    const ny = lerp(lerp(ENTER_NDC.y, HOVER_NDC.y, enter), EXIT_NDC.y, leave) + hover;
-    this.placeAt(camera, nx, ny, this.root.position);
+    // 飛走時從「離開那一刻的位置」出發（飛入到一半被收回也不會瞬移）
+    const fx = this.want
+      ? lerp(ENTER_NDC.x, HOVER_NDC.x, enter)
+      : lerp(this.leaveFrom.x, EXIT_NDC.x, leave);
+    const fy = this.want
+      ? lerp(ENTER_NDC.y, HOVER_NDC.y, enter) + hover
+      : lerp(this.leaveFrom.y, EXIT_NDC.y, leave);
+    this.ndc.set(fx, fy);
+    this.placeAt(camera, fx, fy, this.root.position);
     this.root.quaternion.copy(camera.quaternion);
     this.spin.rotation.y = time * 1.6;
     this.body.rotation.x = 0.95 + Math.sin(time * 1.3) * 0.03;
@@ -299,13 +389,39 @@ export class UfoShow {
     });
 
     // ── 光束 ──
-    const beamOn = easeOut(seg(p, 0.2, 0.3)) * (1 - easeIn(seg(p, 0.74, 0.8)));
+    const beamOn =
+      easeOut(seg(this.enterT / ENTER_S, 0.25, 0.6)) * (1 - easeIn(seg(leave, 0, 0.5)));
     this.beam.visible = beamOn > 0.01;
     this.beam.scale.set(0.35 + 0.65 * beamOn, beamOn, 0.35 + 0.65 * beamOn);
     (this.beam.material as ShaderMaterial).uniforms['uOpacity']!.value = 0.55 * beamOn;
 
     // ── 卡牌 ──
-    for (const s of this.slots) this.placeCard(s, p, time, camera, st.start);
+    for (let i = this.slots.length - 1; i >= 0; i -= 1) {
+      const s = this.slots[i];
+      if (!s) continue;
+      if (!this.stepSlot(s, dt)) {
+        this.parent.remove(s.mesh);
+        disposeCardMesh(s.mesh);
+        this.slots.splice(i, 1);
+        continue;
+      }
+      this.placeCard(s, time, camera, enter, leave);
+    }
+  }
+
+  /** 推進一張牌的動畫；回傳 false＝這張牌演完了，可以移除。 */
+  private stepSlot(s: Slot, dt: number): boolean {
+    s.x += (s.toX - s.x) * Math.min(1, dt * 7);
+    if (s.removing !== null) {
+      s.removing += dt / CARD_OUT_S;
+      return s.removing < 1;
+    }
+    if (s.flight) {
+      s.flight.t += dt;
+      return s.flight.t < s.flight.dur;
+    }
+    s.appear = Math.min(1, s.appear + dt / CARD_IN_S);
+    return true;
   }
 
   /** 螢幕上的位置（NDC）＋固定距離 → 世界座標。 */
@@ -321,41 +437,37 @@ export class UfoShow {
 
   private placeCard(
     s: Slot,
-    p: number,
     time: number,
     camera: PerspectiveCamera,
-    start: UfoStart,
+    enter: number,
+    leave: number,
   ): void {
-    const show = easeOut(seg(p, 0.26, 0.38));
+    const present = easeOut(seg(enter, 0.3, 0.6)) * (1 - easeIn(seg(leave, 0, 0.55)));
     const bob = Math.sin(time * 2.2 + s.phase) * 0.35;
     // 待在光束裡的位置（跟著飛碟，沿螢幕左右／往下排開）
     this.home
       .copy(this.root.position)
       .addScaledVector(this.right, s.x)
       .addScaledVector(this.upv, -CARD_DROP + bob);
-    let scale = CARD_SCALE * show;
-    let alpha = show;
+    let scale = CARD_SCALE * easeOut(s.appear) * (s.flight ? 1 : present);
+    let alpha = s.flight ? 1 : Math.max(easeOut(s.appear), 0) * present;
     this.tmp.copy(this.home);
 
-    if (s.picked) {
-      const k = seg(p, UFO_DELIVER_AT - 0.1, UFO_DELIVER_AT);
-      if (k > 0) {
-        // 飛向買家頭上（弧線上拋）
-        const e = easeIn(k);
-        this.tmp.set(start.target.x, start.target.y, start.target.z).lerp(this.home, 1 - e);
-        this.tmp.addScaledVector(this.upv, Math.sin(Math.PI * e) * 3.2);
-        scale = CARD_SCALE * (1 - 0.55 * e);
-      } else {
-        scale *= 1 + 0.08 * Math.sin(time * 6);
-      }
-      if (p >= UFO_DELIVER_AT) alpha = 0;
-    } else {
-      // 其他牌：待到飛碟離開前被吸回碟身
-      const k = easeIn(seg(p, 0.62, 0.76));
-      if (k > 0) {
-        this.tmp.lerp(this.root.position, k);
-        scale = CARD_SCALE * (1 - k);
-      }
+    if (s.flight) {
+      // 飛向買家頭上（弧線上拋）
+      const k = Math.min(1, s.flight.t / s.flight.dur);
+      const e = easeIn(k);
+      this.tmp.set(s.flight.target.x, s.flight.target.y, s.flight.target.z).lerp(this.home, 1 - e);
+      this.tmp.addScaledVector(this.upv, Math.sin(Math.PI * e) * 3.2);
+      scale = CARD_SCALE * (1 - 0.55 * e);
+      alpha = k > 0.94 ? (1 - k) / 0.06 : 1;
+    } else if (s.removing !== null) {
+      // 被移出商店：吸回碟身
+      const k = easeIn(Math.min(1, s.removing));
+      this.tmp.lerp(this.root.position, k);
+      scale *= 1 - k;
+    } else if (leave > 0) {
+      this.tmp.lerp(this.root.position, easeIn(seg(leave, 0, 0.55)));
     }
     s.mesh.visible = alpha > 0.01 && scale > 0.02;
     s.mesh.position.copy(this.tmp);

@@ -9,6 +9,8 @@ export function toSnapshot(
   state: Pick<GameState, 'config' | 'monsters'> & Partial<Pick<GameState, 'market'>>,
   actorSeat: number | null,
   selfId: string,
+  /** 商店開著：買牌階段而且有東西可買（飛碟入場的條件）。 */
+  shopOpen = false,
 ): SceneSnapshot {
   const nameOf = (seat: number): string =>
     room.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
@@ -18,7 +20,7 @@ export function toSnapshot(
     playerCount: state.config.playerCount,
     activeSeat: actorSeat,
     mySeat: room.players.find((p) => p.id === selfId)?.seat ?? null,
-    market: state.market?.faceUp ?? [],
+    shop: shopOpen ? (state.market?.faceUp ?? []) : null,
     monsters: state.monsters.map((m) => ({
       seat: m.seat,
       name: nameOf(m.seat),

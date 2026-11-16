@@ -33,7 +33,7 @@ function initial(players: number, kinds: number[]): SceneSnapshot {
     playerCount: players,
     activeSeat: 0,
     mySeat: 0,
-    market: MARKET,
+    shop: MARKET,
     monsters: Array.from({ length: players }, (_, seat) => ({
       seat,
       name: NAMES[seat] ?? `座位 ${String(seat)}`,
@@ -198,21 +198,27 @@ export default function Demo() {
             { type: 'card_bought', seat: 0, cardId: bought, cost: 3, from: null },
             { type: 'card_revealed', cardId: fresh },
           ],
-          (s) => ({ ...s, market: [MARKET[0] ?? '', fresh, MARKET[2] ?? ''] }),
+          (s) => ({ ...s, shop: [MARKET[0] ?? '', fresh, MARKET[2] ?? ''] }),
         );
+      },
+    ],
+    [
+      '商店開／關（飛碟入場／離場）',
+      () => {
+        setSnap((s) => ({ ...s, shop: s.shop ? null : MARKET }));
       },
     ],
     [
       '清商店（飛碟）',
       () => {
-        const old = snapRef.current.market ?? MARKET;
+        const old = snapRef.current.shop ?? MARKET;
         const fresh = CARDS.slice(20, 23).map((c) => c.id);
         push(
           [
             { type: 'market_swept', seat: 0, discarded: [...old] },
             ...fresh.map((cardId) => ({ type: 'card_revealed' as const, cardId })),
           ],
-          (s) => ({ ...s, market: fresh }),
+          (s) => ({ ...s, shop: fresh }),
         );
       },
     ],

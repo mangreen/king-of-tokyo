@@ -35,6 +35,7 @@ import {
   removeCounter,
   spendEnergy,
   syncMaxHp,
+  rollLimitOf,
 } from './ops.js';
 import type { G, Owned } from './ops.js';
 import { pickWinners } from './outcome.js';
@@ -238,13 +239,7 @@ function dispatch(g: G, action: Action): ErrorCode | null {
 // ── 擲骰 ────────────────────────────────────────────────
 
 /** 本回合可擲的次數上限（含加擲卡與已使用的額外重擲）。R-CARD-21 */
-function rollLimit(g: G): number {
-  let limit = g.s.config.maxRolls + g.s.turn.bonusRolls;
-  for (const { e, o } of effectsWith(g, g.s.turn.seat, 'extraRolls')) {
-    limit += e.extraRolls(o);
-  }
-  return limit;
-}
+const rollLimit = rollLimitOf;
 
 /** 回合開始時的骰子數。R-CARD-21 */
 function diceCountFor(g: G, seat: number, penalty: number): number {

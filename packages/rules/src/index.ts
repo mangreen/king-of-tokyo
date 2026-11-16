@@ -33,7 +33,7 @@ export { DEFAULT_WEIGHTS, smartBot } from './ai.js';
 export type { AiWeights } from './ai.js';
 export { greedyBot, randomBot } from './bot.js';
 export { checkInvariants } from './invariants.js';
-export { currentActor, defaultAction, legalActions } from './legal.js';
+export { currentActor, defaultAction, legalActions, rollLimit } from './legal.js';
 export { pickWinners } from './outcome.js';
 export { replay } from './replay.js';
 export { BAY_MIN_ALIVE, cloneState, createGame, defaultConfig, isBayOpen } from './state.js';

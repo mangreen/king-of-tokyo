@@ -20,7 +20,7 @@ import type { CardDef, GameEvent } from '@kot/rules';
 import { MonsterActor } from './actor.js';
 import { buildCity, type CityBuild } from './city.js';
 import { CardFaces, CardFxSystem } from './cardShow.js';
-import { directEvents, type Cue } from './director.js';
+import { directEvents, UFO_DELIVER_AT, type Cue } from './director.js';
 import { AttackFxSystem, attackStyleOf } from './attackFx.js';
 import { CrackSystem, DebrisSystem, DustSystem, ShieldSystem, ShockwaveSystem } from './effects.js';
 import { Holds } from './holds.js';
@@ -80,8 +80,11 @@ export interface SceneSnapshot {
   /** 目前行動中的座位（顯示腳下光環）。 */
   activeSeat: number | null;
   mySeat: number | null;
-  /** 商店目前翻開的牌（飛碟演出時光束裡飄的牌）。 */
-  market?: readonly string[];
+  /**
+   * 商店開著（買牌階段、有東西可買）時翻開的牌；null／沒給＝商店沒開。
+   * 飛碟跟著它入場、停留、離場，不是等買了牌才出現。
+   */
+  shop?: readonly string[] | null;
 }
 
 export interface RendererOptions {
@@ -853,25 +856,29 @@ export class SceneRenderer {
     }
   }
 
-  /** 商店飛碟：買牌（牌飛向買家）或清商店（舊牌被帶走）。 */
+  /**
+   * 商店飛碟已經停在場上（跟著商店開著入場，見 syncShop）：買牌時牌從光束飛向買家；
+   * 清商店時舊牌被吸回、新牌滑進來由光束裡的牌自己換，這裡不用再演。
+   */
   private runUfo(cue: Extract<Cue, { kind: 'ufo' }>): void {
-    if (!this.cardFxOn) return;
+    if (!this.cardFxOn || cue.reason !== 'buy' || cue.picked === null) return;
     const buyer = this.actor(cue.seat);
-    const market = this.snapshot?.market ?? [];
-    const shown =
-      cue.reason === 'sweep'
-        ? cue.swept
-        : [
-            ...(cue.picked === null ? [] : [cue.picked]),
-            // 商店現況扣掉這批新補進來的牌＝買牌前留在商店裡的牌
-            ...market.filter((id) => id !== cue.picked && !cue.revealed.includes(id)),
-          ];
-    this.ufo.start({
+    this.ufo.deliver({
       picked: cue.picked,
-      shown,
       target: buyer ? { x: buyer.x, y: buyer.rig.height + 1.2, z: buyer.z } : { x: 0, y: 4, z: 0 },
-      dur: cue.dur / 1000,
+      dur: (cue.dur * UFO_DELIVER_AT) / 1000,
     });
+  }
+
+  /**
+   * 飛碟跟著商店狀態：買牌階段、有東西可買 → 入場並停著；否則 → 離場。
+   * 有演出在播（含買牌的牌還在飛）時先不動，等演出結束再換，才不會牌還沒送到就先被換掉。
+   */
+  private syncShop(): void {
+    if (!this.cardFxOn || this.playing.length > 0 || this.ufo.delivering) return;
+    const shop = this.snapshot?.shop ?? null;
+    if (shop && shop.length > 0) this.ufo.dock(shop);
+    else this.ufo.undock();
   }
 
   /** 卡牌：使用＝依內容的 3D 特效（流星、閃電、治療光柱…）；收下＝亮一下。 */
@@ -1027,6 +1034,7 @@ export class SceneRenderer {
     this.updateMarker(time);
     this.updateCamera(dt);
     this.cardFx.update(sdt, this.camera);
+    this.syncShop();
     this.ufo.update(sdt, this.camera, time);
     if (this.city) {
       this.city.waterTexture.offset.x = (time * 0.012) % 1;
