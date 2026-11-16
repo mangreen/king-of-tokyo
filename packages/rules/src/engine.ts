@@ -19,6 +19,7 @@ import {
   effectsWith,
   endGame,
   findOwned,
+  fire,
   gainCard,
   gainEnergy,
   gainVp,
@@ -448,6 +449,7 @@ function decideHearts(
   if (a.shrink > 0) removeCounter(g, pending.seat, 'shrink', a.shrink);
   const ray = findOwned(g, pending.seat, CAP.healingRay);
   const rate = ray ? num(ray.def, 'rate', 2) : 2;
+  if (ray && others.some((o) => o.amount > 0)) fire(g, pending.seat, ray.cardId);
   for (const o of others) {
     if (o.amount <= 0) continue;
     const target = getMonster(g.s, o.seat);
@@ -479,6 +481,7 @@ function attackStage(g: G): void {
     tokyoBonus: 0,
     nova: false,
     neighbor: 0,
+    used: [],
   };
   for (const { e, o } of effectsWith(g, seat, 'attack')) {
     e.attack(g, o, a);
@@ -516,6 +519,15 @@ function attackStage(g: G): void {
         plan.push({ seat: n, amount: a.neighbor, target: false, asked: false });
       }
     }
+  }
+  for (const u of a.used) {
+    const hit =
+      u.when === 'tokyo'
+        ? targets.some((t) => t.location !== null)
+        : u.when === 'neighbor'
+          ? a.neighbor > 0 && base > 0
+          : true;
+    if (hit) fire(g, seat, u.cardId);
   }
   if (isAttack) {
     s.turn.attackTargets = targets.map((t) => t.seat);
@@ -623,6 +635,8 @@ function afterAttack(g: G): void {
       const m = getMonster(s, seat);
       if (!s.turn.attackTargets.includes(seat) || m.location === null) continue;
       if (forced && s.turn.hit.includes(seat)) {
+        const menace = findOwned(g, attacker.seat, CAP.forcedYield);
+        if (menace) fire(g, attacker.seat, menace.cardId);
         yieldTokyo(g, seat, attacker.seat); // R-CARD-37
       } else {
         queue.push(seat);
@@ -814,6 +828,11 @@ function purchase(g: G, seat: number, req: BuyRequest): ErrorCode | null {
   spendEnergy(g, seat, cost);
   if (fromSeat !== null) {
     gainEnergy(g, fromSeat, cost, 'transfer');
+  }
+  if (cost < def.cost) {
+    for (const { e, o } of effectsWith(g, seat, 'costDelta')) {
+      if (e.costDelta(o) < 0) fire(g, seat, o.cardId);
+    }
   }
   g.ev.push({ type: 'card_bought', seat, cardId: req.cardId, cost, from: fromSeat });
   if (fromSeat !== null) {

@@ -128,6 +128,15 @@ export function findOwned(g: G, seat: number, effectId: string): Owned | undefin
 
 // ── 資源 ────────────────────────────────────────────────
 
+/** 保留卡的被動效果發動了：記一筆事件（供 3D 特效與提示使用），連續重複的不重記。 */
+export function fire(g: G, seat: number, cardId: string): void {
+  const last = g.ev[g.ev.length - 1];
+  if (last?.type === 'card_triggered' && last.seat === seat && last.cardId === cardId) {
+    return;
+  }
+  g.ev.push({ type: 'card_triggered', seat, cardId });
+}
+
 export type EnergySource = 'dice' | 'card' | 'transfer' | 'refund' | 'reserve';
 
 export function gainVp(
@@ -164,7 +173,9 @@ export function gainEnergy(g: G, seat: number, amount: number, source: EnergySou
   let total = amount;
   if (source === 'dice' || source === 'card') {
     for (const { e, o } of effectsWith(g, seat, 'energyBonus')) {
-      total += e.energyBonus(o);
+      const extra = e.energyBonus(o);
+      if (extra > 0) fire(g, seat, o.cardId);
+      total += extra;
     }
   }
   getMonster(g.s, seat).energy += total;
@@ -187,10 +198,15 @@ export function heal(g: G, seat: number, amount: number): number {
   }
   const m = getMonster(g.s, seat);
   let total = amount;
+  const bonusCards: Owned[] = [];
   for (const { e, o } of effectsWith(g, seat, 'healBonus')) {
     total += e.healBonus(o);
+    bonusCards.push(o);
   }
   const actual = Math.min(total, m.maxHp - m.hp);
+  if (actual > amount) {
+    for (const o of bonusCards) fire(g, seat, o.cardId);
+  }
   if (actual > 0) {
     m.hp += actual;
     g.ev.push({ type: 'healed', seat, amount: actual });

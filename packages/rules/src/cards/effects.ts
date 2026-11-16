@@ -7,6 +7,7 @@ import {
   addCounter,
   cardDef,
   discardCard,
+  fire,
   effectOf,
   cardDamage,
   gainEnergy,
@@ -44,6 +45,8 @@ export interface AttackCtx {
   nova: boolean;
   /** 鄰座額外傷害。 */
   neighbor: number;
+  /** 這次攻擊用到的攻擊加成卡（結算確定有攻擊之後才會記為「發動」）。 */
+  used: { cardId: string; when?: 'tokyo' | 'neighbor' }[];
 }
 
 export interface DiceInfo {
@@ -307,6 +310,7 @@ export const EFFECTS: Record<string, Effect> = {
         spendEnergy(g, o.seat, num(o.def, 'cost', 1));
         g.s.turn.bonusRolls += 1;
         g.ev.push({ type: 'card_used', seat: o.seat, cardId: o.cardId });
+        g.ev.push({ type: 'rolls_added', seat: o.seat, cardId: o.cardId, amount: 1 });
       },
     },
   },
@@ -322,6 +326,13 @@ export const EFFECTS: Record<string, Effect> = {
         data.n -= 1;
         g.s.turn.bonusRolls += 1;
         g.ev.push({ type: 'card_used', seat: o.seat, cardId: o.cardId });
+        g.ev.push({
+          type: 'rolls_added',
+          seat: o.seat,
+          cardId: o.cardId,
+          amount: 1,
+          left: Math.max(0, data.n),
+        });
         if (data.n <= 0) {
           discardCard(g, o.seat, o.cardId, 'spent');
         }
@@ -337,8 +348,10 @@ export const EFFECTS: Record<string, Effect> = {
     requiredParams: ['face'],
     onDice(g, o, d) {
       const face = num(o.def, 'face', 1);
-      if ((d.counts[String(face)] ?? 0) >= 3) {
-        gainVp(g, o.seat, num(o.def, 'vp', 0), 'card');
+      const vp = num(o.def, 'vp', 0);
+      if (vp > 0 && (d.counts[String(face)] ?? 0) >= 3) {
+        fire(g, o.seat, o.cardId);
+        gainVp(g, o.seat, vp, 'card');
       }
     },
     attack(_g, o, a) {
@@ -346,6 +359,7 @@ export const EFFECTS: Record<string, Effect> = {
       if (dmg > 0 && (a.counts[String(num(o.def, 'face', 1))] ?? 0) >= 3) {
         a.always = true;
         a.bonus += dmg;
+        a.used.push({ cardId: o.cardId });
       }
     },
   },
@@ -354,6 +368,7 @@ export const EFFECTS: Record<string, Effect> = {
     requiredParams: ['vp'],
     onDice(g, o, d) {
       if (FACES.every((f) => (d.counts[String(f)] ?? 0) > 0)) {
+        fire(g, o.seat, o.cardId);
         gainVp(g, o.seat, num(o.def, 'vp', 9), 'card');
       }
     },
@@ -363,6 +378,7 @@ export const EFFECTS: Record<string, Effect> = {
     requiredParams: ['vp'],
     onDice(g, o, d) {
       if ((d.counts['1'] ?? 0) > 0 && (d.counts['2'] ?? 0) > 0 && (d.counts['3'] ?? 0) > 0) {
+        fire(g, o.seat, o.cardId);
         gainVp(g, o.seat, num(o.def, 'vp', 2), 'card');
       }
     },
@@ -374,6 +390,7 @@ export const EFFECTS: Record<string, Effect> = {
     requiredParams: ['vp'],
     onAttack(g, o, a, targets) {
       if (a.faces > 0 && targets.length > 0) {
+        fire(g, o.seat, o.cardId);
         gainVp(g, o.seat, num(o.def, 'vp', 1), 'card');
       }
     },
@@ -383,6 +400,7 @@ export const EFFECTS: Record<string, Effect> = {
     requiredParams: ['n'],
     attack(_g, o, a) {
       a.bonus += num(o.def, 'n', 1);
+      a.used.push({ cardId: o.cardId });
       if (o.def.params['always'] === true) {
         a.always = true;
       }
@@ -392,10 +410,12 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     attack(_g, o, a) {
       a.tokyoBonus += num(o.def, 'n', 1);
+      a.used.push({ cardId: o.cardId, when: 'tokyo' });
     },
     onYield(g, o, info) {
       const dmg = num(o.def, 'yieldDamage', 1);
       if (dmg > 0) {
+        fire(g, o.seat, o.cardId);
         inflict(g, info.taker, dmg, o.seat, 'yield');
       }
     },
@@ -404,12 +424,14 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onTurnStart(g, o) {
       if (getMonster(g.s, o.seat).location !== null) {
+        fire(g, o.seat, o.cardId);
         gainVp(g, o.seat, num(o.def, 'startVp', 1), 'card');
       }
     },
     attack(g, o, a) {
       if (getMonster(g.s, o.seat).location !== null) {
         a.bonus += num(o.def, 'damage', 1);
+        a.used.push({ cardId: o.cardId });
       }
     },
   },
@@ -417,12 +439,14 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     attack(_g, o, a) {
       a.neighbor += num(o.def, 'n', 1);
+      a.used.push({ cardId: o.cardId, when: 'neighbor' });
     },
   },
   nova: {
     kind: 'keep',
-    attack(_g, _o, a) {
+    attack(_g, o, a) {
       a.nova = true;
+      a.used.push({ cardId: o.cardId });
     },
   },
   forced_yield: { kind: 'keep' },
@@ -455,6 +479,7 @@ export const EFFECTS: Record<string, Effect> = {
         info.cause !== 'reflect' &&
         !info.noReflect
       ) {
+        fire(g, o.seat, o.cardId);
         inflict(g, info.source, num(o.def, 'n', 1), o.seat, 'reflect', { noReflect: true });
       }
     },
@@ -463,6 +488,7 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onDamaged(g, o, info) {
       if (info.amount >= num(o.def, 'min', 2)) {
+        fire(g, o.seat, o.cardId);
         gainEnergy(g, o.seat, num(o.def, 'energy', 1), 'card');
       }
     },
@@ -527,6 +553,7 @@ export const EFFECTS: Record<string, Effect> = {
       if (info.cause === 'yield' || info.cause === 'self') return;
       const counter = o.def.params['counter'] === 'shrink' ? 'shrink' : 'poison';
       if (getMonster(g.s, info.victim).alive) {
+        fire(g, o.seat, o.cardId);
         addCounter(g, info.victim, counter);
       }
     },
@@ -535,6 +562,8 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onDealt(g, o, info) {
       if (info.cause === 'yield') return;
+      const me = getMonster(g.s, o.seat);
+      if (me.alive && me.hp < me.maxHp) fire(g, o.seat, o.cardId);
       healRaw(g, o.seat, num(o.def, 'n', 1));
     },
   },
@@ -542,6 +571,7 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     requiredParams: ['vp'],
     onAnyZero(g, o) {
+      fire(g, o.seat, o.cardId);
       gainVp(g, o.seat, num(o.def, 'vp', 3), 'card');
     },
   },
@@ -552,6 +582,7 @@ export const EFFECTS: Record<string, Effect> = {
   vp_on_buy: {
     kind: 'keep',
     onCardBought(g, o) {
+      fire(g, o.seat, o.cardId);
       gainVp(g, o.seat, num(o.def, 'vp', 1), 'card');
     },
   },
@@ -559,18 +590,16 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onTurnEnd(g, o) {
       const per = Math.max(1, num(o.def, 'per', 6));
-      gainVp(
-        g,
-        o.seat,
-        Math.floor(getMonster(g.s, o.seat).energy / per) * num(o.def, 'vp', 1),
-        'card',
-      );
+      const vp = Math.floor(getMonster(g.s, o.seat).energy / per) * num(o.def, 'vp', 1);
+      if (vp > 0) fire(g, o.seat, o.cardId);
+      gainVp(g, o.seat, vp, 'card');
     },
   },
   end_empty_energy: {
     kind: 'keep',
     onTurnEnd(g, o) {
       if (getMonster(g.s, o.seat).energy === 0) {
+        fire(g, o.seat, o.cardId);
         gainEnergy(g, o.seat, num(o.def, 'n', 1), 'card');
       }
     },
@@ -579,6 +608,7 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onTurnEnd(g, o) {
       if (!g.s.turn.damagedAnyone) {
+        fire(g, o.seat, o.cardId);
         gainVp(g, o.seat, num(o.def, 'vp', 1), 'card');
       }
     },
@@ -587,6 +617,7 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onTurnEnd(g, o) {
       if (g.s.turn.dealt >= num(o.def, 'min', 3)) {
+        fire(g, o.seat, o.cardId);
         gainVp(g, o.seat, num(o.def, 'vp', 2), 'card');
       }
     },
@@ -596,6 +627,7 @@ export const EFFECTS: Record<string, Effect> = {
     onAnyTurnEnd(g, o) {
       const me = getMonster(g.s, o.seat);
       if (me.alive && aliveMonsters(g.s).every((m) => m.vp >= me.vp)) {
+        fire(g, o.seat, o.cardId);
         gainVp(g, o.seat, num(o.def, 'vp', 1), 'card');
       }
     },
@@ -604,6 +636,7 @@ export const EFFECTS: Record<string, Effect> = {
     kind: 'keep',
     onTurnEnd(g, o) {
       if (g.s.turn.vpGained >= num(o.def, 'min', 4) && !g.s.stomp.includes(o.seat)) {
+        fire(g, o.seat, o.cardId);
         g.s.stomp.push(o.seat);
         g.ev.push({ type: 'dice_penalty', seats: [...g.s.stomp] });
       }
@@ -629,6 +662,7 @@ export const EFFECTS: Record<string, Effect> = {
       if (!data) return;
       const take = Math.min(num(o.def, 'perTurn', 2), data.n);
       data.n -= take;
+      if (take > 0) fire(g, o.seat, o.cardId);
       gainEnergy(g, o.seat, take, 'reserve');
       if (data.n <= 0) {
         discardCard(g, o.seat, o.cardId, 'spent');
