@@ -279,6 +279,19 @@ export default function Scene3D({
             >
               🎥
             </button>
+            {customView && (
+              <button
+                className="reset"
+                aria-label="重置視角並恢復自動鏡頭"
+                onClick={() => {
+                  rendererRef.current?.resetView();
+                }}
+              >
+                ↺
+              </button>
+            )}
+          </div>
+          <div className="scene-actions" role="group" aria-label="3D 場景">
             {typeof document !== 'undefined' && document.fullscreenEnabled && (
               <button
                 className="wide"
@@ -297,17 +310,6 @@ export default function Scene3D({
             >
               關閉 3D
             </button>
-            {customView && (
-              <button
-                className="reset"
-                aria-label="重置視角並恢復自動鏡頭"
-                onClick={() => {
-                  rendererRef.current?.resetView();
-                }}
-              >
-                ↺
-              </button>
-            )}
           </div>
           <p className="map-hint" aria-hidden="true">
             拖曳移動 · 滾輪／雙指縮放
