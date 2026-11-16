@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CardDef } from '@kot/rules';
+import type { ChatEntry } from '../state.js';
+import { DanmakuLayer } from './DanmakuLayer.js';
 import { cardLookup } from './cardFx.js';
 import { latestVersion, takeNew, type FeedBatch } from './feed.js';
 import { prefersReducedMotion, savePrefs, watchReducedMotion, type ScenePrefs } from './prefs.js';
 import { followClick, followTitle, followUi } from './followState.js';
 import { SceneRenderer, type SceneSnapshot } from './SceneRenderer.js';
 import type { QualityTier } from './quality.js';
+
+const EMPTY_CHAT: readonly ChatEntry[] = [];
 
 interface Props {
   snapshot: SceneSnapshot;
@@ -24,6 +28,11 @@ interface Props {
   cards?: readonly CardDef[] | null;
   /** 自動畫質目前降到哪一級（設定面板顯示用）。 */
   onTier?: (tier: QualityTier | null) => void;
+  /** 聊天訊息與彈幕預覽（設定面板的按鈕）；彈幕只在 3D 開著時顯示。 */
+  chat?: readonly ChatEntry[];
+  danmakuProbe?: number;
+  /** 預覽彈幕用的顏色（自己的座位色）。 */
+  selfColor?: string;
 }
 
 /**
@@ -41,6 +50,9 @@ export default function Scene3D({
   corner,
   cards,
   onTier,
+  chat,
+  danmakuProbe,
+  selfColor,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -229,6 +241,14 @@ export default function Scene3D({
               </button>
             </div>
           )}
+          <DanmakuLayer
+            enabled={prefs.danmaku}
+            opacity={prefs.danmakuOpacity}
+            size={prefs.danmakuSize}
+            chat={chat ?? EMPTY_CHAT}
+            probe={danmakuProbe ?? 0}
+            probeColor={selfColor ?? '#ffffff'}
+          />
           {corner && <div className="scene-corner">{corner}</div>}
           <div className="map-controls" role="group" aria-label="地圖視角">
             <button
@@ -259,6 +279,19 @@ export default function Scene3D({
             >
               🎥
             </button>
+            {customView && (
+              <button
+                className="reset"
+                aria-label="重置視角並恢復自動鏡頭"
+                onClick={() => {
+                  rendererRef.current?.resetView();
+                }}
+              >
+                ↺
+              </button>
+            )}
+          </div>
+          <div className="scene-actions" role="group" aria-label="3D 場景">
             {typeof document !== 'undefined' && document.fullscreenEnabled && (
               <button
                 className="wide"
@@ -277,17 +310,6 @@ export default function Scene3D({
             >
               關閉 3D
             </button>
-            {customView && (
-              <button
-                className="reset"
-                aria-label="重置視角並恢復自動鏡頭"
-                onClick={() => {
-                  rendererRef.current?.resetView();
-                }}
-              >
-                ↺
-              </button>
-            )}
           </div>
           <p className="map-hint" aria-hidden="true">
             拖曳移動 · 滾輪／雙指縮放

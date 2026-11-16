@@ -23,12 +23,13 @@ import { endRules } from './rulesText.js';
 
 const MAX_TOASTS = 4;
 
-export type HudTab = 'players' | 'shop' | 'log' | 'rules' | 'mine' | 'settings';
+export type HudTab = 'players' | 'shop' | 'log' | 'chat' | 'rules' | 'mine' | 'settings';
 
 const TABS: { key: HudTab; label: string }[] = [
   { key: 'players', label: '👥 玩家' },
   { key: 'shop', label: '🛒 商店' },
   { key: 'log', label: '📜 事件' },
+  { key: 'chat', label: '💬 聊天' },
   { key: 'rules', label: '📖 規則' },
   { key: 'mine', label: '🃏 我的卡牌' },
   { key: 'settings', label: '⚙ 設定' },
@@ -64,6 +65,9 @@ export interface HudProps {
   onAct: (a: GameActionInput) => void;
   /** 工具列右側的額外按鈕（例如全螢幕、離開）。 */
   tools?: ReactNode;
+  /** 「聊天」分頁的內容與最新訊息的 id（用來算未讀數）。 */
+  chat?: ReactNode;
+  chatLatest?: number;
   /** 「設定」分頁的內容（由 GameView 提供，因為偏好設定存在那裡）。 */
   settings?: ReactNode;
   /** 3D 開關會讓 HUD 重新掛載：由外層記住目前的分頁，切換後仍停在原處。 */
@@ -83,6 +87,11 @@ export function GameHud(p: HudProps) {
   useEffect(() => {
     onTabChange?.(tab);
   }, [tab, onTabChange]);
+  // 聊天未讀：看過的最新 id（掛載時以目前為準，3D 開關造成重新掛載也不會把舊訊息當未讀）
+  const chatLatest = p.chatLatest ?? 0;
+  const [chatSeen, setChatSeen] = useState(chatLatest);
+  if (tab === 'chat' && chatSeen !== chatLatest) setChatSeen(chatLatest);
+  const unread = tab === 'chat' ? 0 : Math.max(0, chatLatest - chatSeen);
   // 輪到我買牌時自動打開商店一次；離開買牌階段時若是自動打開的就收起來
   const [auto, setAuto] = useState<{ key: string | null; opened: boolean }>({
     key: null,
@@ -225,6 +234,11 @@ export function GameHud(p: HudProps) {
               {t.key === 'shop' && p.marketBuys.length > 0 && (
                 <span className="badge">{p.marketBuys.length}</span>
               )}
+              {t.key === 'chat' && unread > 0 && (
+                <span className="badge" aria-label={`${String(unread)} 則未讀`}>
+                  {unread}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -250,6 +264,7 @@ export function GameHud(p: HudProps) {
             />
           )}
           {tab === 'log' && <LogPanel log={p.log} rules={rules} />}
+          {tab === 'chat' && p.chat}
           {tab === 'rules' && <RulesPanel state={state} nameOf={p.nameOf} />}
           {tab === 'mine' && <MyCardsPanel monster={me} env={p.env} />}
           {tab === 'settings' && p.settings}

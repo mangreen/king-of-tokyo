@@ -32,6 +32,45 @@ export const CardSetIdSchema = z
 /** 建立房間：可指定卡牌組，省略則用伺服器預設。 */
 export const RoomCreateSchema = z.object({ cardSetId: CardSetIdSchema.optional() }).strict();
 
+// ── 聊天 ─────────────────────────────────────────────────
+
+export const CHAT_MAX_LENGTH = 80;
+
+/** 聊天內容：去除前後空白後 1~80 字，不含控制字元（換行、零寬控制等）。 */
+export const ChatSendSchema = z
+  .object({
+    text: z
+      .string()
+      .trim()
+      .min(1)
+      .max(CHAT_MAX_LENGTH)
+      // eslint-disable-next-line no-control-regex
+      .regex(/^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]+$/u),
+  })
+  .strict();
+export type ChatSendInput = z.infer<typeof ChatSendSchema>;
+
+/** 伺服器廣播給房內每位玩家（含發話者本人）的聊天訊息。 */
+export interface ChatMessage {
+  /** 發話者的 playerId。 */
+  from: string;
+  nickname: string;
+  /** 發話者的座位（大廳階段為 null）；3D 彈幕用它決定玩家顏色。 */
+  seat: number | null;
+  text: string;
+  /** 房主端時間（ms epoch），純顯示用。 */
+  at: number;
+}
+
+/** 客戶端收到聊天訊息時的驗證（不信任房主送來的形狀）。 */
+export const ChatMessageSchema = z.object({
+  from: z.string().min(1).max(64),
+  nickname: z.string().max(40),
+  seat: z.number().int().min(0).max(5).nullable(),
+  text: z.string().min(1).max(CHAT_MAX_LENGTH),
+  at: z.number(),
+});
+
 const FaceSchema = z.union([
   z.literal(1),
   z.literal(2),

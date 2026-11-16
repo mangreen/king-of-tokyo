@@ -1,5 +1,6 @@
 import { describeEvent, type CardDef, type GameEvent } from '@kot/rules';
 import {
+  ChatMessageSchema,
   ServerErrorSchema,
   ServerHelloSchema,
   type CardSetInfo,
@@ -26,6 +27,16 @@ export interface EventBatch {
   events: GameEvent[];
 }
 
+/** 一則收到的聊天訊息（id 是本機流水號，只用來排序與去重）。 */
+export interface ChatEntry {
+  id: number;
+  from: string;
+  nickname: string;
+  seat: number | null;
+  text: string;
+  at: number;
+}
+
 export interface AppState {
   connection: Connection;
   room: RoomSnapshot | null;
@@ -41,6 +52,10 @@ export interface AppState {
   log: string[];
   /** 最近幾批事件（最新在最後），3D 場景依 version 去重後播放。 */
   feed: EventBatch[];
+  /** 房內聊天（最新在最後，只留最近 CHAT_LIMIT 則；不存檔、重新整理就沒有）。 */
+  chat: ChatEntry[];
+  /** 聊天流水號（只增不減，離開房間清空聊天紀錄時也不歸零，id 才不會重複）。 */
+  chatSeq: number;
   /** 操作失敗等一次性提示。 */
   notice: string | null;
   /**
@@ -59,11 +74,13 @@ export type AppAction =
   | { type: 'room-state'; payload: unknown }
   | { type: 'game-cards'; payload: unknown }
   | { type: 'game-update'; payload: unknown; at: number }
+  | { type: 'chat'; payload: unknown }
   | { type: 'notice'; message: string | null }
   | { type: 'reset' };
 
 export const LOG_LIMIT = 200;
 export const FEED_LIMIT = 30;
+export const CHAT_LIMIT = 100;
 
 export const initialAppState: AppState = {
   connection: { status: 'idle' },
@@ -75,6 +92,8 @@ export const initialAppState: AppState = {
   deadlineAt: null,
   log: [],
   feed: [],
+  chat: [],
+  chatSeq: 0,
   notice: null,
   acceptRewind: false,
 };
@@ -192,6 +211,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           deadlineAt: null,
           log: [],
           feed: [],
+          chat: [],
         };
       }
       return isRoomSnapshot(room) ? { ...state, room } : state;
@@ -233,6 +253,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         feed,
         deadlineAt: update.remainingMs === null ? null : action.at + update.remainingMs,
         log,
+      };
+    }
+
+    case 'chat': {
+      const parsed = ChatMessageSchema.safeParse(action.payload);
+      if (!parsed.success) return state;
+      const id = state.chatSeq + 1;
+      return {
+        ...state,
+        chatSeq: id,
+        chat: [...state.chat, { id, ...parsed.data }].slice(-CHAT_LIMIT),
       };
     }
 

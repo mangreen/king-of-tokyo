@@ -1,5 +1,5 @@
 /** 測試用工具：假時鐘與記錄推送的 Publisher（可攜，瀏覽器端測試也能用）。 */
-import type { GameCardsMessage, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
+import type { ChatMessage, GameCardsMessage, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
 import type { Publisher } from './room.js';
 import type { Scheduler } from './scheduler.js';
 
@@ -53,6 +53,13 @@ export class RecordingPublisher implements Publisher {
   readonly rooms = new Map<string, (RoomSnapshot | null)[]>();
   readonly games = new Map<string, GameUpdateMessage[]>();
   readonly cards = new Map<string, GameCardsMessage[]>();
+  readonly chats = new Map<string, ChatMessage[]>();
+
+  chat(playerId: string, message: ChatMessage): void {
+    const list = this.chats.get(playerId) ?? [];
+    list.push(message);
+    this.chats.set(playerId, list);
+  }
 
   gameCards(playerId: string, message: GameCardsMessage): void {
     const list = this.cards.get(playerId) ?? [];

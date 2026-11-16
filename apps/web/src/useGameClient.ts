@@ -39,6 +39,8 @@ export interface GameClient {
   addBot(): void;
   removeBot(id: string): void;
   act(action: GameActionInput): void;
+  /** 在房內發一則聊天訊息（失敗會以提示列告知，例如太頻繁）。 */
+  sendChat(text: string): void;
   dismissNotice(): void;
 }
 
@@ -129,6 +131,9 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
               break;
             case EVENTS.roomState:
               dispatch({ type: 'room-state', payload });
+              break;
+            case EVENTS.chatMessage:
+              dispatch({ type: 'chat', payload });
               break;
             case EVENTS.gameCards:
               dispatch({ type: 'game-cards', payload });
@@ -265,6 +270,9 @@ export function useGameClient({ link, persistSession, canResume }: GameClientOpt
     },
     act: (action) => {
       request(EVENTS.gameAction, action);
+    },
+    sendChat: (text) => {
+      request(EVENTS.chatSend, { text });
     },
     dismissNotice: () => {
       dispatch({ type: 'notice', message: null });

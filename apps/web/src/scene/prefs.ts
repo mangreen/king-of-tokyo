@@ -1,3 +1,4 @@
+import { clampRange, DANMAKU_OPACITY, DANMAKU_SIZE } from './danmaku.js';
 import { parseQualitySetting, type QualitySetting } from './quality.js';
 
 export interface ScenePrefs {
@@ -12,6 +13,12 @@ export interface ScenePrefs {
   attackFx: boolean;
   /** 商店飛碟與卡牌使用特效。 */
   cardFx: boolean;
+  /** 聊天訊息在 3D 場景上方飛過的彈幕。 */
+  danmaku: boolean;
+  /** 彈幕文字不透明度（0.2~1）。 */
+  danmakuOpacity: number;
+  /** 彈幕文字大小（px，14~40）。 */
+  danmakuSize: number;
 }
 
 const KEY = 'kot.scene.prefs.v1';
@@ -25,6 +32,9 @@ export function defaultPrefs(reducedMotion: boolean): ScenePrefs {
     // 系統要求減少動態時，閃爍的光柱特效預設關閉（仍可手動開啟）
     attackFx: !reducedMotion,
     cardFx: !reducedMotion,
+    danmaku: !reducedMotion,
+    danmakuOpacity: DANMAKU_OPACITY.def,
+    danmakuSize: DANMAKU_SIZE.def,
   };
 }
 
@@ -43,6 +53,9 @@ export function parsePrefs(raw: string | null, reducedMotion: boolean): ScenePre
       follow: typeof o['follow'] === 'boolean' ? o['follow'] : base.follow,
       attackFx: typeof o['attackFx'] === 'boolean' ? o['attackFx'] : base.attackFx,
       cardFx: typeof o['cardFx'] === 'boolean' ? o['cardFx'] : base.cardFx,
+      danmaku: typeof o['danmaku'] === 'boolean' ? o['danmaku'] : base.danmaku,
+      danmakuOpacity: clampRange(o['danmakuOpacity'], DANMAKU_OPACITY),
+      danmakuSize: clampRange(o['danmakuSize'], DANMAKU_SIZE),
     };
   } catch {
     return base;

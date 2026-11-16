@@ -36,6 +36,12 @@ export const EVENTS = {
   gameAction: 'game:action',
   gameUpdate: 'game:update',
   gameCards: 'game:cards',
+  /**
+   * 房內聊天（client → server，有 ack）與廣播（server → client）。聊天不是對局狀態：
+   * 不進複本、不進存檔、不保留歷史；新增事件不改變既有訊息格式，所以協定版本不變。
+   */
+  chatSend: 'chat:send',
+  chatMessage: 'chat:message',
 } as const;
 
 /** 暱稱：去除前後空白後 1~20 字，只允許字母、數字、空白、底線、連字號。 */

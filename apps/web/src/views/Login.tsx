@@ -47,7 +47,7 @@ export function Login({
   }
 
   return (
-    <form className="card" onSubmit={submit}>
+    <form className="card login-form" onSubmit={submit}>
       {mode !== undefined && onModeChange !== undefined && !inviteCode && (
         <fieldset className="mode-picker" data-testid="mode-picker">
           <legend>玩法</legend>

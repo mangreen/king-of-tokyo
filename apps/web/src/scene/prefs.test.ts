@@ -11,8 +11,12 @@ describe('scene prefs', () => {
       follow: true,
       attackFx: true,
       cardFx: true,
+      danmaku: true,
+      danmakuOpacity: 0.75,
+      danmakuSize: 22,
     });
     expect(parsePrefs(null, true).cameraMotion).toBe(false);
+    expect(parsePrefs(null, true).danmaku).toBe(false);
     expect(defaultPrefs(false).enabled).toBe(true);
   });
 
@@ -26,8 +30,18 @@ describe('scene prefs', () => {
       follow: false,
       attackFx: true,
       cardFx: true,
+      danmaku: true,
+      danmakuOpacity: 0.75,
+      danmakuSize: 22,
     });
     expect(parsePrefs('{"attackFx":false}', false).attackFx).toBe(false);
+    // 彈幕：開關、透明度與大小；超出範圍夾回、壞值退回預設
+    const dm = parsePrefs('{"danmaku":false,"danmakuOpacity":0.4,"danmakuSize":30}', false);
+    expect([dm.danmaku, dm.danmakuOpacity, dm.danmakuSize]).toEqual([false, 0.4, 30]);
+    const clamped = parsePrefs('{"danmakuOpacity":9,"danmakuSize":1}', false);
+    expect([clamped.danmakuOpacity, clamped.danmakuSize]).toEqual([1, 14]);
+    const bad = parsePrefs('{"danmakuOpacity":"x","danmakuSize":null}', false);
+    expect([bad.danmakuOpacity, bad.danmakuSize]).toEqual([0.75, 22]);
     // 舊版偏好沒有 follow 欄位 → 預設開啟
     expect(parsePrefs('{"enabled":true,"quality":"auto","cameraMotion":true}', false).follow).toBe(
       true,

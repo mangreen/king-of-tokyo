@@ -8,6 +8,7 @@ import {
   EVENTS,
   PROTOCOL_VERSION,
   type Ack,
+  type ChatMessage,
   type GameActionInput,
   type GameCardsMessage,
   type GameUpdateMessage,
@@ -45,6 +46,7 @@ class TestClient {
   cards: GameCardsMessage | null = null;
   cardsReceived = 0;
   readonly gameUpdates: GameUpdateMessage[] = [];
+  readonly chats: ChatMessage[] = [];
   private waiters: (() => void)[] = [];
 
   constructor(readonly nickname: string) {
@@ -66,6 +68,10 @@ class TestClient {
     this.socket.on(EVENTS.gameCards, (message: GameCardsMessage) => {
       this.cards = message;
       this.cardsReceived += 1;
+      this.notify();
+    });
+    this.socket.on(EVENTS.chatMessage, (message: ChatMessage) => {
+      this.chats.push(message);
       this.notify();
     });
     this.socket.on(EVENTS.gameUpdate, (update: GameUpdateMessage) => {
@@ -231,6 +237,38 @@ describe('大廳流程', () => {
     expect(await a.send(EVENTS.roomLeave)).toEqual({ ok: true });
     await a.until(() => a.room === null);
     expect(app.rooms.roomCount).toBe(0);
+  });
+});
+
+describe('聊天', () => {
+  it('房內廣播（含自己）；格式錯誤、太長、換行都被拒絕；不在房內被拒絕', async () => {
+    const { a, b } = await twoInRoom();
+    expect(await a.send(EVENTS.chatSend, { text: '  哈囉  ' })).toEqual({ ok: true });
+    await a.until(() => a.chats.length === 1);
+    await b.until(() => b.chats.length === 1);
+    expect(b.chats[0]).toMatchObject({ from: a.hello?.playerId, nickname: 'Alice', text: '哈囉' });
+    expect(await b.send(EVENTS.chatSend, { text: '' })).toEqual({
+      ok: false,
+      code: 'invalid_message',
+    });
+    expect(await b.send(EVENTS.chatSend, { text: 'x'.repeat(81) })).toEqual({
+      ok: false,
+      code: 'invalid_message',
+    });
+    expect(await b.send(EVENTS.chatSend, { text: 'a\nb' })).toEqual({
+      ok: false,
+      code: 'invalid_message',
+    });
+    expect(await b.send(EVENTS.chatSend, { text: 'hi', extra: 1 })).toEqual({
+      ok: false,
+      code: 'invalid_message',
+    });
+    const c = await new TestClient('Carol').hi();
+    expect(await c.send(EVENTS.chatSend, { text: 'hi' })).toEqual({
+      ok: false,
+      code: 'not_in_room',
+    });
+    expect(c.chats).toHaveLength(0);
   });
 });
 

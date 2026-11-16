@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type { Action, CardDef } from '@kot/rules';
 import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
 import { envOf, groupActions, myActions } from '../actions.js';
+import { ChatPanel } from '../hud/ChatPanel.js';
 import { GameHud, type HudTab } from '../hud/GameHud.js';
 import { SettingsPanel } from '../hud/SettingsPanel.js';
 import { nextSpins } from '../scene/dice.js';
@@ -15,8 +16,9 @@ import {
   type ScenePrefs,
 } from '../scene/prefs.js';
 import type { QualityTier } from '../scene/quality.js';
+import { seatColor } from '../scene/layout.js';
 import { toSnapshot } from '../scene/snapshot.js';
-import type { EventBatch } from '../state.js';
+import type { ChatEntry, EventBatch } from '../state.js';
 
 // 3D 場景（Three.js）動態載入：大廳與房間不必下載它
 const Scene3D = lazy(() => import('../scene/Scene3D.js'));
@@ -38,6 +40,8 @@ interface Props {
   cards: CardDef[] | null;
   log: string[];
   feed: EventBatch[];
+  chat: ChatEntry[];
+  onChat: (text: string) => void;
   onAct: (action: GameActionInput) => void;
   onLeave: () => void;
 }
@@ -50,6 +54,8 @@ export function GameView({
   cards,
   log,
   feed,
+  chat,
+  onChat,
   onAct,
   onLeave,
 }: Props) {
@@ -57,6 +63,7 @@ export function GameView({
   const [prefs, setPrefs] = useState(loadPrefs);
   const [tier, setTier] = useState<QualityTier | null>(null);
   const [hudTab, setHudTab] = useState<HudTab>('players');
+  const [danmakuProbe, setDanmakuProbe] = useState(0);
   const [reduced, setReduced] = useState(prefersReducedMotion);
   useEffect(() => watchReducedMotion(setReduced), []);
   const updatePrefs = (patch: Partial<ScenePrefs>): void => {
@@ -150,6 +157,17 @@ export function GameView({
       sweep={sweep}
       groups={hudGroups}
       onAct={onAct}
+      chat={
+        <ChatPanel
+          entries={chat}
+          selfId={selfId}
+          onSend={onChat}
+          {...(canGL && prefs.enabled && prefs.danmaku
+            ? {}
+            : { danmakuNote: '彈幕目前沒有顯示（3D 或彈幕已關閉，可在「⚙ 設定」開啟）。' })}
+        />
+      }
+      chatLatest={chat.at(-1)?.id ?? 0}
       initialTab={hudTab}
       onTabChange={setHudTab}
       settings={
@@ -159,6 +177,13 @@ export function GameView({
           canGL={canGL}
           reduced={reduced}
           tier={tier}
+          {...(canGL && prefs.enabled
+            ? {
+                onPreviewDanmaku: () => {
+                  setDanmakuProbe((n) => n + 1);
+                },
+              }
+            : {})}
         />
       }
     />
@@ -196,6 +221,9 @@ export function GameView({
             corner={leaveButton}
             cards={cards}
             onTier={setTier}
+            chat={chat}
+            danmakuProbe={danmakuProbe}
+            selfColor={seatColor(mySeat ?? 0)}
           />
         </Suspense>
       ) : (

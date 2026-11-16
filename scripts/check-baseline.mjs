@@ -6,6 +6,7 @@
 // 見 AGENTS.md「環境約束」。
 //
 // 這裡只檢查已知會出問題的套件；新增限制時請在 RULES 加一筆並註明原因。
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const RULES = [
@@ -46,8 +47,38 @@ for (const rule of RULES) {
   }
 }
 
+// 大小寫不敏感的檔案系統（macOS 預設）：foo.ts 與 Foo.tsx 會被當成同一個模組，
+// 在大小寫敏感的 Linux／CI 看不出問題，到 Mac 才出現「does not provide an export」。
+// 只比對「去掉副檔名後只差大小寫」的來源檔。
+const sources = execFileSync(
+  'git',
+  ['ls-files', '-z', '--', '*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs'],
+  {
+    encoding: 'utf8',
+    cwd: new URL('..', import.meta.url),
+  },
+)
+  .split('\0')
+  .filter(Boolean);
+const byStem = new Map();
+for (const file of sources) {
+  const stem = file.replace(/\.(test\.)?[cm]?[jt]sx?$/, (_m, t) => (t ? '.test' : ''));
+  const key = stem.toLowerCase();
+  byStem.set(key, [...(byStem.get(key) ?? []), file]);
+}
+for (const files of byStem.values()) {
+  const stems = new Set(files.map((f) => f.replace(/\.[cm]?[jt]sx?$/, '')));
+  if (stems.size > 1) {
+    problems.push(
+      `檔名只差大小寫：${files.join('、')}\n  處理：macOS（大小寫不敏感）會把它們當成同一個模組；請改成不同的名字`,
+    );
+  }
+}
+
 if (problems.length > 0) {
   console.error('基準機相容性檢查失敗：\n' + problems.map((p) => `- ${p}`).join('\n'));
   process.exit(1);
 }
-console.log('基準機相容性檢查通過（lockfile 沒有需要 macOS 12 以上的原生工具）');
+console.log(
+  '基準機相容性檢查通過（lockfile 沒有需要 macOS 12 以上的原生工具、沒有只差大小寫的檔名）',
+);

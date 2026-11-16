@@ -3,6 +3,7 @@ import { createGame, defaultConfig } from '@kot/rules';
 import { PROTOCOL_VERSION, type GameUpdateMessage, type RoomSnapshot } from '@kot/protocol';
 import {
   appReducer,
+  CHAT_LIMIT,
   FEED_LIMIT,
   initialAppState,
   LOG_LIMIT,
@@ -127,6 +128,44 @@ describe('房間狀態', () => {
     const state = online();
     expect(appReducer(state, { type: 'room-state', payload: { room: { code: 5 } } })).toBe(state);
     expect(appReducer(state, { type: 'room-state', payload: null })).toBe(state);
+  });
+});
+
+describe('聊天', () => {
+  const msg = (text: string, seat: number | null = 0) => ({
+    from: 'p1',
+    nickname: 'Mang',
+    seat,
+    text,
+    at: 1,
+  });
+
+  it('收到的訊息依序加上遞增 id；格式不符的被忽略', () => {
+    let state = appReducer(online(), { type: 'chat', payload: msg('嗨') });
+    state = appReducer(state, { type: 'chat', payload: msg('哈囉', null) });
+    expect(state.chat.map((m) => [m.id, m.text, m.seat])).toEqual([
+      [1, '嗨', 0],
+      [2, '哈囉', null],
+    ]);
+    expect(appReducer(state, { type: 'chat', payload: { text: 5 } })).toBe(state);
+    expect(appReducer(state, { type: 'chat', payload: msg('x'.repeat(81)) })).toBe(state);
+  });
+
+  it('最多保留最近 CHAT_LIMIT 則', () => {
+    let state = online();
+    for (let i = 0; i < CHAT_LIMIT + 5; i += 1) {
+      state = appReducer(state, { type: 'chat', payload: msg(`m${String(i)}`) });
+    }
+    expect(state.chat).toHaveLength(CHAT_LIMIT);
+    expect(state.chat.at(-1)?.text).toBe(`m${String(CHAT_LIMIT + 4)}`);
+  });
+
+  it('離開房間清掉聊天，但流水號不歸零（id 不會重複，彈幕才不會漏播）', () => {
+    let state = appReducer(online(), { type: 'chat', payload: msg('a') });
+    state = appReducer(state, { type: 'room-state', payload: { room: null } });
+    expect(state.chat).toEqual([]);
+    state = appReducer(state, { type: 'chat', payload: msg('b') });
+    expect(state.chat[0]?.id).toBe(2);
   });
 });
 
