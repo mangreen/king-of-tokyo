@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CardDef } from '@kot/rules';
 import type { ChatEntry } from '../state.js';
-import { Danmaku } from './Danmaku.js';
+import { DanmakuLayer } from './DanmakuLayer.js';
 import { cardLookup } from './cardFx.js';
 import { latestVersion, takeNew, type FeedBatch } from './feed.js';
 import { prefersReducedMotion, savePrefs, watchReducedMotion, type ScenePrefs } from './prefs.js';
@@ -241,7 +241,7 @@ export default function Scene3D({
               </button>
             </div>
           )}
-          <Danmaku
+          <DanmakuLayer
             enabled={prefs.danmaku}
             opacity={prefs.danmakuOpacity}
             size={prefs.danmakuSize}

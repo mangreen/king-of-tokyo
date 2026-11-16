@@ -22,7 +22,7 @@ const PROBE_TEXT = '這是彈幕預覽 💬';
  * 直接操作 DOM（不經過 React 狀態），因為它只是一層會自己消失的動畫；
  * 軌道安排見 danmaku.ts（同一軌道等速、不重疊）。
  */
-export function Danmaku({ enabled, opacity, size, chat, probe, probeColor }: Props) {
+export function DanmakuLayer({ enabled, opacity, size, chat, probe, probeColor }: Props) {
   const layerRef = useRef<HTMLDivElement>(null);
   const planner = useRef<{ key: string; planner: LanePlanner } | null>(null);
   const seen = useRef<number>(chat.at(-1)?.id ?? 0);
