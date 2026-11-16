@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { legalActions, rollLimit, type Action, type CardDef } from '@kot/rules';
+import { rollLimit, type Action, type CardDef } from '@kot/rules';
 import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
 import { envOf, groupActions, myActions } from '../actions.js';
 import { ChatPanel } from '../hud/ChatPanel.js';
@@ -17,7 +17,7 @@ import {
 } from '../scene/prefs.js';
 import type { QualityTier } from '../scene/quality.js';
 import { seatColor } from '../scene/layout.js';
-import { toSnapshot } from '../scene/snapshot.js';
+import { isShopOpen, toSnapshot } from '../scene/snapshot.js';
 import type { ChatEntry, EventBatch } from '../state.js';
 
 // 3D 場景（Three.js）動態載入：大廳與房間不必下載它
@@ -82,12 +82,7 @@ export function GameView({
   const [canGL] = useState(() => webglAvailable());
   const env = useMemo(() => envOf(cards), [cards]);
   const snapshot = useMemo(() => {
-    // 商店開著＝買牌階段，而且行動中的玩家買得起牌（或清得起商店）：飛碟在這段時間入場停著
-    const shopOpen =
-      state.phase === 'buy' &&
-      legalActions(state, env).some(
-        (a) => (a.type === 'buy' && a.from === undefined) || a.type === 'sweep',
-      );
+    const shopOpen = isShopOpen(state, env);
     return toSnapshot(room, state, game.actorSeat, selfId, shopOpen);
   }, [room, state, env, game.actorSeat, selfId]);
   const seed = useMemo(() => seedFromCode(room.code), [room.code]);
