@@ -1107,15 +1107,27 @@ main.wide {
   margin-top: 0.25rem;
 }
 
-/* 3D 場景右下角：全螢幕與關閉 3D（文字按鈕，靠右對齊在縮放按鈕下方） */
-.map-controls {
-  align-items: flex-end;
+/* 3D 場景右上角：全螢幕與關閉 3D（文字按鈕，橫向排列） */
+.scene-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
-.map-controls button.wide {
+.scene-actions button {
   width: auto;
   height: auto;
+  min-height: 0;
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  touch-action: manipulation;
 }
 /* 設定面板 */
 .settings {
