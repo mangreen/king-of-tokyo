@@ -20,6 +20,7 @@ import type { CardDef, GameEvent } from '@kot/rules';
 import { MonsterActor } from './actor.js';
 import { buildCity, type CityBuild } from './city.js';
 import { CardFaces, CardFxSystem } from './cardShow.js';
+import { THEME_STYLE } from './cardFx.js';
 import { directEvents, UFO_DELIVER_AT, type Cue } from './director.js';
 import { buildCrown, headBounds, type Crown } from './crown.js';
 import { AttackFxSystem, attackStyleOf } from './attackFx.js';
@@ -917,13 +918,14 @@ export class SceneRenderer {
   private runCard(cue: Extract<Cue, { kind: 'card' }>): void {
     const a = this.actor(cue.seat);
     if (!a) return;
-    if (!this.cardFxOn || cue.mode === 'bought') {
+    if (!this.cardFxOn || cue.mode === 'bought' || cue.mode === 'triggered') {
+      // 買到手／被動發動：輕量演出（被動發動用卡牌主題色，讓人看得出是哪一類效果）
       this.dust.emit(a.x, 2.6, a.z, {
-        count: 10,
+        count: cue.mode === 'triggered' ? 14 : 10,
         spread: 2.2,
         up: 2,
         size: 1.2,
-        color: seatColor(cue.seat),
+        color: cue.mode === 'triggered' ? THEME_STYLE[cue.theme].color : seatColor(cue.seat),
         life: 0.9,
       });
       if (this.cardFxOn) this.cardFx.pop(cue.cardId, a.x, a.z, a.rig.height * 0.8, false);

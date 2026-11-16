@@ -556,6 +556,29 @@ export class CardFxSystem {
           color: '#ffffff',
         });
         break;
+      case 'smoke':
+        // 煙霧彈：一大團灰煙從腳邊炸開、往上翻騰，外圈再散出一圈白煙（顆數多、顆粒大，才不會被背景吃掉）
+        dust.emit(subject.x, 0.8, subject.z, {
+          count: n(44),
+          spread: 3.6,
+          up: 1.8,
+          size: 4.6,
+          color: '#c9d0d7',
+          life: 2.2,
+          radius: 1.8,
+        });
+        dust.emit(subject.x, 1.8, subject.z, {
+          count: n(26),
+          spread: 5,
+          up: 2.8,
+          size: 3.4,
+          color: '#ffffff',
+          life: 1.8,
+          radius: 2.4,
+        });
+        debris.burst(subject.x, 3, subject.z, n(6), 4, DICE_COLORS);
+        waves.fire(subject.x, subject.z, 4.6, '#cfd5db', 0.7);
+        break;
       case 'wings':
         dust.emit(subject.x, 1.5, subject.z, {
           count: n(18),

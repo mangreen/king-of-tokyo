@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { Group } from 'three';
+import { describe, expect, it, vi } from 'vitest';
 import type { CardDef } from '@kot/rules';
 import originalCardSet from '../../../../card-sets/original/set.json';
 import { THEME_STYLE, themeOf, type CardTheme } from './cardFx.js';
+import { CardFxSystem } from './cardShow.js';
 
 const cards = (originalCardSet as { cards: CardDef[] }).cards;
 const instant = (ops: unknown[]): Pick<CardDef, 'kind' | 'effectId' | 'params'> => ({
@@ -47,5 +49,42 @@ describe('themeOf', () => {
     const used = new Set<CardTheme>(cards.map(themeOf));
     for (const t of used) expect(THEME_STYLE[t].color).toMatch(/^#/);
     expect(used.size).toBeGreaterThanOrEqual(10);
+  });
+});
+
+describe('煙霧彈與擲骰類卡牌的主題', () => {
+  const themeById = (id: string): CardTheme | undefined => {
+    const c = cards.find((x) => x.id === id);
+    return c ? themeOf(c) : undefined;
+  };
+
+  it('煙霧彈用專屬的煙幕主題；其他換擲骰機會的卡是骰子主題', () => {
+    expect(themeById('o-smoke-bomb')).toBe('smoke');
+    expect(themeById('o-mind-link')).toBe('dice');
+  });
+
+  it('煙幕特效：噴出煙霧粒子（不會丟例外），其他主題也都能播', () => {
+    const emit = vi.fn();
+    const burst = vi.fn();
+    const fire = vi.fn();
+    const deps = {
+      dust: { emit },
+      debris: { burst },
+      waves: { fire },
+      shields: { pop: vi.fn() },
+      faces: {},
+      scale: () => 1,
+      shake: vi.fn(),
+    } as never;
+    const fx = new CardFxSystem(new Group(), deps);
+    const spot = { x: 0, z: 0 };
+    fx.play('smoke', spot, [spot], [spot]);
+    expect(emit).toHaveBeenCalled();
+    expect(fire).toHaveBeenCalled();
+    for (const theme of Object.keys(THEME_STYLE) as CardTheme[]) {
+      expect(() => {
+        fx.play(theme, spot, [spot], [spot]);
+      }).not.toThrow();
+    }
   });
 });

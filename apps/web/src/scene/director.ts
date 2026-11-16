@@ -35,8 +35,8 @@ export type Cue =
       at: number;
       seat: number;
       cardId: string;
-      /** bought＝買到手的收下動畫；used＝使用／觸發效果（依卡牌內容演出）。 */
-      mode: 'bought' | 'used';
+      /** bought＝買到手的收下動畫；used＝使用效果（依卡牌內容演出）；triggered＝持有的保留卡被動發動（輕量提示）。 */
+      mode: 'bought' | 'used' | 'triggered';
       theme: CardTheme;
     }
   | {
@@ -76,6 +76,8 @@ export const UFO_DELIVER_AT = 0.68;
 export const UFO_HOLD = 1200;
 /** 卡牌特效播出後，等多久才接後續事件（傷害／回復在特效之後才跳出）。 */
 export const CARD_USE_HOLD = 650;
+/** 保留卡被動發動：輕量提示，停得比主動使用短。 */
+export const CARD_TRIGGER_HOLD = 380;
 
 export function powerOf(amount: number): Power {
   if (amount >= 5) return 'heavy';
@@ -300,6 +302,19 @@ export function directEvents(events: readonly GameEvent[], cardOf?: CardLookup):
         }
         break;
       }
+
+      case 'card_triggered':
+        flush();
+        cues.push({
+          kind: 'card',
+          at: t,
+          seat: e.seat,
+          cardId: e.cardId,
+          mode: 'triggered',
+          theme: themeOf(cardOf?.(e.cardId)),
+        });
+        t += CARD_TRIGGER_HOLD;
+        break;
 
       case 'card_used':
         flush();

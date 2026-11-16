@@ -240,6 +240,12 @@ export default function Demo() {
         }));
       },
     ],
+    [
+      '被動發動（銳爪）',
+      () => {
+        push([{ type: 'card_triggered', seat: 0, cardId: 'o-razor-claw' }]);
+      },
+    ],
     ...[...SAMPLE_BY_THEME.entries()].map(([theme, card]): [string, () => void] => [
       `${THEME_STYLE[theme].icon}${card.name}`,
       () => {

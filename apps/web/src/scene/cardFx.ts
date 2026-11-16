@@ -17,6 +17,7 @@ export type CardTheme =
   | 'extra' // 額外回合
   | 'shield' // 防禦、反擊
   | 'dice' // 骰子相關
+  | 'smoke' // 煙霧彈：換來額外的擲骰機會
   | 'wings' // 移動、飛行
   | 'revive' // 復活
   | 'generic';
@@ -39,6 +40,7 @@ export const THEME_STYLE: Record<CardTheme, ThemeStyle> = {
   extra: { color: '#ffb347', icon: '⏩', label: '再一回合' },
   shield: { color: '#7de3ff', icon: '🛡️', label: '防禦' },
   dice: { color: '#f2f2f2', icon: '🎲', label: '骰子' },
+  smoke: { color: '#aeb6bf', icon: '💨', label: '煙幕' },
   wings: { color: '#dff3ff', icon: '🪽', label: '移動' },
   revive: { color: '#fff3a8', icon: '✨', label: '復活' },
   generic: { color: '#ffffff', icon: '🃏', label: '卡牌' },
@@ -73,7 +75,6 @@ const KEEP_THEME: Record<string, CardTheme> = {
   energy_bonus: 'bolt',
   lose_hp_energy: 'bolt',
   cost_discount: 'bolt',
-  reroll_energy: 'bolt',
   buy_from_others: 'bolt',
   heal_bonus: 'heal',
   heal_others: 'heal',
@@ -84,7 +85,8 @@ const KEEP_THEME: Record<string, CardTheme> = {
   die_change: 'dice',
   extra_dice: 'dice',
   extra_rolls: 'dice',
-  reroll_charges: 'dice',
+  reroll_energy: 'dice',
+  reroll_charges: 'smoke',
   reroll_threes: 'dice',
   probe: 'dice',
   mimic: 'dice',
