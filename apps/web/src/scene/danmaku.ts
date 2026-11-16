@@ -69,17 +69,20 @@ export function layoutFor(
   containerWidth: number,
   containerHeight: number,
   fontSize: number,
+  speedFactor = 1,
 ): DanmakuLayout {
   const laneHeight = Math.ceil(fontSize * 1.5);
   const top = Math.round(Math.min(56, containerHeight * 0.08));
   const area = Math.max(laneHeight, containerHeight * DANMAKU_AREA - top);
   const lanes = Math.max(1, Math.min(8, Math.floor(area / laneHeight)));
-  const speed = Math.max(0.06, containerWidth / CROSS_MS);
+  const speed = Math.max(0.03, (containerWidth / CROSS_MS) * speedFactor);
   return { lanes, laneHeight, top, speed };
 }
 
 /** 彈幕偏好的範圍（設定面板的拉桿與解析共用）。 */
 export const DANMAKU_OPACITY = { min: 0.2, max: 1, step: 0.05, def: 0.75 } as const;
+/** 移動速度倍率：1 倍＝約 9 秒飛過整個畫面。 */
+export const DANMAKU_SPEED = { min: 0.4, max: 3, step: 0.1, def: 1 } as const;
 export const DANMAKU_SIZE = { min: 14, max: 40, step: 1, def: 22 } as const;
 
 export function clampRange(

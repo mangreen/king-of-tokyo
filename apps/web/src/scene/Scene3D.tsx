@@ -245,6 +245,7 @@ export default function Scene3D({
             enabled={prefs.danmaku}
             opacity={prefs.danmakuOpacity}
             size={prefs.danmakuSize}
+            speed={prefs.danmakuSpeed}
             chat={chat ?? EMPTY_CHAT}
             probe={danmakuProbe ?? 0}
             probeColor={selfColor ?? '#ffffff'}

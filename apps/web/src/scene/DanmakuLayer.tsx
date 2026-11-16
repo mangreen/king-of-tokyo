@@ -7,6 +7,8 @@ interface Props {
   enabled: boolean;
   opacity: number;
   size: number;
+  /** 移動速度倍率。 */
+  speed: number;
   /** 聊天訊息（id 遞增）。只播放「掛載之後新到的」，換頁或重開 3D 不會重播歷史。 */
   chat: readonly ChatEntry[];
   /** 設定面板的「預覽」按鈕每按一次加一：飛過一則範例彈幕。 */
@@ -22,14 +24,14 @@ const PROBE_TEXT = '這是彈幕預覽 💬';
  * 直接操作 DOM（不經過 React 狀態），因為它只是一層會自己消失的動畫；
  * 軌道安排見 danmaku.ts（同一軌道等速、不重疊）。
  */
-export function DanmakuLayer({ enabled, opacity, size, chat, probe, probeColor }: Props) {
+export function DanmakuLayer({ enabled, opacity, size, speed, chat, probe, probeColor }: Props) {
   const layerRef = useRef<HTMLDivElement>(null);
   const planner = useRef<{ key: string; planner: LanePlanner } | null>(null);
   const seen = useRef<number>(chat.at(-1)?.id ?? 0);
   const lastProbe = useRef(probe);
-  const latest = useRef({ size, probeColor });
+  const latest = useRef({ size, speed, probeColor });
   useEffect(() => {
-    latest.current = { size, probeColor };
+    latest.current = { size, speed, probeColor };
   });
 
   // 透明度即時生效（飛行中的也會變）
@@ -56,7 +58,7 @@ export function DanmakuLayer({ enabled, opacity, size, chat, probe, probeColor }
       const width = layer.clientWidth;
       const height = layer.clientHeight;
       if (width === 0 || height === 0) return;
-      const layout = layoutFor(width, height, fontSize);
+      const layout = layoutFor(width, height, fontSize, latest.current.speed);
       const key = `${String(layout.lanes)}:${String(fontSize)}:${String(Math.round(layout.speed * 1000))}`;
       if (planner.current?.key !== key)
         planner.current = { key, planner: new LanePlanner(layout.lanes) };
