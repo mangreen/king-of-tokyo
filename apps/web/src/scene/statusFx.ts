@@ -52,9 +52,9 @@ export const poisonCount = (tokens: number): number =>
 export const shrinkCount = (tokens: number): number =>
   tokens <= 0 ? 0 : Math.min(SHRINK_MAX, 12 + 7 * Math.min(tokens, 2));
 
-/** 縮小後的大小倍率：每個指示物小 9%，最小 0.68。 */
-export const shrinkScale = (tokens: number): number =>
-  Math.max(0.68, 1 - 0.09 * Math.max(0, tokens));
+/** 縮小後的大小倍率：有縮小指示物就是原來的一半（0.5×），與指示物數量無關。 */
+export const SHRINK_SCALE = 0.5;
+export const shrinkScale = (tokens: number): number => (tokens > 0 ? SHRINK_SCALE : 1);
 
 /** 中毒時身體的閃爍強度（0..1）：快慢兩個頻率疊起來，忽明忽暗。 */
 export function poisonGlow(time: number): number {
