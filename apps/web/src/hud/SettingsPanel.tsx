@@ -21,7 +21,14 @@ interface Props {
   tier: QualityTier | null;
   /** 飛過一則範例彈幕（讓人調整透明度與大小時看得到效果）；3D 關閉時不提供。 */
   onPreviewDanmaku?: () => void;
-  /** 其他設定區塊（彈幕、新手教學…）。 */
+  /** 新手教學的設定；沒提供就不顯示這一區。 */
+  tutorial?: {
+    enabled: boolean;
+    onEnabled: (on: boolean) => void;
+    onReplay: () => void;
+    onReset: () => void;
+  };
+  /** 其他設定區塊。 */
   children?: ReactNode;
 }
 
@@ -62,6 +69,7 @@ export function SettingsPanel({
   reduced,
   tier,
   onPreviewDanmaku,
+  tutorial,
   children,
 }: Props) {
   const motion = prefs.cameraMotion && !reduced;
@@ -202,6 +210,25 @@ export function SettingsPanel({
           </button>
         )}
       </fieldset>
+      {tutorial && (
+        <fieldset>
+          <legend>📘 新手教學</legend>
+          <Check checked={tutorial.enabled} onChange={tutorial.onEnabled}>
+            顯示新手教學（快速規則與情境提示）
+          </Check>
+          <p className="muted">
+            第一次遇到某個時機（擲骰、讓位、買牌…）才會跳出提示，看過就不再出現。
+          </p>
+          <div className="settings-row">
+            <button type="button" onClick={tutorial.onReplay}>
+              重看快速規則
+            </button>
+            <button type="button" onClick={tutorial.onReset}>
+              重置提示（再看一次）
+            </button>
+          </div>
+        </fieldset>
+      )}
       {children}
     </div>
   );

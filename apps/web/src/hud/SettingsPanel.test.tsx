@@ -35,6 +35,23 @@ describe('SettingsPanel（設定面板）', () => {
     expect(html.indexOf('彈幕設定')).toBeGreaterThan(html.indexOf('商店飛碟與卡牌特效'));
   });
 
+  it('新手教學：有提供才顯示；開關反映目前設定、有「重看快速規則」與「重置提示」', () => {
+    const base = {
+      onEnabled: () => undefined,
+      onReplay: () => undefined,
+      onReset: () => undefined,
+    };
+    expect(render()).not.toContain('新手教學');
+    const on = render({ tutorial: { ...base, enabled: true } });
+    expect(on).toContain('📘 新手教學');
+    expect(on).toMatch(/checked=""[^>]*\/> 顯示新手教學/);
+    expect(on).toContain('重看快速規則');
+    expect(on).toContain('重置提示');
+    expect(render({ tutorial: { ...base, enabled: false } })).not.toMatch(
+      /checked=""[^>]*\/> 顯示新手教學/,
+    );
+  });
+
   it('彈幕設定：開關、透明度與大小拉桿（顯示目前值）、預覽按鈕', () => {
     const html = render({
       prefs: { ...defaultPrefs(false), danmakuOpacity: 0.4, danmakuSize: 30 },
