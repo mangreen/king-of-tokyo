@@ -121,13 +121,28 @@ interface ShopProps {
   state: GameState;
   env: Env;
   buys: Extract<Action, { type: 'buy' }>[];
+  /** 牌庫頂（先知）與別人持有的牌（寄生觸手）的購買動作。 */
+  otherBuys?: Extract<Action, { type: 'buy' }>[];
   sweep: Action | undefined;
   labelCtx: LabelContext;
   onAct: Act;
 }
 
-export function ShopPanel({ state, env, buys, sweep, labelCtx, onAct }: ShopProps) {
+export function ShopPanel({ state, env, buys, otherBuys = [], sweep, labelCtx, onAct }: ShopProps) {
   if (!state.market) return <p className="muted">這個牌組沒有商店。</p>;
+  const deckBuys = otherBuys.filter((a) => a.from === 'deck');
+  const ownerBuys = otherBuys.filter((a) => typeof a.from === 'number');
+  const buyButton = (a: Extract<Action, { type: 'buy' }>) => (
+    <button
+      key={labelAction(a, labelCtx)}
+      className="primary"
+      onClick={() => {
+        onAct(toIntent(a));
+      }}
+    >
+      {labelAction(a, labelCtx)}
+    </button>
+  );
   return (
     <div className="shop">
       <p className="muted">
@@ -155,6 +170,38 @@ export function ShopPanel({ state, env, buys, sweep, labelCtx, onAct }: ShopProp
           );
         })}
       </div>
+      {deckBuys.length > 0 && (
+        <>
+          <h4 className="shop-sub">🔮 牌庫頂</h4>
+          <div className="shop-cards">
+            {deckBuys.map((a) => {
+              const def = env.cards[a.cardId];
+              return (
+                <div key={a.cardId} className="shop-card">
+                  {def ? <CardBody def={def} /> : <strong>{a.cardId}</strong>}
+                  {buyButton(a)}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {ownerBuys.length > 0 && (
+        <>
+          <h4 className="shop-sub">🦠 別人持有的牌（寄生觸手：付能量給持有者）</h4>
+          <div className="shop-cards">
+            {ownerBuys.map((a) => {
+              const def = env.cards[a.cardId];
+              return (
+                <div key={`${String(a.from)}-${a.cardId}`} className="shop-card">
+                  {def ? <CardBody def={def} /> : <strong>{a.cardId}</strong>}
+                  {buyButton(a)}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
       {sweep && (
         <button
           onClick={() => {

@@ -50,5 +50,5 @@ export type {
   InstantOp,
   RulesEnv,
 } from './cards/types.js';
-export { EFFECTS, knownEffectIds } from './cards/effects.js';
+export { CAP, EFFECTS, knownEffectIds } from './cards/effects.js';
 export type { Effect } from './cards/effects.js';

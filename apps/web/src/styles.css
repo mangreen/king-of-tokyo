@@ -784,6 +784,10 @@ main.wide {
 .shop-card button {
   min-height: 2.25rem;
 }
+.shop-sub {
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+}
 
 /* 事件與規則面板 */
 .log-list {

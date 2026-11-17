@@ -63,6 +63,8 @@ export interface HudProps {
   onToggle: (i: number) => void;
   // 動作
   marketBuys: Extract<Action, { type: 'buy' }>[];
+  /** 牌庫頂（先知）與別人持有的牌（寄生觸手）的購買動作；商店分頁一起列出。 */
+  otherBuys: Extract<Action, { type: 'buy' }>[];
   sweep: Action | undefined;
   groups: ActionGroup[];
   onAct: (a: GameActionInput) => void;
@@ -110,6 +112,9 @@ export function GameHud(p: HudProps) {
     if (tab === 'shop') setTab('players');
   }
 
+  // 買得起的東西：商店牌＋牌庫頂＋別人持有的牌
+  const buyableCount = p.marketBuys.length + p.otherBuys.length;
+
   // 提示（toast）：重大事件＋「商店可以買」。用「渲染中推導狀態」，不用 effect。
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [seen, setSeen] = useState(() => latestVersion(p.feed));
@@ -131,9 +136,9 @@ export function GameHud(p: HudProps) {
     setSeen(latest);
     if (added.length > 0) setToasts((t) => [...t, ...added].slice(-MAX_TOASTS));
   }
-  if (buyKey !== null && buyKey !== shopShownFor && p.marketBuys.length > 0) {
+  if (buyKey !== null && buyKey !== shopShownFor && buyableCount > 0) {
     setShopShownFor(buyKey);
-    const n = shopNotice(p.marketBuys.length);
+    const n = shopNotice(buyableCount);
     if (n)
       setToasts((t) =>
         [...t.filter((x) => x.action !== 'shop'), { ...n, key: `shop-${buyKey}` }].slice(
@@ -141,7 +146,7 @@ export function GameHud(p: HudProps) {
         ),
       );
   }
-  const holdEndTurn = shouldHoldEndTurn(buyKey, leftShopFor, p.marketBuys.length);
+  const holdEndTurn = shouldHoldEndTurn(buyKey, leftShopFor, buyableCount);
   const leaveShop = (): void => {
     setLeftShopFor(buyKey);
     if (tab === 'shop') setTab('players');
@@ -154,7 +159,7 @@ export function GameHud(p: HudProps) {
     document.querySelector('.hud-info')?.scrollIntoView({ block: 'nearest' });
   };
   // 「商店可以買」只在現在真的還買得起、而且還沒離開商店時顯示，數字即時更新
-  const buyable = p.marketBuys.length;
+  const buyable = buyableCount;
   const shownToasts = useMemo(
     () => visibleShopToasts(toasts, buyKey, leftShopFor, buyable, (n) => shopNotice(n)?.text ?? ''),
     [toasts, buyKey, leftShopFor, buyable],
@@ -240,8 +245,8 @@ export function GameHud(p: HudProps) {
               }}
             >
               {t.label}
-              {t.key === 'shop' && p.marketBuys.length > 0 && (
-                <span className="badge">{p.marketBuys.length}</span>
+              {t.key === 'shop' && buyableCount > 0 && (
+                <span className="badge">{buyableCount}</span>
               )}
               {t.key === 'chat' && unread > 0 && (
                 <span className="badge" aria-label={`${String(unread)} 則未讀`}>
@@ -267,6 +272,7 @@ export function GameHud(p: HudProps) {
               state={state}
               env={p.env}
               buys={p.marketBuys}
+              otherBuys={p.otherBuys}
               sweep={p.sweep}
               labelCtx={p.labelCtx}
               onAct={p.onAct}
