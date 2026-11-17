@@ -257,4 +257,14 @@ describe('directEvents', () => {
       expect(first?.dur).toBeGreaterThanOrEqual(Math.round(UFO_DURATION * MIN_SPEEDUP));
     });
   });
+
+  it('保留卡被動發動：輕量的 card 提示（mode=triggered），停留比使用短', () => {
+    const { cues } = directEvents([{ type: 'card_triggered', seat: 1, cardId: 'x' }]);
+    expect(of(cues, 'card')).toEqual([
+      expect.objectContaining({ mode: 'triggered', seat: 1, cardId: 'x' }),
+    ]);
+    const three = (type: 'card_triggered' | 'card_used') =>
+      directEvents([1, 2, 3].map(() => ({ type, seat: 1, cardId: 'x' }))).duration;
+    expect(three('card_triggered')).toBeLessThan(three('card_used'));
+  });
 });

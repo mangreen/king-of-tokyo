@@ -282,6 +282,10 @@ export type GameEvent =
   | { type: 'card_bought'; seat: number; cardId: string; cost: number; from: number | null }
   | { type: 'card_discarded'; seat: number | null; cardId: string; reason: string }
   | { type: 'card_used'; seat: number; cardId: string }
+  /** 持有的保留卡自動發動（被動效果，例如反射、吸血、得分加成）；緊接在它造成的事件之前。 */
+  | { type: 'card_triggered'; seat: number; cardId: string }
+  /** 本回合多了擲骰機會（用卡換來的）；left＝這張卡之後還剩幾次充能（沒有充能的卡省略）。 */
+  | { type: 'rolls_added'; seat: number; cardId: string; amount: number; left?: number }
   | { type: 'card_swapped'; seat: number; gave: string; took: string; from: number }
   | { type: 'die_changed'; seat: number; index: number; face: Face }
   | { type: 'die_rerolled'; by: number; seat: number; index: number; face: Face }

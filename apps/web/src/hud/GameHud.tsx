@@ -125,6 +125,7 @@ export function GameHud(p: HudProps) {
         nameOf: p.nameOf,
         cardName: (id) => p.env.cards[id]?.name ?? id,
         cardIcon: (id) => THEME_STYLE[themeOf(p.env.cards[id])].icon,
+        cardText: (id) => p.env.cards[id]?.text ?? '',
         victoryPoints: state.config.victoryPoints,
         vpNow: (seat) => state.monsters.find((m) => m.seat === seat)?.vp ?? 0,
       }).map((n): Toast => ({ ...n, key: `${String(b.version)}-${n.id}` })),

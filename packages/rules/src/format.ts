@@ -66,6 +66,10 @@ export function describeEvent(
       return e.reason === 'instant' ? '' : `  ${cardName(e.cardId)} 被棄掉（${e.reason}）`;
     case 'card_used':
       return `  ${nameOf(e.seat)} 使用 ${cardName(e.cardId)}`;
+    case 'rolls_added':
+      return `  ${nameOf(e.seat)} 多得到 ${e.amount} 次擲骰機會（${cardName(e.cardId)}）`;
+    case 'card_triggered':
+      return `  ${nameOf(e.seat)} 的 ${cardName(e.cardId)} 發動`;
     case 'card_swapped':
       return `  ${nameOf(e.seat)} 與 ${nameOf(e.from)} 換卡：給出 ${cardName(e.gave)}，拿走 ${cardName(e.took)}`;
     case 'die_changed':

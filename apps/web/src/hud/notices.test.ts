@@ -111,19 +111,61 @@ describe('卡牌使用提示', () => {
     cause: 'card',
   });
 
-  it('別人用牌波及自己：寫出誰、哪張牌、對我的影響，且是 danger', () => {
+  it('別人用牌波及自己：寫出誰、哪張牌、對所有人的影響，且是 danger', () => {
     const n = noticesFor([used(1), hit(0, 3), hit(2, 3)], ctx({ cardIcon: () => '☄️' }));
     expect(n).toHaveLength(1);
     expect(n[0]).toMatchObject({
       kind: 'danger',
       icon: '☄️',
-      text: 'Bob使用了【卡-quake】，對你：HP -3',
+      text: 'Bob使用了【卡-quake】：你 HP -3；Cat HP -3',
     });
   });
 
-  it('別人用牌沒波及自己：明說對你沒有影響', () => {
+  it('別人用牌沒波及自己：仍寫出誰、哪張牌、影響了誰（不是 danger）', () => {
     const n = noticesFor([used(1), hit(2, 3)], ctx());
-    expect(n[0]).toMatchObject({ kind: 'info', text: 'Bob使用了【卡-quake】，對你沒有影響' });
+    expect(n[0]).toMatchObject({ kind: 'info', text: 'Bob使用了【卡-quake】：Cat HP -3' });
+  });
+
+  it('煙霧彈：沒有任何人受傷也提示誰用了牌、多了擲骰機會', () => {
+    const smoke: GameEvent[] = [
+      { type: 'card_used', seat: 1, cardId: 'smoke' },
+      { type: 'rolls_added', seat: 1, cardId: 'smoke', amount: 1, left: 2 },
+    ];
+    expect(noticesFor(smoke, ctx())[0]).toMatchObject({
+      kind: 'info',
+      text: 'Bob使用了【卡-smoke】：Bob本回合多 1 次擲骰機會（卡上剩 2 次）',
+    });
+    expect(texts(smoke.map((e) => ('seat' in e ? { ...e, seat: 0 } : e)))[0]).toBe(
+      '你使用了【卡-smoke】：你本回合多 1 次擲骰機會（卡上剩 2 次）',
+    );
+  });
+
+  it('改骰、額外回合等非數字效果也會寫出來，且不重複跳提示', () => {
+    const n = noticesFor(
+      [
+        { type: 'card_used', seat: 2, cardId: 'x' },
+        { type: 'die_changed', seat: 2, index: 0, face: 'attack' },
+        { type: 'extra_turn_granted', seat: 2 },
+      ],
+      ctx(),
+    );
+    expect(n).toHaveLength(1);
+    expect(n[0]?.text).toBe(
+      'Cat使用了【卡-x】：Cat把第 1 顆骰子改成 💥；Cat回合結束後會再進行一個回合',
+    );
+  });
+
+  it('被動卡發動：寫出誰的哪張牌發動、造成什麼；沒有可量化的影響就寫卡面文字', () => {
+    const passive: GameEvent[] = [
+      { type: 'card_triggered', seat: 1, cardId: 'p' },
+      { type: 'vp_gained', seat: 1, amount: 2, reason: 'card' as never },
+    ];
+    expect(noticesFor(passive, ctx())[0]?.text).toBe('Bob的【卡-p】發動了：Bob ⭐ +2');
+    const bare = noticesFor(
+      [{ type: 'card_triggered', seat: 1, cardId: 'p' }],
+      ctx({ cardText: () => '你攻擊時多造成 1 點傷害。' }),
+    );
+    expect(bare[0]?.text).toBe('Bob的【卡-p】發動了：你攻擊時多造成 1 點傷害。');
   });
 
   it('自己用牌：列出自己的收穫', () => {
@@ -139,7 +181,7 @@ describe('卡牌使用提示', () => {
     );
     expect(n[0]).toMatchObject({
       kind: 'good',
-      text: '你使用了【卡-quake】，你：HP +2、⭐ +1、⚡ -1',
+      text: '你使用了【卡-quake】：你 HP +2、⭐ +1、⚡ -1；Bob HP +9',
     });
   });
 
@@ -148,6 +190,9 @@ describe('卡牌使用提示', () => {
       noticesFor([used(0), { type: 'energy_gained', seat: 0, amount: 9 }], ctx())[0]?.kind,
     ).toBe('good');
     expect(noticesFor([used(0)], ctx())[0]?.text).toBe('你使用了【卡-quake】');
+    expect(noticesFor([used(0)], ctx({ cardText: () => '說明' }))[0]?.text).toBe(
+      '你使用了【卡-quake】：說明',
+    );
   });
 
   it('影響只算到下一張牌／回合邊界／骰面攻擊之前', () => {
@@ -164,7 +209,7 @@ describe('卡牌使用提示', () => {
 
   it('被這張牌淘汰也會寫出來', () => {
     const n = noticesFor([used(1), hit(0, 9), { type: 'eliminated', seat: 0, by: 1 }], ctx());
-    expect(n.map((x) => x.text)).toContain('Bob使用了【卡-quake】，對你：HP -9、被淘汰');
+    expect(n.map((x) => x.text)).toContain('Bob使用了【卡-quake】：你 HP -9、被淘汰');
     expect(describeImpact({ hp: 0, vp: 0, energy: 0, eliminated: false })).toBe('');
   });
 });
