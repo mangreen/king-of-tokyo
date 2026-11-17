@@ -135,7 +135,7 @@ describe('R-DICE-05 / R-DICE-06 結算', () => {
     const s = makeState({ players: 3, monsters: { 0: { energy: 2 } } });
     const r = resolveWith(s, [E, E, E, 1, 1, 2]);
     expect(mon(r.state, 0).energy).toBe(5);
-    expect(r.events).toContainEqual({ type: 'energy_gained', seat: 0, amount: 3 });
+    expect(r.events).toContainEqual({ type: 'energy_gained', seat: 0, amount: 3, source: 'dice' });
   });
 
   it('R-DICE-06：結算事件依 VP → 能量 → 治療 → 攻擊 的順序輸出', () => {
@@ -165,7 +165,7 @@ describe('R-HEAL 治療', () => {
       2,
     ]);
     expect(mon(r.state, 0).hp).toBe(6);
-    expect(r.events).toContainEqual({ type: 'healed', seat: 0, amount: 2 });
+    expect(r.events).toContainEqual({ type: 'healed', seat: 0, amount: 2, source: 'dice' });
   });
 
   it('R-HEAL-01：HP 不會超過上限 10', () => {
@@ -178,7 +178,7 @@ describe('R-HEAL 治療', () => {
       2,
     ]);
     expect(mon(r.state, 0).hp).toBe(10);
-    expect(r.events).toContainEqual({ type: 'healed', seat: 0, amount: 1 });
+    expect(r.events).toContainEqual({ type: 'healed', seat: 0, amount: 1, source: 'dice' });
   });
 
   it('R-HEAL-01：HP 已滿時沒有治療事件', () => {

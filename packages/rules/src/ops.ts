@@ -7,7 +7,16 @@ import type { Effect } from './cards/effects.js';
 import type { CardDef, RulesEnv } from './cards/types.js';
 import { nextInt } from './rng.js';
 import { aliveMonsters, getMonster, occupantOf } from './state.js';
-import type { DamageCause, GameEvent, GameState, Monster, PlanItem, WinReason } from './types.js';
+import type {
+  DamageCause,
+  EnergySource,
+  GameEvent,
+  GameState,
+  HealSource,
+  Monster,
+  PlanItem,
+  WinReason,
+} from './types.js';
 
 /** 一次動作處理期間的上下文。 */
 export interface G {
@@ -137,8 +146,6 @@ export function fire(g: G, seat: number, cardId: string): void {
   g.ev.push({ type: 'card_triggered', seat, cardId });
 }
 
-export type EnergySource = 'dice' | 'card' | 'transfer' | 'refund' | 'reserve';
-
 export function gainVp(
   g: G,
   seat: number,
@@ -179,7 +186,7 @@ export function gainEnergy(g: G, seat: number, amount: number, source: EnergySou
     }
   }
   getMonster(g.s, seat).energy += total;
-  g.ev.push({ type: 'energy_gained', seat, amount: total });
+  g.ev.push({ type: 'energy_gained', seat, amount: total, source });
   return total;
 }
 
@@ -192,7 +199,7 @@ export function spendEnergy(g: G, seat: number, amount: number): void {
 }
 
 /** 治療。回傳實際回復量。在東京內骰面治療無效由呼叫端處理。 */
-export function heal(g: G, seat: number, amount: number): number {
+export function heal(g: G, seat: number, amount: number, source: HealSource = 'card'): number {
   if (amount <= 0) {
     return 0;
   }
@@ -209,7 +216,7 @@ export function heal(g: G, seat: number, amount: number): number {
   }
   if (actual > 0) {
     m.hp += actual;
-    g.ev.push({ type: 'healed', seat, amount: actual });
+    g.ev.push({ type: 'healed', seat, amount: actual, source });
   }
   return actual;
 }

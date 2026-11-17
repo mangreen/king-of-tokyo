@@ -229,6 +229,18 @@ export type ActionResult =
 
 export type VpReason = 'tokyo_start' | 'enter_tokyo' | 'dice' | 'card';
 
+/** 能量的來源：骰面、卡牌效果、玩家之間轉移、退費、電池卡取回。 */
+export type EnergySource = 'dice' | 'card' | 'transfer' | 'refund' | 'reserve';
+
+/** 補血的來源：骰面（治療面）或卡牌。 */
+export type HealSource = 'dice' | 'card';
+
+/**
+ * 骰面攻擊打到哪裡：`tokyo`＝攻擊者在東京外，打東京裡的怪獸；`outside`＝攻擊者在東京裡，
+ * 打東京外的所有怪獸；`all`＝打所有其他怪獸（全域衝擊波）。
+ */
+export type SmashZone = 'tokyo' | 'outside' | 'all';
+
 /** 非骰面攻擊的傷害原因；骰面攻擊省略此欄位。 */
 export type DamageCause = 'card' | 'poison' | 'reflect' | 'yield' | 'extra' | 'self';
 
@@ -251,12 +263,12 @@ export type GameEvent =
       rerolled: number[];
     }
   | { type: 'rolling_ended'; seat: number; dice: Face[] }
-  | { type: 'energy_gained'; seat: number; amount: number }
+  | { type: 'energy_gained'; seat: number; amount: number; source?: EnergySource }
   | { type: 'energy_spent'; seat: number; amount: number }
-  | { type: 'healed'; seat: number; amount: number }
+  | { type: 'healed'; seat: number; amount: number; source?: HealSource }
   /** 在東京內擲出治療面：無效。R-HEAL-02 */
   | { type: 'heal_ignored'; seat: number; faces: number }
-  | { type: 'smash'; attacker: number; damage: number; targets: number[] }
+  | { type: 'smash'; attacker: number; damage: number; targets: number[]; zone?: SmashZone }
   | {
       type: 'damage_taken';
       seat: number;

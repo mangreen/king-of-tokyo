@@ -416,7 +416,7 @@ function healFromDice(g: G, seat: number, hearts: number): void {
   if (getMonster(g.s, seat).location !== null) {
     g.ev.push({ type: 'heal_ignored', seat, faces: hearts }); // R-HEAL-02
   } else {
-    heal(g, seat, hearts); // R-HEAL-01
+    heal(g, seat, hearts, 'dice'); // R-HEAL-01
   }
 }
 
@@ -536,6 +536,7 @@ function attackStage(g: G): void {
       attacker: seat,
       damage: base,
       targets: s.turn.attackTargets.slice(),
+      zone: a.nova ? 'all' : attacker.location === null ? 'tokyo' : 'outside',
     });
     for (const { e, o } of effectsWith(g, seat, 'onAttack')) {
       e.onAttack(g, o, a, s.turn.attackTargets);

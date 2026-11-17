@@ -20,7 +20,13 @@ describe('R-SMASH 攻擊', () => {
     expect(mon(r.state, 2).hp).toBe(10);
     expect(mon(r.state, 3).hp).toBe(10);
     expect(mon(r.state, 0).hp).toBe(10);
-    expect(r.events).toContainEqual({ type: 'smash', attacker: 0, damage: 2, targets: [1] });
+    expect(r.events).toContainEqual({
+      type: 'smash',
+      attacker: 0,
+      damage: 2,
+      targets: [1],
+      zone: 'tokyo',
+    });
     expect(r.events).toContainEqual({ type: 'damage_taken', seat: 1, amount: 2, hp: 8, source: 0 });
   });
 
@@ -44,6 +50,18 @@ describe('R-SMASH 攻擊', () => {
     expect(mon(r.state, 1).hp).toBe(8);
     expect(mon(r.state, 2).hp).toBe(8);
     expect(mon(r.state, 4).hp).toBe(8);
+  });
+
+  it('smash 事件標明打到哪裡：攻擊者在東京裡 → 東京外（outside）', () => {
+    const s = makeState({ players: 4, monsters: { 0: { location: 'city' } } });
+    const r = resolveWith(s, attacks(2));
+    expect(r.events).toContainEqual({
+      type: 'smash',
+      attacker: 0,
+      damage: 2,
+      targets: [1, 2, 3],
+      zone: 'outside',
+    });
   });
 
   it('R-SMASH-02：東京市與東京灣的怪獸同時受傷', () => {

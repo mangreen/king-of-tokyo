@@ -4,6 +4,9 @@ export { sha256Hex } from './sha256.js';
 
 export { FACES } from './types.js';
 export type {
+  EnergySource,
+  HealSource,
+  SmashZone,
   Action,
   ActionResult,
   ErrorCode,
