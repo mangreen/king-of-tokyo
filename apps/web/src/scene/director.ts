@@ -68,12 +68,12 @@ export const LUNGE_DURATION = 700;
 /** 單一批事件最長播放時間；超過就整體加速。 */
 export const MAX_DURATION = 7000;
 export const MIN_SPEEDUP = 0.4;
-/** 商店飛碟整段演出（飛入 → 光束展示三張牌 → 買到的牌飛向買家 → 飛走）。 */
-export const UFO_DURATION = 3600;
+/** 買牌的飛碟演出：飛碟已停在場上（跟著商店開著入場），這段是買到的牌從光束飛向買家。 */
+export const UFO_DURATION = 2200;
 /** 飛碟演出進行到這個比例時，買到的牌抵達買家。 */
 export const UFO_DELIVER_AT = 0.68;
-/** 飛碟出場後，時間軸往後推多少毫秒才接後續事件（演出本身不必等完）。 */
-export const UFO_HOLD = 1500;
+/** 買牌演出開始後，時間軸往後推多少毫秒才接後續事件（演出本身不必等完）。 */
+export const UFO_HOLD = 1200;
 /** 卡牌特效播出後，等多久才接後續事件（傷害／回復在特效之後才跳出）。 */
 export const CARD_USE_HOLD = 650;
 

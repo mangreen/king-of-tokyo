@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import type { Action, CardDef } from '@kot/rules';
+import { rollLimit, type Action, type CardDef } from '@kot/rules';
 import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/protocol';
 import { envOf, groupActions, myActions } from '../actions.js';
 import { ChatPanel } from '../hud/ChatPanel.js';
@@ -17,7 +17,7 @@ import {
 } from '../scene/prefs.js';
 import type { QualityTier } from '../scene/quality.js';
 import { seatColor } from '../scene/layout.js';
-import { toSnapshot } from '../scene/snapshot.js';
+import { isShopOpen, toSnapshot } from '../scene/snapshot.js';
 import type { ChatEntry, EventBatch } from '../state.js';
 
 // 3D 場景（Three.js）動態載入：大廳與房間不必下載它
@@ -80,16 +80,16 @@ export function GameView({
     setSpins({ version: game.version, counts: nextSpins(spins.counts, game.events) });
   }
   const [canGL] = useState(() => webglAvailable());
-  const snapshot = useMemo(
-    () => toSnapshot(room, state, game.actorSeat, selfId),
-    [room, state, game.actorSeat, selfId],
-  );
+  const env = useMemo(() => envOf(cards), [cards]);
+  const snapshot = useMemo(() => {
+    const shopOpen = isShopOpen(state, env);
+    return toSnapshot(room, state, game.actorSeat, selfId, shopOpen);
+  }, [room, state, env, game.actorSeat, selfId]);
   const seed = useMemo(() => seedFromCode(room.code), [room.code]);
   const mySeat = room.players.find((p) => p.id === selfId)?.seat ?? null;
   const nameOf = (seat: number): string =>
     room.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
 
-  const env = envOf(cards);
   const cardName = (id: string): string => env.cards[id]?.name ?? id;
   const labelCtx = { cardName, nameOf };
   const myTurn = mySeat !== null && game.actorSeat === mySeat;
@@ -108,10 +108,20 @@ export function GameView({
 
   const inRolling = state.phase === 'roll';
   const { rollsUsed, dice } = state.turn;
-  const maxRolls = state.config.maxRolls;
-  const canToggle = myTurn && inRolling && rollsUsed >= 1 && rollsUsed < maxRolls;
+  // 擲骰次數上限要含煙霧彈／能量重擲的額外重擲與加擲卡，不能只看基本規則的次數
+  const rollMax = rollLimit(state, env);
+  const regularRerolls = rollsUsed < rollMax;
+  // 次數用完但持有「只重擲 3」的卡且還有 3：引擎只允許這一種擲法（保留所有非 3 的骰子）
+  const threesKeep =
+    myTurn && inRolling && !regularRerolls
+      ? (actions.find((a): a is Extract<Action, { type: 'roll' }> => a.type === 'roll')?.keep ??
+        null)
+      : null;
+  const canToggle = myTurn && inRolling && rollsUsed >= 1 && regularRerolls;
   const canRoll =
-    myTurn && inRolling && rollsUsed < maxRolls && (rollsUsed === 0 || kept.size < dice.length);
+    myTurn &&
+    inRolling &&
+    ((regularRerolls && (rollsUsed === 0 || kept.size < dice.length)) || threesKeep !== null);
   const canStop = myTurn && inRolling && rollsUsed >= 1;
 
   function toggle(index: number): void {
@@ -151,6 +161,8 @@ export function GameView({
       spins={spins.counts}
       canToggle={canToggle}
       canRoll={canRoll}
+      rollMax={rollMax}
+      threesKeep={threesKeep}
       canStop={canStop}
       onToggle={toggle}
       marketBuys={marketBuys}

@@ -18,7 +18,7 @@ import { NO_CARDS } from './cards/types.js';
 import type { RulesEnv } from './cards/types.js';
 import { applyAction } from './engine.js';
 import { currentActor, defaultAction, legalActions } from './legal.js';
-import { effectOf, makeG, ownedOf } from './ops.js';
+import { makeG, rollLimitOf } from './ops.js';
 import { aliveMonsters, cloneState, getMonster } from './state.js';
 import { FACES } from './types.js';
 import type { Action, Face, GameState, Monster } from './types.js';
@@ -298,11 +298,7 @@ function subsets(c: Counts): Counts[] {
 
 function rerollsLeft(s: GameState, env: RulesEnv): number {
   const g = makeG(s, env, []);
-  let limit = s.config.maxRolls + s.turn.bonusRolls;
-  for (const o of ownedOf(g, s.turn.seat)) {
-    limit += effectOf(o.def)?.extraRolls?.(o) ?? 0;
-  }
-  return Math.max(0, limit - s.turn.rollsUsed);
+  return Math.max(0, rollLimitOf(g) - s.turn.rollsUsed);
 }
 
 interface RollPlan {

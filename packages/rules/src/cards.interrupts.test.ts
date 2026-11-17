@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction } from './engine.js';
 import { checkInvariants } from './invariants.js';
-import { currentActor, legalActions } from './legal.js';
+import { currentActor, legalActions, rollLimit } from './legal.js';
 import type { CardDef } from './cards/types.js';
 import { card, makeEnv, makeState, mon, must, resolveWith, withDice } from './test-utils.js';
 import { cloneState } from './state.js';
@@ -207,6 +207,27 @@ describe('R-CARD-23 擲骰期能力', () => {
     expect(s.turn.bonusRolls).toBe(3);
     expect(mon(s, 0).cards).toEqual([]);
     check(s);
+  });
+
+  it('rollLimit（介面用）：基本次數＋加擲卡＋已使用的額外重擲；用煙霧彈後最後一擲也能再擲', () => {
+    const { env, state } = world(
+      [card('sc', 'reroll_charges', { params: { charges: 3 } }), card('er', 'extra_rolls')],
+      3,
+      { 0: { cards: ['sc'], cardData: { sc: { n: 3, ref: null } } } },
+    );
+    expect(rollLimit(state, env)).toBe(3);
+    let s = must(state, { type: 'roll', seat: 0, keep: [] }, env).state;
+    s = must(s, { type: 'roll', seat: 0, keep: [0] }, env).state;
+    s = must(s, { type: 'roll', seat: 0, keep: [0] }, env).state;
+    expect(s.turn.rollsUsed).toBe(3);
+    expect(legalActions(s, env).some((a) => a.type === 'roll')).toBe(false);
+    s = must(s, { type: 'useCard', seat: 0, cardId: 'sc' }, env).state;
+    expect(rollLimit(s, env)).toBe(4);
+    expect(legalActions(s, env).some((a) => a.type === 'roll')).toBe(true);
+    // 加擲卡也算在上限內
+    const withCard = cloneState(s);
+    withCard.monsters[0]!.cards.push('er');
+    expect(rollLimit(withCard, env)).toBe(5);
   });
 
   it('只重擲 3：次數用完後仍可重擲 3，不增加擲骰次數', () => {

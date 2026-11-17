@@ -2,7 +2,7 @@ import { CAP, mimicTargets } from './cards/effects.js';
 import { NO_CARDS } from './cards/types.js';
 import type { RulesEnv } from './cards/types.js';
 import { pendingSeat, SWEEP_COST } from './engine.js';
-import { costFor, effectOf, hasEffect, makeG, ownedOf } from './ops.js';
+import { costFor, effectOf, hasEffect, makeG, ownedOf, rollLimitOf } from './ops.js';
 import type { G, Owned } from './ops.js';
 import { aliveMonsters, getMonster } from './state.js';
 import { FACES } from './types.js';
@@ -254,10 +254,7 @@ export function legalActions(state: GameState, env: RulesEnv = NO_CARDS): Action
     return actions;
   }
   actions.push({ type: 'endRolling', seat });
-  let limit = s.config.maxRolls + s.turn.bonusRolls;
-  for (const o of ownedOf(g, seat)) {
-    limit += effectOf(o.def)?.extraRolls?.(o) ?? 0;
-  }
+  const limit = rollLimitOf(g);
   const n = diceCount;
   if (rollsUsed < limit) {
     // 每一種「保留哪些骰子」的組合（不含全部保留）
@@ -275,4 +272,9 @@ export function legalActions(state: GameState, env: RulesEnv = NO_CARDS): Action
   }
   actions.push(...useActions(g, seat));
   return actions;
+}
+
+/** 目前行動座位本回合的擲骰次數上限（含煙霧彈等額外重擲、加擲卡），給介面顯示與判斷用。 */
+export function rollLimit(state: GameState, env: RulesEnv): number {
+  return rollLimitOf(makeG(state, env, []));
 }
