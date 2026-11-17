@@ -248,6 +248,11 @@ export class UfoShow {
     return this.root.visible;
   }
 
+  /** 飛碟已經（或正在）入場。 */
+  get docked(): boolean {
+    return this.want;
+  }
+
   /** 有牌正飛向買家（這時商店的牌不要先換掉）。 */
   get delivering(): boolean {
     return this.slots.some((s) => s.flight !== null);

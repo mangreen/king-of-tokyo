@@ -128,6 +128,8 @@ interface Playing {
 
 const CONCRETE = ['#b8b2a5', '#8c8678', '#d9d2c3', '#6e7a86', '#a8564a'] as const;
 const CONFETTI = ['#ff4d6d', '#ffd23f', '#3bceac', '#4cc9f0', '#b565e6'] as const;
+/** 別人的買牌階段要連續開著這麼久，飛碟才入場（輪到自己則馬上）。 */
+const SHOP_OTHERS_DEBOUNCE_MS = 1500;
 const BACKLOG_LIMIT_MS = 9000;
 const FLOAT_COLORS = {
   energy: '#ffd23f',
@@ -158,6 +160,8 @@ export class SceneRenderer {
   private readonly faces: CardFaces;
   private cardFx!: CardFxSystem;
   private ufo!: UfoShow;
+  /** 商店開始連續開著的時間（模擬毫秒）；關著＝null。 */
+  private shopSince: number | null = null;
   private cardFxOn: boolean;
   private cardOf: ((id: string) => CardDef | undefined) | undefined;
   private readonly blobTex: Texture = makeSoftDotTexture();
@@ -872,13 +876,30 @@ export class SceneRenderer {
 
   /**
    * 飛碟跟著商店狀態：買牌階段、有東西可買 → 入場並停著；否則 → 離場。
-   * 有演出在播（含買牌的牌還在飛）時先不動，等演出結束再換，才不會牌還沒送到就先被換掉。
+   * 只在「買牌／清商店的飛碟演出還沒播、或牌還在飛」時先不動，才不會牌還沒送到就先被換掉；
+   * 其他演出（骰子、攻擊、別人的回合…）不擋——不然電腦玩家連續演出時，商店關了飛碟還賴著、開了卻遲遲不來。
    */
   private syncShop(): void {
-    if (!this.cardFxOn || this.playing.length > 0 || this.ufo.delivering) return;
+    if (!this.cardFxOn || this.ufo.delivering || this.hasPendingUfoCue()) return;
     const shop = this.snapshot?.shop ?? null;
-    if (shop && shop.length > 0) this.ufo.dock(shop);
-    else this.ufo.undock();
+    if (!shop || shop.length === 0) {
+      this.shopSince = null;
+      this.ufo.undock();
+      return;
+    }
+    this.shopSince ??= this.simMs;
+    // 輪到我：馬上入場。別人（電腦）的買牌階段常常一下就結束，要連續開著一小段時間才入場，
+    // 否則飛碟會剛飛進來就飛走，光束與牌一閃一閃。
+    const mySeat = this.snapshot?.mySeat;
+    const mine = mySeat !== undefined && mySeat !== null && mySeat === this.snapshot?.activeSeat;
+    if (mine || this.ufo.docked || this.simMs - this.shopSince >= SHOP_OTHERS_DEBOUNCE_MS) {
+      this.ufo.dock(shop);
+    }
+  }
+
+  /** 佇列裡還有沒播的飛碟演出（買牌的牌要先送到、清商店要先演完）。 */
+  private hasPendingUfoCue(): boolean {
+    return this.playing.some((p) => p.cues.slice(p.next).some((c) => c.kind === 'ufo'));
   }
 
   /** 卡牌：使用＝依內容的 3D 特效（流星、閃電、治療光柱…）；收下＝亮一下。 */
