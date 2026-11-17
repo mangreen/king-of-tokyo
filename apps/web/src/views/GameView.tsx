@@ -4,6 +4,10 @@ import type { GameActionInput, GameUpdateMessage, RoomSnapshot } from '@kot/prot
 import { envOf, groupActions, myActions } from '../actions.js';
 import { ChatPanel } from '../hud/ChatPanel.js';
 import { GameHud, type HudTab } from '../hud/GameHud.js';
+import { ruleConfigOf } from '../hud/Panels.js';
+import { TutorialLayer } from '../hud/TutorialLayer.js';
+import { hintFor, introSlides, nextHint } from '../hud/tutorial.js';
+import { useTutorial } from '../hud/useTutorial.js';
 import { SettingsPanel } from '../hud/SettingsPanel.js';
 import { nextSpins } from '../scene/dice.js';
 import {
@@ -150,6 +154,21 @@ export function GameView({
   const leaveLabel = state.phase === 'over' ? '返回大廳' : '離開對局';
   const leaveButton = <button onClick={onLeave}>{leaveLabel}</button>;
 
+  // 新手教學：快速規則（第一次進遊戲）與情境提示（第一次遇到某個時機）
+  const tutorial = useTutorial();
+  const ruleCfg = ruleConfigOf(state);
+  // 快速規則是對話框，開著時回合計時仍在走：第一次進遊戲若正好輪到我，先不要擋住，
+  // 等到不是我的回合再跳出（情境提示照常先教擲骰）；從設定按「重看」則馬上顯示
+  const [introLive, setIntroLive] = useState(false);
+  if (tutorial.introOpen && !myTurn && !introLive) setIntroLive(true);
+  if (!tutorial.introOpen && introLive) setIntroLive(false);
+  const introShowing = tutorial.introOpen && introLive;
+  const hintId = nextHint(tutorial.state, introShowing, {
+    phase: state.phase,
+    myTurn,
+    actionTypes: new Set(actions.map((a) => a.type)),
+  });
+
   const renderHud = (mode: 'overlay' | 'flat') => (
     <GameHud
       mode={mode}
@@ -197,6 +216,15 @@ export function GameView({
           canGL={canGL}
           reduced={reduced}
           tier={tier}
+          tutorial={{
+            enabled: tutorial.state.enabled,
+            onEnabled: tutorial.setEnabled,
+            onReplay: () => {
+              tutorial.replayIntro();
+              setIntroLive(true);
+            },
+            onReset: tutorial.reset,
+          }}
           {...(canGL && prefs.enabled
             ? {
                 onPreviewDanmaku: () => {
@@ -211,6 +239,19 @@ export function GameView({
 
   return (
     <div className="game">
+      <TutorialLayer
+        introOpen={introShowing}
+        timerRunning={myTurn}
+        slides={introSlides(ruleCfg)}
+        onFinishIntro={tutorial.finishIntro}
+        hint={hintId === null ? null : hintFor(hintId, ruleCfg)}
+        onDismissHint={() => {
+          if (hintId !== null) tutorial.dismissHint(hintId);
+        }}
+        onDisable={() => {
+          tutorial.setEnabled(false);
+        }}
+      />
       {outcomeText !== null && (
         <div className="banner" role="status">
           🏆 {outcomeText}

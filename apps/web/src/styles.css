@@ -1371,3 +1371,133 @@ main.wide {
     animation: none;
   }
 }
+
+/* 新手教學：快速規則（對話框）與情境提示（頂端小卡） */
+.tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+.tutorial-card {
+  width: min(30rem, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem 1.1rem;
+  background: var(--card);
+  color: var(--fg);
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+}
+.tutorial-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.tutorial-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  flex: 1;
+}
+.tutorial-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.tutorial-step {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.tutorial-card ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.4rem;
+  line-height: 1.5;
+}
+.tutorial-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.tutorial-dots span {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+}
+.tutorial-dots span.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.tutorial-never {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.tutorial-never input {
+  width: auto;
+  margin: 0;
+}
+.tutorial-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.tutorial-spacer {
+  flex: 1;
+}
+.tutorial-actions .primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--line);
+}
+.tutorial-actions .ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+}
+.tutorial-hint {
+  position: fixed;
+  z-index: 880;
+  left: 0.75rem;
+  bottom: 3.2rem;
+  width: min(20rem, calc(100vw - 1.5rem));
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.7rem 0.85rem;
+  background: var(--card);
+  color: var(--fg);
+  border: 3px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3);
+}
+.tutorial-warn {
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+  border-radius: 8px;
+  background: rgba(228, 87, 46, 0.16);
+  border: 1px solid var(--accent);
+}
+.tutorial-hint-body p {
+  margin: 0.2rem 0 0.5rem;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
