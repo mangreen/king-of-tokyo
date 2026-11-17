@@ -127,7 +127,12 @@ describe('種子共同產生與局後稽核（M10）', () => {
     const room = host.relayed.local.host.rooms.room(host.code()) as unknown as {
       state: GameState;
     };
-    room.state.monsters[0]!.hp += 5; // 房主偷改記憶體中的狀態；之後每個畫面都帶著這個差異
+    // 房主偷改記憶體中的狀態；之後每個畫面都帶著這個差異。
+    // 最大血量一起加：只加 hp 的話，下一步若重算最大血量（例如買牌）會把 hp 夾回上限，
+    // 作弊在任何人看到之前就被抹掉，稽核就「正確地」找不到差異（曾造成偶發失敗）。
+    const cheater = room.state.monsters[0]!;
+    cheater.maxHp += 5;
+    cheater.hp += 5;
     await cluster.advance(300_000);
     expect(phases(host.page)).toContain('over');
     for (const node of [a, b]) {
