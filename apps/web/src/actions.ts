@@ -28,6 +28,44 @@ export function myActions(state: GameState, env: RulesEnv, seat: number | null):
 export interface LabelContext {
   cardName: (id: string) => string;
   nameOf: (seat: number) => string;
+  /** 卡牌資料（顯示卡面文字用）；沒給就只顯示名稱。 */
+  cardDef?: (id: string) => CardDef | undefined;
+}
+
+/**
+ * 這些動作牽涉到的「別的卡牌」：複製對象、要賣掉的牌、讓位時可以拿走的牌、可使用的防禦牌，
+ * 以及剛翻開、可以立即購買的牌。按鈕上只寫得下名稱，玩家要看到卡面文字才知道該不該按。
+ * 依出現順序、不重複。
+ */
+export function referencedCardIds(
+  actions: readonly Action[],
+  pending?: GameState['pending'],
+): string[] {
+  const ids: string[] = [];
+  const add = (id: string | null | undefined): void => {
+    if (id !== undefined && id !== null && !ids.includes(id)) ids.push(id);
+  };
+  if (pending?.kind === 'opportunity') add(pending.queue[0]?.cardId);
+  for (const a of actions) {
+    switch (a.type) {
+      case 'yieldDecision':
+        add(a.takeCard);
+        break;
+      case 'useCard':
+        add(a.args?.target);
+        for (const id of a.args?.cards ?? []) add(id);
+        break;
+      case 'buy':
+        add(a.target);
+        break;
+      case 'reactDecision':
+        add(a.cardId);
+        break;
+      default:
+        break;
+    }
+  }
+  return ids;
 }
 
 const FACE_TEXT: Record<string, string> = { energy: '⚡', attack: '💥', heal: '❤️' };

@@ -2,7 +2,13 @@ import { monsterKindOf, monsterName } from '../scene/roster.js';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Action, Face, GameState, Monster, RulesEnv } from '@kot/rules';
 import type { GameActionInput, RoomSnapshot } from '@kot/protocol';
-import { labelAction, toIntent, type ActionGroup, type LabelContext } from '../actions.js';
+import {
+  labelAction,
+  referencedCardIds,
+  toIntent,
+  type ActionGroup,
+  type LabelContext,
+} from '../actions.js';
 import { Die3D } from '../scene/Die3D.js';
 import { seatColor } from '../scene/layout.js';
 import { CardBody, CardChip } from './CardChip.js';
@@ -115,6 +121,34 @@ export function PlayersPanel({ state, room, actorSeat, mySeat, nameOf, env }: Pl
   );
 }
 
+/** 一排卡牌說明（名稱、費用、類型、卡面文字）：給按鈕上只寫得下名稱的「別的卡牌」。 */
+export function CardRefs({
+  ids,
+  labelCtx,
+  title,
+}: {
+  ids: readonly string[];
+  labelCtx: LabelContext;
+  title: string;
+}) {
+  if (ids.length === 0) return null;
+  return (
+    <section className="card-refs" aria-label={title}>
+      <h4 className="shop-sub">{title}</h4>
+      <div className="shop-cards">
+        {ids.map((id) => {
+          const def = labelCtx.cardDef?.(id);
+          return (
+            <div key={id} className="shop-card">
+              {def ? <CardBody def={def} /> : <strong>{labelCtx.cardName(id)}</strong>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // ── 商店 ──────────────────────────────────────────
 
 interface ShopProps {
@@ -151,6 +185,11 @@ export function ShopPanel({ state, env, buys, sweep, labelCtx, onAct }: ShopProp
                   {labelAction(a, labelCtx)}
                 </button>
               ))}
+              <CardRefs
+                ids={referencedCardIds(mine)}
+                labelCtx={labelCtx}
+                title="可複製的牌（買下後這張牌會變成它）"
+              />
             </div>
           );
         })}
@@ -369,6 +408,14 @@ export function ActionPanel(p: ActionProps) {
           <RuleBlocks sections={diceRules(rules)} />
         </div>
       )}
+      <CardRefs
+        ids={referencedCardIds(
+          p.groups.flatMap((g) => g.actions),
+          p.myTurn ? state.pending : undefined,
+        )}
+        labelCtx={p.labelCtx}
+        title="這些動作牽涉的牌"
+      />
       {p.groups.length > 0 && (
         <div className="actions">
           {p.groups.map((g) =>

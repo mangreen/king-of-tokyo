@@ -99,7 +99,7 @@ export function GameView({
       : null;
 
   const cardName = (id: string): string => env.cards[id]?.name ?? id;
-  const labelCtx = { cardName, nameOf };
+  const labelCtx = { cardName, nameOf, cardDef: (id: string) => env.cards[id] };
   const myTurn = mySeat !== null && game.actorSeat === mySeat;
   const actions = myActions(state, env, mySeat);
   // 商店牌的購買按鈕直接掛在牌上；其他動作（牌庫頂、向別人買、使用能力、提示回應…）列在動作區
