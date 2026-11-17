@@ -17,8 +17,6 @@ export interface NoticeContext {
   mySeat: number | null;
   nameOf: (seat: number) => string;
   cardName: (id: string) => string;
-  /** 卡牌圖示（依特效主題）；沒提供就用通用圖示。 */
-  cardIcon?: (id: string) => string;
   /** 卡面效果文字；這張牌沒有可量化的影響時，用它說明牌的作用。 */
   cardText?: (id: string) => string;
   victoryPoints: number;
@@ -35,11 +33,6 @@ export const LOW_HP = 3;
 
 const LOC = { city: '東京市', bay: '東京灣' } as const;
 
-/**
- * 從一批事件挑出「重大事件」，其餘（擲骰、回復…）只留在事件日誌裡，不打擾玩家。
- * 重大事件：輪到自己、淘汰、復活、重擊、自己血量見底、進入東京、接近／達成勝利分數、
- * 買牌、中毒或縮小、額外回合、東京灣關閉。
- */
 /** 一次用牌／被動發動對某個座位造成的變化（只算這張牌效果範圍內的事件）。 */
 export interface CardImpact {
   hp: number;
@@ -94,16 +87,16 @@ export function impactsOf(span: readonly GameEvent[]): Map<number, CardImpact> {
         at(e.seat).hp -= e.amount;
         break;
       case 'healed':
-        at(e.seat).hp += e.amount;
+        if (e.source !== 'dice') at(e.seat).hp += e.amount; // 骰面的補血另外有 🎲 提示
         break;
       case 'vp_gained':
-        at(e.seat).vp += e.amount;
+        if (e.reason !== 'dice') at(e.seat).vp += e.amount;
         break;
       case 'vp_lost':
         at(e.seat).vp -= e.amount;
         break;
       case 'energy_gained':
-        at(e.seat).energy += e.amount;
+        if (e.source !== 'dice') at(e.seat).energy += e.amount;
         break;
       case 'energy_spent':
         at(e.seat).energy -= e.amount;
@@ -219,6 +212,14 @@ export function describeEffects(
   return [...sideEffects(span, c), ...parts].join('；');
 }
 
+/**
+ * 從一批事件挑出要提示玩家的事件，圖示表示「結果從哪來」：
+ * - 🎲 骰子造成的結果：誰補了多少 ♥️、誰對東京裡／外的怪獸發動幾點攻擊、誰得到幾點 ⭐、誰得到多少 ⚡
+ * - 🃏 卡牌造成的結果：誰使用／發動了哪張牌、造成什麼；誰購買了哪張牌
+ * - 其他重大事件：輪到自己、淘汰、復活、自己血量見底、進入東京、接近／達成勝利分數、
+ *   中毒或縮小、額外回合、東京灣關閉。
+ * 不分敵我（任何人的骰子與卡牌都提示），讓玩家也能看懂局勢與沒用過的卡。
+ */
 export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Notice[] {
   const out: Notice[] = [];
   const mine = (seat: number): boolean => seat === c.mySeat;
@@ -248,13 +249,47 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
       case 'revived':
         push({ kind: 'good', icon: '✨', text: `${who(e.seat)}復活了！HP ${String(e.hp)}` });
         break;
-      case 'smash':
-        if (e.damage >= BIG_HIT) {
-          const hitsMe = c.mySeat !== null && e.targets.includes(c.mySeat);
+      case 'smash': {
+        // 🎲 骰面攻擊：誰、打到哪裡、幾點
+        const hitsMe = c.mySeat !== null && e.targets.includes(c.mySeat);
+        const big = e.damage >= BIG_HIT;
+        const where =
+          e.zone === 'tokyo'
+            ? '東京裡的所有怪獸'
+            : e.zone === 'outside'
+              ? '東京外的所有怪獸'
+              : e.zone === 'all'
+                ? '所有其他怪獸'
+                : e.targets.map(who).join('、');
+        push({
+          kind: hitsMe ? 'danger' : big ? 'warn' : 'info',
+          icon: '🎲',
+          text: `${who(e.attacker)}對${where}發動了 ${String(e.damage)} 點${big ? '重擊' : '攻擊'}${hitsMe ? '，你是目標！' : ''}`,
+        });
+        break;
+      }
+      case 'healed':
+        if (e.source === 'dice') {
           push({
-            kind: hitsMe ? 'danger' : 'warn',
-            icon: '💥',
-            text: `${who(e.attacker)}發動 ${String(e.damage)} 點重擊${hitsMe ? '，你是目標！' : '！'}`,
+            kind: mine(e.seat) ? 'good' : 'info',
+            icon: '🎲',
+            text: `${who(e.seat)}補了 ${String(e.amount)} ♥️`,
+          });
+        }
+        break;
+      case 'heal_ignored':
+        push({
+          kind: 'info',
+          icon: '🎲',
+          text: `${who(e.seat)}擲出 ${String(e.faces)} 個 ♥️，但在東京裡不能補血`,
+        });
+        break;
+      case 'energy_gained':
+        if (e.source === 'dice') {
+          push({
+            kind: mine(e.seat) ? 'good' : 'info',
+            icon: '🎲',
+            text: `${who(e.seat)}得到 ${String(e.amount)} ⚡`,
           });
         }
         break;
@@ -272,6 +307,13 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
         });
         break;
       case 'vp_gained': {
+        if (e.reason === 'dice') {
+          push({
+            kind: mine(e.seat) ? 'good' : 'info',
+            icon: '🎲',
+            text: `${who(e.seat)}得到 ${String(e.amount)} ⭐`,
+          });
+        }
         const now = c.vpNow(e.seat);
         const before = now - e.amount;
         const goal = c.victoryPoints;
@@ -295,8 +337,10 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
       case 'card_bought':
         push({
           kind: 'info',
-          icon: '🛒',
-          text: `${who(e.seat)}買下 ${c.cardName(e.cardId)}`,
+          icon: '🃏',
+          text: `${who(e.seat)}購買了【${c.cardName(e.cardId)}】${
+            e.from === null ? '' : `（向${who(e.from)}）`
+          }`,
         });
         break;
       case 'card_used':
@@ -333,7 +377,7 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
         if (effect === '') effect = c.cardText?.(e.cardId) ?? '';
         push({
           kind: bad ? 'danger' : good ? 'good' : 'info',
-          icon: c.cardIcon?.(e.cardId) ?? '🃏',
+          icon: '🃏',
           text: effect === '' ? base : `${base}：${effect}`,
         });
         break;

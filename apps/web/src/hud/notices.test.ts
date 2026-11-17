@@ -26,10 +26,85 @@ describe('noticesFor', () => {
     expect(other[0]).toMatchObject({ kind: 'warn', text: 'Bob 被淘汰（你幹的）' });
   });
 
-  it('重擊（≥4）才提示；自己是目標時升級為 danger', () => {
-    expect(texts([{ type: 'smash', attacker: 1, damage: 3, targets: [0] }])).toEqual([]);
-    const n = noticesFor([{ type: 'smash', attacker: 1, damage: 5, targets: [0] }], ctx());
-    expect(n[0]).toMatchObject({ kind: 'danger', text: 'Bob發動 5 點重擊，你是目標！' });
+  it('骰面攻擊：🎲 誰對東京裡／外的所有怪獸發動幾點攻擊；重擊 warn、自己是目標 danger', () => {
+    const smash = (
+      attacker: number,
+      damage: number,
+      targets: number[],
+      zone?: 'tokyo' | 'outside' | 'all',
+    ): GameEvent => ({ type: 'smash', attacker, damage, targets, ...(zone ? { zone } : {}) });
+    expect(noticesFor([smash(1, 3, [2], 'tokyo')], ctx())[0]).toMatchObject({
+      kind: 'info',
+      icon: '🎲',
+      text: 'Bob對東京裡的所有怪獸發動了 3 點攻擊',
+    });
+    expect(noticesFor([smash(0, 2, [1, 2], 'outside')], ctx())[0]).toMatchObject({
+      text: '你對東京外的所有怪獸發動了 2 點攻擊',
+    });
+    expect(noticesFor([smash(1, 2, [0, 2], 'all')], ctx())[0]?.text).toBe(
+      'Bob對所有其他怪獸發動了 2 點攻擊，你是目標！',
+    );
+    expect(noticesFor([smash(1, 5, [2], 'tokyo')], ctx())[0]).toMatchObject({
+      kind: 'warn',
+      text: 'Bob對東京裡的所有怪獸發動了 5 點重擊',
+    });
+    expect(noticesFor([smash(1, 5, [0], 'tokyo')], ctx())[0]).toMatchObject({
+      kind: 'danger',
+      text: 'Bob對東京裡的所有怪獸發動了 5 點重擊，你是目標！',
+    });
+    // 舊紀錄沒有 zone：改列出目標名字
+    expect(noticesFor([smash(1, 2, [0, 2])], ctx())[0]?.text).toBe(
+      'Bob對你、Cat發動了 2 點攻擊，你是目標！',
+    );
+  });
+
+  it('骰子的補血、得分、能量：🎲 誰得到多少（不分敵我）', () => {
+    const t = noticesFor(
+      [
+        { type: 'vp_gained', seat: 1, amount: 3, reason: 'dice' },
+        { type: 'energy_gained', seat: 1, amount: 2, source: 'dice' },
+        { type: 'healed', seat: 0, amount: 2, source: 'dice' },
+        { type: 'heal_ignored', seat: 2, faces: 2 },
+      ],
+      ctx(),
+    );
+    expect(t.map((n) => [n.icon, n.text])).toEqual([
+      ['🎲', 'Bob得到 3 ⭐'],
+      ['🎲', 'Bob得到 2 ⚡'],
+      ['🎲', '你補了 2 ♥️'],
+      ['🎲', 'Cat擲出 2 個 ♥️，但在東京裡不能補血'],
+    ]);
+  });
+
+  it('卡牌造成的得分／能量／補血不當成骰子：沒有 🎲，只出現在 🃏 卡牌提示裡', () => {
+    const n = noticesFor(
+      [
+        { type: 'card_used', seat: 1, cardId: 'x' },
+        { type: 'vp_gained', seat: 1, amount: 4, reason: 'card' },
+        { type: 'energy_gained', seat: 1, amount: 1, source: 'card' },
+        { type: 'healed', seat: 1, amount: 2, source: 'card' },
+      ],
+      ctx(),
+    );
+    expect(n).toHaveLength(1);
+    expect(n[0]).toMatchObject({ icon: '🃏' });
+    expect(n[0]?.text).toContain('⭐ +4');
+    expect(n[0]?.text).toContain('⚡ +1');
+    expect(n[0]?.text).toContain('HP +2');
+  });
+
+  it('被動卡發動在骰子結算中：骰子的能量算 🎲、不算進卡牌的影響', () => {
+    const n = noticesFor(
+      [
+        { type: 'card_triggered', seat: 1, cardId: 'bonus' },
+        { type: 'energy_gained', seat: 1, amount: 3, source: 'dice' },
+      ],
+      ctx({ cardText: () => '每次得到能量多 +1' }),
+    );
+    expect(n.map((x) => [x.icon, x.text])).toEqual([
+      ['🃏', 'Bob的【卡-bonus】發動了：每次得到能量多 +1'],
+      ['🎲', 'Bob得到 3 ⚡'],
+    ]);
   });
 
   it('只有自己血量見底（≤3 且還活著）才警告', () => {
@@ -53,15 +128,26 @@ describe('noticesFor', () => {
       amount,
       reason: 'dice',
     });
-    expect(texts([gain(2)], ctx({ vpNow: () => 14 }))).toEqual([]);
-    expect(texts([gain(2)], ctx({ vpNow: () => 16 }))).toEqual(['Bob離勝利只差 4 VP']);
-    expect(texts([gain(1)], ctx({ vpNow: () => 17 }))).toEqual([]);
-    expect(texts([gain(3)], ctx({ vpNow: () => 21 }))).toEqual(['Bob 達到 20 VP！']);
+    expect(texts([gain(2)], ctx({ vpNow: () => 14 }))).toEqual(['Bob得到 2 ⭐']);
+    expect(texts([gain(2)], ctx({ vpNow: () => 16 }))).toEqual([
+      'Bob得到 2 ⭐',
+      'Bob離勝利只差 4 VP',
+    ]);
+    expect(texts([gain(1)], ctx({ vpNow: () => 17 }))).toEqual(['Bob得到 1 ⭐']);
+    expect(texts([gain(3)], ctx({ vpNow: () => 21 }))).toEqual([
+      'Bob得到 3 ⭐',
+      'Bob 達到 20 VP！',
+    ]);
     const mine = noticesFor(
       [{ type: 'vp_gained', seat: 0, amount: 2, reason: 'card' }],
       ctx({ vpNow: () => 20 }),
     );
     expect(mine[0]).toMatchObject({ kind: 'good', icon: '🏁' });
+    // 骰子得分：先是 🎲 得分提示，再接門檻提示
+    expect(noticesFor([gain(3)], ctx({ vpNow: () => 21 })).map((n) => n.icon)).toEqual([
+      '🎲',
+      '🏁',
+    ]);
   });
 
   it('買牌、進入東京、自己中毒、額外回合、東京灣關閉都會提示', () => {
@@ -74,7 +160,7 @@ describe('noticesFor', () => {
       { type: 'bay_closed', seat: 2, movedTo: null },
     ]);
     expect(t).toEqual([
-      'Bob買下 卡-x',
+      'Bob購買了【卡-x】',
       '你進入東京市',
       '你中毒了',
       'Bob將再進行一個回合',
@@ -82,12 +168,16 @@ describe('noticesFor', () => {
     ]);
   });
 
-  it('一般事件（擲骰、回復、能量）不打擾', () => {
+  it('買牌向別人買時標明對象；單純擲骰、非骰面來源的補血／能量不打擾', () => {
+    expect(
+      noticesFor([{ type: 'card_bought', seat: 1, cardId: 'x', cost: 3, from: 2 }], ctx())[0],
+    ).toMatchObject({ icon: '🃏', text: 'Bob購買了【卡-x】（向Cat）' });
     expect(
       texts([
         { type: 'dice_rolled', seat: 0, rollNumber: 1, dice: [1, 2, 3], rerolled: [] },
         { type: 'healed', seat: 0, amount: 1 },
         { type: 'energy_gained', seat: 0, amount: 2 },
+        { type: 'energy_gained', seat: 0, amount: 2, source: 'transfer' },
       ]),
     ).toEqual([]);
   });
@@ -112,11 +202,11 @@ describe('卡牌使用提示', () => {
   });
 
   it('別人用牌波及自己：寫出誰、哪張牌、對所有人的影響，且是 danger', () => {
-    const n = noticesFor([used(1), hit(0, 3), hit(2, 3)], ctx({ cardIcon: () => '☄️' }));
+    const n = noticesFor([used(1), hit(0, 3), hit(2, 3)], ctx());
     expect(n).toHaveLength(1);
     expect(n[0]).toMatchObject({
       kind: 'danger',
-      icon: '☄️',
+      icon: '🃏',
       text: 'Bob使用了【卡-quake】：你 HP -3；Cat HP -3',
     });
   });
