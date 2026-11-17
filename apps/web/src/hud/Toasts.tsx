@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { DURATION_MS, type Notice } from './notices.js';
 
@@ -58,7 +58,31 @@ function ToastItem({
   );
 }
 
-/** 畫面下方的提示列：重大事件與「商店可以買」。掛在 body，不被 3D 區裁切。 */
+function subscribeFullscreen(onChange: () => void): () => void {
+  document.addEventListener('fullscreenchange', onChange);
+  return () => {
+    document.removeEventListener('fullscreenchange', onChange);
+  };
+}
+
+/**
+ * 提示要掛在哪裡：平常掛 body；全螢幕時瀏覽器只會顯示全螢幕元素的內容，
+ * 掛在 body 的提示會整個被蓋掉（看不到），所以要掛進全螢幕元素裡。
+ */
+export function useToastRoot(): Element | null {
+  return useSyncExternalStore(
+    subscribeFullscreen,
+    () => pickToastRoot(document.fullscreenElement, document.body),
+    () => null,
+  );
+}
+
+/** 全螢幕時掛進全螢幕元素，否則掛 body。 */
+export function pickToastRoot<T extends object>(fullscreenElement: T | null, body: T): T {
+  return fullscreenElement ?? body;
+}
+
+/** 畫面下方的提示列：重大事件與「商店可以買」。不被 3D 區裁切；全螢幕時掛進全螢幕元素。 */
 export function ToastHost({
   toasts,
   onDismiss,
@@ -68,13 +92,14 @@ export function ToastHost({
   onDismiss: (key: string) => void;
   onAction: (a: NonNullable<Toast['action']>) => void;
 }) {
-  if (toasts.length === 0) return null;
+  const root = useToastRoot();
+  if (toasts.length === 0 || !root) return null;
   return createPortal(
     <div className="toast-host" aria-live="polite">
       {toasts.map((t) => (
         <ToastItem key={t.key} toast={t} onDismiss={onDismiss} onAction={onAction} />
       ))}
     </div>,
-    document.body,
+    root,
   );
 }
