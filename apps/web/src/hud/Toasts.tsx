@@ -21,7 +21,7 @@ function ToastItem({
       () => {
         onDismiss(toast.key);
       },
-      DURATION_MS[toast.action ? 'shop' : toast.kind],
+      DURATION_MS[toast.action ? 'shop' : toast.hold ? 'hold' : toast.kind],
     );
     return () => {
       window.clearTimeout(id);

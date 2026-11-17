@@ -680,6 +680,7 @@ function decideYield(g: G, leave: boolean, takeCard?: string): ErrorCode | null 
     if (swap && takeCard !== undefined && m.alive && getMonster(g.s, pending.attacker).alive) {
       transferCard(g, pending.attacker, seat, takeCard);
       transferCard(g, seat, pending.attacker, swap.cardId);
+      g.ev.push({ type: 'card_triggered', seat, cardId: swap.cardId });
       g.ev.push({
         type: 'card_swapped',
         seat,

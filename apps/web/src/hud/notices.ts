@@ -11,6 +11,8 @@ export interface Notice {
   text: string;
   /** 附帶的快捷動作（例如「看商店」）。 */
   action?: 'shop';
+  /** 有一段要讀的文字（例如偷看到的卡）：停留久一點。 */
+  hold?: boolean;
 }
 
 export interface NoticeContext {
@@ -19,6 +21,8 @@ export interface NoticeContext {
   cardName: (id: string) => string;
   /** 卡面效果文字；這張牌沒有可量化的影響時，用它說明牌的作用。 */
   cardText?: (id: string) => string;
+  /** 卡牌費用（偷看到的牌要連費用一起讀）。 */
+  cardCost?: (id: string) => number | undefined;
   /** 卡牌類型；買下一次性牌時，沒有可量化的影響也要用卡面文字說明效果。 */
   cardKind?: (id: string) => 'keep' | 'discard' | undefined;
   victoryPoints: number;
@@ -178,7 +182,9 @@ function sideEffects(span: readonly GameEvent[], c: NoticeContext): string[] {
         out.push(`${who(e.seat)}擋下 ${String(e.amount)} 點傷害`);
         break;
       case 'card_swapped':
-        out.push(`${who(e.seat)}與${who(e.from)}換卡`);
+        out.push(
+          `${who(e.seat)}用【${c.cardName(e.gave)}】換走${who(e.from)}的【${c.cardName(e.took)}】`,
+        );
         break;
       case 'deck_peeked':
         out.push(`${who(e.seat)}偷看了牌庫頂的一張牌`);
@@ -401,6 +407,44 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
         if (fx) push(fx);
         break;
       }
+      case 'deck_peeked': {
+        // 只有看到的人（cardId 不是 null）才有內容；其他人只知道有人偷看，由用牌提示說明
+        if (e.cardId === null) break;
+        const cost = c.cardCost?.(e.cardId);
+        const text = c.cardText?.(e.cardId) ?? '';
+        push({
+          kind: 'info',
+          icon: '🔮',
+          hold: true,
+          text: `${who(e.seat)}偷看到牌庫頂：【${c.cardName(e.cardId)}】${
+            cost === undefined ? '' : `⚡${String(cost)}`
+          }${text === '' ? '' : ` — ${text}`}`,
+        });
+        break;
+      }
+      case 'counter_removed':
+        // 用骰面 ❤️ 解除指示物（沒有卡牌參與）
+        push({
+          kind: mine(e.seat) ? 'good' : 'info',
+          icon: '🎲',
+          text: `${who(e.seat)}用 ❤️ 解除了${e.counter === 'poison' ? '☠ 中毒' : '🤏 縮小'}指示物${
+            e.total > 0 ? `（還剩 ${String(e.total)} 個）` : ''
+          }`,
+        });
+        break;
+      case 'market_swept':
+        push({ kind: 'info', icon: '♻', text: `${who(e.seat)}花 2 能量清掉了商店` });
+        break;
+      case 'card_discarded':
+        // 其他原因（淘汰、復活、一次性牌用完）由別的提示說明；這裡只補「用完自動棄掉」
+        if (e.reason === 'spent' && e.seat !== null) {
+          push({
+            kind: 'info',
+            icon: '🃏',
+            text: `${who(e.seat)}的【${c.cardName(e.cardId)}】用完了，已棄掉`,
+          });
+        }
+        break;
       case 'counter_gained':
         if (mine(e.seat) && !covered.has(idx)) {
           push({
@@ -436,7 +480,8 @@ export function shopNotice(buyable: number): Notice | null {
   };
 }
 
-export const DURATION_MS: Record<NoticeKind | 'shop', number> = {
+export const DURATION_MS: Record<NoticeKind | 'shop' | 'hold', number> = {
+  hold: 12000,
   info: 3800,
   good: 4500,
   warn: 5500,

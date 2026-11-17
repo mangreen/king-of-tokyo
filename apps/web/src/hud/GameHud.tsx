@@ -8,6 +8,7 @@ import { latestVersion, takeNew } from '../scene/feed.js';
 import { noticesFor, shopNotice } from './notices.js';
 import { shouldHoldEndTurn, visibleShopToasts } from './shopGate.js';
 import { ToastHost, type Toast } from './Toasts.js';
+import { PeekCard } from './PeekCard.js';
 import { Tip } from './Tip.js';
 import {
   ActionPanel,
@@ -130,6 +131,7 @@ export function GameHud(p: HudProps) {
         cardName: (id) => p.env.cards[id]?.name ?? id,
         cardText: (id) => p.env.cards[id]?.text ?? '',
         cardKind: (id) => p.env.cards[id]?.kind,
+        cardCost: (id) => p.env.cards[id]?.cost,
         victoryPoints: state.config.victoryPoints,
         vpNow: (seat) => state.monsters.find((m) => m.seat === seat)?.vp ?? 0,
       }).map((n): Toast => ({ ...n, key: `${String(b.version)}-${n.id}` })),
@@ -266,6 +268,12 @@ export function GameHud(p: HudProps) {
               mySeat={p.mySeat}
               nameOf={p.nameOf}
               env={p.env}
+            />
+          )}
+          {tab === 'shop' && p.myTurn && (
+            <PeekCard
+              id={state.turn.peek}
+              def={state.turn.peek ? p.env.cards[state.turn.peek] : undefined}
             />
           )}
           {tab === 'shop' && (
