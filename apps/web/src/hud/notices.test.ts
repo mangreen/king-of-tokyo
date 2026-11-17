@@ -36,25 +36,25 @@ describe('noticesFor', () => {
     expect(noticesFor([smash(1, 3, [2], 'tokyo')], ctx())[0]).toMatchObject({
       kind: 'info',
       icon: '🎲',
-      text: 'Bob對東京裡的所有怪獸發動了 3 點攻擊',
+      text: 'Bob對東京裡的所有怪獸發動了 3 點攻擊💥',
     });
     expect(noticesFor([smash(0, 2, [1, 2], 'outside')], ctx())[0]).toMatchObject({
-      text: '你對東京外的所有怪獸發動了 2 點攻擊',
+      text: '你對東京外的所有怪獸發動了 2 點攻擊💥',
     });
     expect(noticesFor([smash(1, 2, [0, 2], 'all')], ctx())[0]?.text).toBe(
-      'Bob對所有其他怪獸發動了 2 點攻擊，你是目標！',
+      'Bob對所有其他怪獸發動了 2 點攻擊💥，你是目標！',
     );
     expect(noticesFor([smash(1, 5, [2], 'tokyo')], ctx())[0]).toMatchObject({
       kind: 'warn',
-      text: 'Bob對東京裡的所有怪獸發動了 5 點重擊',
+      text: 'Bob對東京裡的所有怪獸發動了 5 點重擊💥',
     });
     expect(noticesFor([smash(1, 5, [0], 'tokyo')], ctx())[0]).toMatchObject({
       kind: 'danger',
-      text: 'Bob對東京裡的所有怪獸發動了 5 點重擊，你是目標！',
+      text: 'Bob對東京裡的所有怪獸發動了 5 點重擊💥，你是目標！',
     });
     // 舊紀錄沒有 zone：改列出目標名字
     expect(noticesFor([smash(1, 2, [0, 2])], ctx())[0]?.text).toBe(
-      'Bob對你、Cat發動了 2 點攻擊，你是目標！',
+      'Bob對你、Cat發動了 2 點攻擊💥，你是目標！',
     );
   });
 

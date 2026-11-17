@@ -264,7 +264,7 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
         push({
           kind: hitsMe ? 'danger' : big ? 'warn' : 'info',
           icon: '🎲',
-          text: `${who(e.attacker)}對${where}發動了 ${String(e.damage)} 點${big ? '重擊' : '攻擊'}${hitsMe ? '，你是目標！' : ''}`,
+          text: `${who(e.attacker)}對${where}發動了 ${String(e.damage)} 點${big ? '重擊' : '攻擊'}💥${hitsMe ? '，你是目標！' : ''}`,
         });
         break;
       }
