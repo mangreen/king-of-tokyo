@@ -152,19 +152,19 @@ describe('noticesFor', () => {
 
   it('買牌、進入東京、自己中毒、額外回合、東京灣關閉都會提示', () => {
     const t = texts([
-      { type: 'card_bought', seat: 1, cardId: 'x', cost: 3, from: null },
       { type: 'entered_tokyo', seat: 0, location: 'city' },
       { type: 'counter_gained', seat: 0, counter: 'poison', total: 1 },
       { type: 'counter_gained', seat: 1, counter: 'poison', total: 1 },
       { type: 'extra_turn_granted', seat: 1 },
       { type: 'bay_closed', seat: 2, movedTo: null },
+      { type: 'card_bought', seat: 1, cardId: 'x', cost: 3, from: null },
     ]);
     expect(t).toEqual([
-      'Bob購買了【卡-x】',
       '你進入東京市',
       '你中毒了',
       'Bob將再進行一個回合',
       '東京灣關閉了',
+      'Bob購買了【卡-x】',
     ]);
   });
 
@@ -180,6 +180,80 @@ describe('noticesFor', () => {
         { type: 'energy_gained', seat: 0, amount: 2, source: 'transfer' },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('買下立刻生效的牌：購買提示之外再跳效果提示', () => {
+  const bought = (cardId = 'meteor'): GameEvent => ({
+    type: 'card_bought',
+    seat: 0,
+    cardId,
+    cost: 3,
+    from: null,
+  });
+
+  it('一次性牌（例如流星雨）：先是購買，再是對所有人的實際效果', () => {
+    const ns = noticesFor(
+      [
+        { type: 'energy_spent', seat: 0, amount: 3 },
+        bought(),
+        { type: 'vp_gained', seat: 0, amount: 2, reason: 'card' },
+        { type: 'card_discarded', seat: null, cardId: 'meteor', reason: 'instant' },
+        { type: 'damage_taken', seat: 0, amount: 2, hp: 8, source: 0, cause: 'card' },
+        { type: 'damage_taken', seat: 1, amount: 2, hp: 8, source: 0, cause: 'card' },
+      ],
+      ctx(),
+    );
+    expect(ns.map((n) => n.text)).toEqual([
+      '你購買了【卡-meteor】',
+      '【卡-meteor】生效：你 HP -2、⭐ +2；Bob HP -2',
+    ]);
+    expect(ns.every((n) => n.icon === '🃏')).toBe(true);
+  });
+
+  it('一次性牌沒有可量化的影響：用卡面文字說明；持續牌沒有立即效果就不多跳', () => {
+    const c = ctx({
+      cardText: (id) => `${id} 的卡面文字`,
+      cardKind: (id) => (id === 'meteor' ? 'discard' : 'keep'),
+    });
+    expect(texts([bought()], c)).toEqual([
+      '你購買了【卡-meteor】',
+      '【卡-meteor】生效：meteor 的卡面文字',
+    ]);
+    expect(texts([bought('armor')], c)).toEqual(['你購買了【卡-armor】']);
+  });
+
+  it('持續牌買下就有效果（最大 HP＋2）：也會說明', () => {
+    expect(
+      texts([
+        bought('arm'),
+        { type: 'max_hp_changed', seat: 0, maxHp: 12 },
+        { type: 'healed', seat: 0, amount: 2 },
+      ]),
+    ).toEqual(['你購買了【卡-arm】', '【卡-arm】生效：你的最大 HP 變成 12；你 HP +2']);
+  });
+
+  it('買下就進東京：只有牌的效果提示，不再重複「進入東京」', () => {
+    expect(texts([bought(), { type: 'entered_tokyo', seat: 0, location: 'city' }])).toEqual([
+      '你購買了【卡-meteor】',
+      '【卡-meteor】生效：你進入東京市',
+    ]);
+  });
+
+  it('下一次買牌是邊界：兩張牌的效果不會混在一起', () => {
+    expect(
+      texts([
+        bought('a'),
+        { type: 'vp_gained', seat: 0, amount: 1, reason: 'card' },
+        bought('b'),
+        { type: 'vp_gained', seat: 0, amount: 3, reason: 'card' },
+      ]),
+    ).toEqual([
+      '你購買了【卡-a】',
+      '【卡-a】生效：你 ⭐ +1',
+      '你購買了【卡-b】',
+      '【卡-b】生效：你 ⭐ +3',
+    ]);
   });
 });
 
