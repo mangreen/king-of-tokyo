@@ -205,7 +205,13 @@ export default function Demo() {
     [
       '商店開／關（飛碟入場／離場）',
       () => {
-        setSnap((s) => ({ ...s, shop: s.shop ? null : MARKET }));
+        setSnap((s) => ({ ...s, shop: s.shop ? null : MARKET, shopRefresh: false }));
+      },
+    ],
+    [
+      '買不起但清得起（飛碟＋♻）',
+      () => {
+        setSnap((s) => ({ ...s, shop: null, shopRefresh: !s.shopRefresh }));
       },
     ],
     [

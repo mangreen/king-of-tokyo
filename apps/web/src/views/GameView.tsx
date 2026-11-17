@@ -17,7 +17,7 @@ import {
 } from '../scene/prefs.js';
 import type { QualityTier } from '../scene/quality.js';
 import { seatColor } from '../scene/layout.js';
-import { isShopOpen, toSnapshot } from '../scene/snapshot.js';
+import { shopStatus, toSnapshot } from '../scene/snapshot.js';
 import type { ChatEntry, EventBatch } from '../state.js';
 
 // 3D 場景（Three.js）動態載入：大廳與房間不必下載它
@@ -82,8 +82,7 @@ export function GameView({
   const [canGL] = useState(() => webglAvailable());
   const env = useMemo(() => envOf(cards), [cards]);
   const snapshot = useMemo(() => {
-    const shopOpen = isShopOpen(state, env);
-    return toSnapshot(room, state, game.actorSeat, selfId, shopOpen);
+    return toSnapshot(room, state, game.actorSeat, selfId, shopStatus(state, env));
   }, [room, state, env, game.actorSeat, selfId]);
   const seed = useMemo(() => seedFromCode(room.code), [room.code]);
   const mySeat = room.players.find((p) => p.id === selfId)?.seat ?? null;

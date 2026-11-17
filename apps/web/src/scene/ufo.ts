@@ -1,6 +1,7 @@
 import type { Object3D, PerspectiveCamera } from 'three';
 import {
   AdditiveBlending,
+  CanvasTexture,
   CircleGeometry,
   Color,
   CylinderGeometry,
@@ -9,6 +10,7 @@ import {
   LatheGeometry,
   Mesh,
   MeshBasicMaterial,
+  PlaneGeometry,
   MeshStandardMaterial,
   ShaderMaterial,
   Shape,
@@ -25,7 +27,9 @@ import { disposeCardMesh, makeCardMesh, type CardFaces } from './cardShow.js';
  * 演出（跟著「商店能不能買」走，不是等買了才出現）：輪到某人的買牌階段、商店有東西可買時，
  * 飛碟從畫面右上飛入，停在城市上空打出黃色光束，光束裡飄著商店翻開的牌；
  * 買到的那張飛向買家，商店補進新牌時新牌滑進光束；清商店時舊牌被吸回碟身、換上新牌；
- * 買牌階段結束（或買不起了）飛碟往左上飛走。
+ * 買牌階段結束（或什麼都做不了）飛碟往左上飛走。
+ * 買不起任何牌、但付得起清商店時，飛碟照樣入場，光束裡改飄一個 ♻ 更新圖示（不是卡片），
+ * 提醒「可以花 2 能量清商店」。
  * 純視覺；牌的飛行只看進度（秒數由演出時間軸給，事件多時整段會等比例變快）。
  */
 
@@ -44,6 +48,9 @@ const CARD_SCALE = 0.95;
 const SLOT_X = [-4.2, 0, 4.2] as const;
 /** 牌離飛碟的垂直距離（沿螢幕往下）。 */
 const CARD_DROP = 8.6;
+/** ♻ 更新圖示的大小（世界單位）與淡入／淡出秒數。 */
+const ICON_SIZE = 6.4;
+const ICON_FADE_S = 0.4;
 
 const easeOut = (k: number): number => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
 const easeIn = (k: number): number => Math.pow(Math.min(1, Math.max(0, k)), 2.2);
@@ -81,6 +88,55 @@ interface Slot {
   flight: { t: number; dur: number; target: { x: number; y: number; z: number } } | null;
 }
 
+/**
+ * ♻ 更新圖示：兩支首尾相接的圓弧箭頭（畫在 canvas，不靠字型，各平台長得一樣）。
+ * 黃色帶淡光暈，與光束同色系。
+ */
+export function makeRefreshTexture(): CanvasTexture {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  if (g) {
+    const mid = size / 2;
+    const r = size * 0.3;
+    g.clearRect(0, 0, size, size);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    // 兩段弧，各約 140 度，中間留缺口放箭頭
+    for (const base of [Math.PI * 0.08, Math.PI * 1.08]) {
+      const from = base + 0.25;
+      const to = base + Math.PI - 0.5;
+      g.shadowColor = 'rgba(255, 233, 122, 0.95)';
+      g.shadowBlur = 22;
+      g.strokeStyle = '#fff3b0';
+      g.lineWidth = 26;
+      g.beginPath();
+      g.arc(mid, mid, r, from, to);
+      g.stroke();
+      // 箭頭：在弧的終點、沿切線方向
+      const ex = mid + Math.cos(to) * r;
+      const ey = mid + Math.sin(to) * r;
+      const tx = -Math.sin(to);
+      const ty = Math.cos(to);
+      const nx = Math.cos(to);
+      const ny = Math.sin(to);
+      const tip = { x: ex + tx * 38, y: ey + ty * 38 };
+      const wing = 34;
+      g.fillStyle = '#fff3b0';
+      g.beginPath();
+      g.moveTo(tip.x, tip.y);
+      g.lineTo(ex + nx * wing, ey + ny * wing);
+      g.lineTo(ex - nx * wing, ey - ny * wing);
+      g.closePath();
+      g.fill();
+    }
+  }
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = 'srgb';
+  return tex;
+}
+
 /** 閃電徽章的外形。 */
 export function boltShape(): Shape {
   const s = new Shape();
@@ -110,6 +166,10 @@ export class UfoShow {
   private readonly leaveFrom = new Vector2(HOVER_NDC.x, HOVER_NDC.y);
   private readonly ndc = new Vector2(ENTER_NDC.x, ENTER_NDC.y);
   private cards: string[] = [];
+  /** 光束裡飄的是 ♻ 更新圖示（買不起、但清得起商店），不是卡片。 */
+  private refresh = false;
+  private iconAppear = 0;
+  private readonly icon: Mesh;
   private readonly slots: Slot[] = [];
   private readonly tmp = new Vector3();
   private readonly home = new Vector3();
@@ -238,6 +298,22 @@ export class UfoShow {
     this.beam.position.y = -0.55;
     this.beam.renderOrder = 5;
 
+    // ♻ 更新圖示（與卡牌一樣疊在最上層、面向鏡頭）
+    const iconMat = own(
+      new MeshBasicMaterial({
+        map: own(makeRefreshTexture()),
+        transparent: true,
+        side: DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+        toneMapped: false,
+      }),
+    );
+    this.icon = new Mesh(own(new PlaneGeometry(1, 1)), iconMat);
+    this.icon.renderOrder = 8;
+    this.icon.visible = false;
+    parent.add(this.icon);
+
     this.body.add(this.spin, this.badge);
     this.root.add(this.body, this.beam);
     parent.add(this.root);
@@ -258,10 +334,14 @@ export class UfoShow {
     return this.slots.some((s) => s.flight !== null);
   }
 
-  /** 商店開著：飛碟入場（已在場就只更新光束裡的牌）。cards＝商店翻開的牌，最多三張。 */
-  dock(cards: readonly string[]): void {
+  /**
+   * 商店開著：飛碟入場（已在場就只更新光束裡的內容）。
+   * cards＝商店翻開的牌，最多三張；refresh＝買不起任何牌、但清得起商店，光束裡改飄 ♻ 圖示（cards 應為空）。
+   */
+  dock(cards: readonly string[], refresh = false): void {
     if (
       this.want &&
+      refresh === this.refresh &&
       cards.length === this.cards.length &&
       cards.every((c, i) => c === this.cards[i])
     ) {
@@ -274,6 +354,7 @@ export class UfoShow {
       this.leaveT = 0;
       this.root.visible = true;
     }
+    this.refresh = refresh;
     this.setCards(cards.slice(0, 3));
   }
 
@@ -343,6 +424,9 @@ export class UfoShow {
   /** 立即結束（跳過演出、關閉特效）。 */
   clear(): void {
     this.want = false;
+    this.refresh = false;
+    this.iconAppear = 0;
+    this.icon.visible = false;
     this.enterT = 0;
     this.leaveT = 0;
     this.root.visible = false;
@@ -400,6 +484,8 @@ export class UfoShow {
     this.beam.scale.set(0.35 + 0.65 * beamOn, beamOn, 0.35 + 0.65 * beamOn);
     (this.beam.material as ShaderMaterial).uniforms['uOpacity']!.value = 0.55 * beamOn;
 
+    this.placeIcon(dt, time, camera, enter, leave);
+
     // ── 卡牌 ──
     for (let i = this.slots.length - 1; i >= 0; i -= 1) {
       const s = this.slots[i];
@@ -412,6 +498,33 @@ export class UfoShow {
       }
       this.placeCard(s, time, camera, enter, leave);
     }
+  }
+
+  /** ♻ 更新圖示：待在光束中央慢慢旋轉、上下飄，淡入淡出；飛碟離場時一起被吸回碟身。 */
+  private placeIcon(
+    dt: number,
+    time: number,
+    camera: PerspectiveCamera,
+    enter: number,
+    leave: number,
+  ): void {
+    const target = this.want && this.refresh ? 1 : 0;
+    this.iconAppear +=
+      Math.sign(target - this.iconAppear) *
+      Math.min(Math.abs(target - this.iconAppear), dt / ICON_FADE_S);
+    const present = easeOut(seg(enter, 0.3, 0.6)) * (1 - easeIn(seg(leave, 0, 0.55)));
+    const k = easeOut(this.iconAppear);
+    const alpha = k * present;
+    const bob = Math.sin(time * 2.2) * 0.35;
+    this.icon.position.copy(this.root.position).addScaledVector(this.upv, -CARD_DROP + bob);
+    if (leave > 0) this.icon.position.lerp(this.root.position, easeIn(seg(leave, 0, 0.55)));
+    this.icon.quaternion.copy(camera.quaternion);
+    this.icon.rotateZ(-time * 0.9);
+    this.icon.scale.setScalar(
+      Math.max(0.001, ICON_SIZE * (0.6 + 0.4 * k) * (1 + 0.04 * Math.sin(time * 3))),
+    );
+    (this.icon.material as MeshBasicMaterial).opacity = alpha;
+    this.icon.visible = alpha > 0.01;
   }
 
   /** 推進一張牌的動畫；回傳 false＝這張牌演完了，可以移除。 */
@@ -484,6 +597,7 @@ export class UfoShow {
   dispose(): void {
     this.clear();
     this.parent.remove(this.root);
+    this.parent.remove(this.icon);
     for (const o of this.owned) o.dispose();
     this.owned.length = 0;
   }
