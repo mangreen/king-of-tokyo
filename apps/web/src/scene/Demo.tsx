@@ -222,6 +222,24 @@ export default function Demo() {
         );
       },
     ],
+    [
+      '勝利（座位 0）',
+      () => {
+        push([{ type: 'game_over', winners: [0], reason: 'turnEnd' }], (s) => ({
+          ...s,
+          winners: [0],
+        }));
+      },
+    ],
+    [
+      '雙勝者（0、1）',
+      () => {
+        push([{ type: 'game_over', winners: [0, 1], reason: 'roundEnd' }], (s) => ({
+          ...s,
+          winners: [0, 1],
+        }));
+      },
+    ],
     ...[...SAMPLE_BY_THEME.entries()].map(([theme, card]): [string, () => void] => [
       `${THEME_STYLE[theme].icon}${card.name}`,
       () => {
@@ -247,6 +265,11 @@ export default function Demo() {
     () => (
       <Scene3D
         snapshot={snap}
+        outcome={
+          (snap.winners?.length ?? 0) > 0
+            ? `勝者：${(snap.winners ?? []).map((w) => NAMES[w] ?? w).join('、')}`
+            : null
+        }
         feed={feed}
         prefs={prefs}
         onPrefs={(p) => {

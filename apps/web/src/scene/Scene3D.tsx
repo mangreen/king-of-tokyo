@@ -33,6 +33,8 @@ interface Props {
   danmakuProbe?: number;
   /** 預覽彈幕用的顏色（自己的座位色）。 */
   selfColor?: string;
+  /** 勝負已分時的結果文字（全螢幕看不到頁面上的橫幅，所以場景裡也要有）。 */
+  outcome?: string | null;
 }
 
 /**
@@ -53,6 +55,7 @@ export default function Scene3D({
   chat,
   danmakuProbe,
   selfColor,
+  outcome,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -228,6 +231,14 @@ export default function Scene3D({
             aria-label="3D 地圖。拖曳移動，滾輪或雙指縮放，方向鍵移動、加減號縮放、0 重置"
           />
           <div ref={overlayRef} className="kot-overlay" aria-hidden="true" />
+          {fullscreen && (outcome ?? '') !== '' && (
+            <div className="scene-winner" role="status">
+              <span className="scene-winner-crown" aria-hidden="true">
+                👑
+              </span>
+              {outcome}
+            </div>
+          )}
           {fatal !== null && (
             <div className="scene-fallback" role="alert">
               <p>3D 場景無法顯示（{fatal}）。不影響遊戲，操作與資訊仍可正常使用。</p>

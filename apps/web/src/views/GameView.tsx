@@ -90,6 +90,15 @@ export function GameView({
   const nameOf = (seat: number): string =>
     room.players.find((p) => p.seat === seat)?.nickname ?? `座位 ${String(seat)}`;
 
+  const outcomeText =
+    state.phase === 'over' && state.outcome
+      ? `${
+          state.outcome.winners.length > 0
+            ? `勝者：${state.outcome.winners.map(nameOf).join('、')}`
+            : '全員淘汰，沒有勝者'
+        }（${REASON_TEXT[state.outcome.reason]}）`
+      : null;
+
   const cardName = (id: string): string => env.cards[id]?.name ?? id;
   const labelCtx = { cardName, nameOf };
   const myTurn = mySeat !== null && game.actorSeat === mySeat;
@@ -203,13 +212,9 @@ export function GameView({
 
   return (
     <div className="game">
-      {state.phase === 'over' && state.outcome && (
+      {outcomeText !== null && (
         <div className="banner" role="status">
-          🏆{' '}
-          {state.outcome.winners.length > 0
-            ? `勝者：${state.outcome.winners.map(nameOf).join('、')}`
-            : '全員淘汰，沒有勝者'}
-          （{REASON_TEXT[state.outcome.reason]}）
+          🏆 {outcomeText}
         </div>
       )}
 
@@ -236,6 +241,7 @@ export function GameView({
             chat={chat}
             danmakuProbe={danmakuProbe}
             selfColor={seatColor(mySeat ?? 0)}
+            outcome={outcomeText}
           />
         </Suspense>
       ) : (

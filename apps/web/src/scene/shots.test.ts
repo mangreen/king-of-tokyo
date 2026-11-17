@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BAY_SPOT, CITY_SPOT, ringSpot, type Spot } from './layout.js';
-import { MONSTER_HEIGHT, OVERVIEW_POSE, blendPose, poseFor, smoothstep } from './shots.js';
+import {
+  MONSTER_HEIGHT,
+  OVERVIEW_POSE,
+  blendPose,
+  poseFor,
+  smoothstep,
+  victoryPose,
+} from './shots.js';
 
 const spots: Record<number, Spot> = { 0: CITY_SPOT, 1: ringSpot(1, 4), 2: BAY_SPOT };
 const spotOf = (seat: number) => spots[seat];
@@ -57,5 +64,25 @@ describe('camera shots', () => {
     expect(smoothstep(1)).toBe(1);
     expect(smoothstep(0.5)).toBeCloseTo(0.5);
     expect(smoothstep(-1)).toBe(0);
+  });
+});
+
+describe('勝利鏡頭', () => {
+  const winner = ringSpot(1, 4);
+
+  it('固定距離繞著勝者轉、視線落在勝者身上，時間越久角度越不同', () => {
+    const a = victoryPose(winner, 0);
+    const b = victoryPose(winner, 5000);
+    expect(dist(a.position, winner)).toBeCloseTo(14, 5);
+    expect(dist(b.position, winner)).toBeCloseTo(14, 5);
+    expect(a.position).not.toEqual(b.position);
+    expect(dist(a.lookAt, winner)).toBeCloseTo(0, 5);
+    // 俯看：鏡頭比怪獸高，看向怪獸偏上的位置（皇冠要入鏡）
+    expect(a.position.y).toBeGreaterThan(MONSTER_HEIGHT);
+    expect(a.lookAt.y).toBeGreaterThan(MONSTER_HEIGHT * 0.8);
+  });
+
+  it('同一個時間點、同一位勝者，每個人算出的鏡位完全相同（鎖定）', () => {
+    expect(victoryPose(winner, 12345)).toEqual(victoryPose({ ...winner }, 12345));
   });
 });

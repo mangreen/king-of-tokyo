@@ -114,6 +114,26 @@ export function poseFor(spec: ShotSpec, spotOf: SpotOf, t = 0): CameraPose {
   }
 }
 
+/** 多位勝者時每隔多久換一位（毫秒）。 */
+export const VICTORY_SWITCH_MS = 7000;
+
+/**
+ * 勝利鏡頭：繞著勝者慢慢轉一圈又一圈（約 21 秒一圈），從偏高處俯看，把整隻怪獸和頭上的皇冠都收進畫面。
+ * `ms` 是場景累計的演出時間；所有玩家用同一個公式，所以看到的是同一個鏡位。
+ */
+export function victoryPose(subject: Spot, ms: number): CameraPose {
+  const angle = subject.yaw + Math.PI / 5 + (ms / 1000) * 0.3;
+  return {
+    position: {
+      x: subject.x + Math.sin(angle) * 14,
+      y: MONSTER_HEIGHT * 1.6,
+      z: subject.z + Math.cos(angle) * 14,
+    },
+    lookAt: { x: subject.x, y: MONSTER_HEIGHT * 0.95, z: subject.z },
+    fov: 46,
+  };
+}
+
 /** 兩個姿態之間的混合（鏡頭平滑移動用）。 */
 export function blendPose(a: CameraPose, b: CameraPose, k: number): CameraPose {
   const t = Math.max(0, Math.min(1, k));
