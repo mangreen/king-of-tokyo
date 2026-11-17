@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { ScenePrefs } from '../scene/prefs.js';
-import { DANMAKU_OPACITY, DANMAKU_SIZE } from '../scene/danmaku.js';
+import { DANMAKU_OPACITY, DANMAKU_SIZE, DANMAKU_SPEED } from '../scene/danmaku.js';
 import type { QualitySetting, QualityTier } from '../scene/quality.js';
 
 export const QUALITY_LABEL: Record<QualitySetting, string> = {
@@ -179,6 +179,22 @@ export function SettingsPanel({
             }}
           />
           <output>{prefs.danmakuSize}px</output>
+        </label>
+        <label className="slider">
+          <span>移動速度</span>
+          <input
+            type="range"
+            min={DANMAKU_SPEED.min}
+            max={DANMAKU_SPEED.max}
+            step={DANMAKU_SPEED.step}
+            value={prefs.danmakuSpeed}
+            disabled={!prefs.danmaku}
+            aria-label="彈幕移動速度"
+            onChange={(e) => {
+              onChange({ danmakuSpeed: Number(e.target.value) });
+            }}
+          />
+          <output>{prefs.danmakuSpeed.toFixed(1)}×</output>
         </label>
         {onPreviewDanmaku && (
           <button type="button" disabled={!prefs.danmaku} onClick={onPreviewDanmaku}>

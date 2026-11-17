@@ -14,6 +14,7 @@ describe('scene prefs', () => {
       danmaku: true,
       danmakuOpacity: 0.75,
       danmakuSize: 22,
+      danmakuSpeed: 1,
     });
     expect(parsePrefs(null, true).cameraMotion).toBe(false);
     expect(parsePrefs(null, true).danmaku).toBe(false);
@@ -33,6 +34,7 @@ describe('scene prefs', () => {
       danmaku: true,
       danmakuOpacity: 0.75,
       danmakuSize: 22,
+      danmakuSpeed: 1,
     });
     expect(parsePrefs('{"attackFx":false}', false).attackFx).toBe(false);
     // 彈幕：開關、透明度與大小；超出範圍夾回、壞值退回預設
@@ -40,6 +42,11 @@ describe('scene prefs', () => {
     expect([dm.danmaku, dm.danmakuOpacity, dm.danmakuSize]).toEqual([false, 0.4, 30]);
     const clamped = parsePrefs('{"danmakuOpacity":9,"danmakuSize":1}', false);
     expect([clamped.danmakuOpacity, clamped.danmakuSize]).toEqual([1, 14]);
+    const sp = parsePrefs('{"danmakuSpeed":2.5}', false);
+    expect(sp.danmakuSpeed).toBe(2.5);
+    expect(parsePrefs('{"danmakuSpeed":99}', false).danmakuSpeed).toBe(3);
+    expect(parsePrefs('{"danmakuSpeed":0}', false).danmakuSpeed).toBe(0.4);
+    expect(parsePrefs('{"danmakuSpeed":"fast"}', false).danmakuSpeed).toBe(1);
     const bad = parsePrefs('{"danmakuOpacity":"x","danmakuSize":null}', false);
     expect([bad.danmakuOpacity, bad.danmakuSize]).toEqual([0.75, 22]);
     // 舊版偏好沒有 follow 欄位 → 預設開啟

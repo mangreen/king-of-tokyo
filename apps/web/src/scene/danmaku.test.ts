@@ -91,6 +91,10 @@ describe('layoutFor', () => {
   it('速度跟寬度成正比（穿過畫面的時間大致固定），有下限', () => {
     expect(layoutFor(1800, 800, 22).speed).toBeGreaterThan(layoutFor(900, 800, 22).speed);
     expect(layoutFor(10, 800, 22).speed).toBeGreaterThan(0);
+    // 速度倍率：2 倍就是 2 倍快，0.5 倍就是一半
+    const base = layoutFor(1200, 800, 22).speed;
+    expect(layoutFor(1200, 800, 22, 2).speed).toBeCloseTo(base * 2);
+    expect(layoutFor(1200, 800, 22, 0.5).speed).toBeCloseTo(base / 2);
   });
 });
 

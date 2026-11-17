@@ -1,4 +1,4 @@
-import { clampRange, DANMAKU_OPACITY, DANMAKU_SIZE } from './danmaku.js';
+import { clampRange, DANMAKU_OPACITY, DANMAKU_SIZE, DANMAKU_SPEED } from './danmaku.js';
 import { parseQualitySetting, type QualitySetting } from './quality.js';
 
 export interface ScenePrefs {
@@ -19,6 +19,8 @@ export interface ScenePrefs {
   danmakuOpacity: number;
   /** 彈幕文字大小（px，14~40）。 */
   danmakuSize: number;
+  /** 彈幕移動速度倍率（0.4~3，1＝約 9 秒飛過畫面）。 */
+  danmakuSpeed: number;
 }
 
 const KEY = 'kot.scene.prefs.v1';
@@ -35,6 +37,7 @@ export function defaultPrefs(reducedMotion: boolean): ScenePrefs {
     danmaku: !reducedMotion,
     danmakuOpacity: DANMAKU_OPACITY.def,
     danmakuSize: DANMAKU_SIZE.def,
+    danmakuSpeed: DANMAKU_SPEED.def,
   };
 }
 
@@ -56,6 +59,7 @@ export function parsePrefs(raw: string | null, reducedMotion: boolean): ScenePre
       danmaku: typeof o['danmaku'] === 'boolean' ? o['danmaku'] : base.danmaku,
       danmakuOpacity: clampRange(o['danmakuOpacity'], DANMAKU_OPACITY),
       danmakuSize: clampRange(o['danmakuSize'], DANMAKU_SIZE),
+      danmakuSpeed: clampRange(o['danmakuSpeed'], DANMAKU_SPEED),
     };
   } catch {
     return base;

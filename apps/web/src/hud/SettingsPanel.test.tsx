@@ -45,6 +45,8 @@ describe('SettingsPanel（設定面板）', () => {
     expect(html).toMatch(/type="range"[^>]*aria-label="彈幕文字大小"/);
     expect(html).toContain('40%');
     expect(html).toContain('30px');
+    expect(html).toMatch(/type="range"[^>]*aria-label="彈幕移動速度"/);
+    expect(html).toContain('1.0×');
     expect(html).toContain('預覽彈幕');
     expect(render()).not.toContain('預覽彈幕');
   });
@@ -54,7 +56,7 @@ describe('SettingsPanel（設定面板）', () => {
       prefs: { ...defaultPrefs(false), danmaku: false },
       onPreviewDanmaku: () => undefined,
     });
-    expect(off.match(/<input[^>]*type="range"[^>]*disabled=""/g)?.length).toBe(2);
+    expect(off.match(/<input[^>]*type="range"[^>]*disabled=""/g)?.length).toBe(3);
     expect(off).toMatch(/<button[^>]*disabled=""[^>]*>預覽彈幕/);
     expect(render({ prefs: { ...defaultPrefs(false), enabled: false } })).toContain(
       '彈幕只會顯示在 3D 場景上',
