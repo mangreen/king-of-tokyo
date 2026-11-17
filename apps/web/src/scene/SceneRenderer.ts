@@ -92,6 +92,11 @@ export interface SceneSnapshot {
   shop?: readonly string[] | null;
   /** 遊戲結束時的勝者座位（空或省略＝還在進行中）：戴皇冠、持續慶祝，鏡頭鎖定勝者。 */
   winners?: readonly number[];
+  /**
+   * 商店買不起任何牌、但付得起清商店：飛碟照樣入場，光束裡飄 ♻ 更新圖示（不是卡片）。
+   * 與 shop 互斥（shop 有牌時為 false／省略）。
+   */
+  shopRefresh?: boolean;
 }
 
 export interface RendererOptions {
@@ -894,7 +899,8 @@ export class SceneRenderer {
   private syncShop(): void {
     if (!this.cardFxOn || this.ufo.delivering || this.hasPendingUfoCue()) return;
     const shop = this.snapshot?.shop ?? null;
-    if (!shop || shop.length === 0) {
+    const refresh = !shop?.length && this.snapshot?.shopRefresh === true;
+    if (!refresh && (!shop || shop.length === 0)) {
       this.shopSince = null;
       this.ufo.undock();
       return;
@@ -905,7 +911,7 @@ export class SceneRenderer {
     const mySeat = this.snapshot?.mySeat;
     const mine = mySeat !== undefined && mySeat !== null && mySeat === this.snapshot?.activeSeat;
     if (mine || this.ufo.docked || this.simMs - this.shopSince >= SHOP_OTHERS_DEBOUNCE_MS) {
-      this.ufo.dock(shop);
+      this.ufo.dock(refresh ? [] : (shop ?? []), refresh);
     }
   }
 
