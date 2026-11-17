@@ -99,8 +99,12 @@ export function PlayersPanel({ state, room, actorSeat, mySeat, nameOf, env }: Pl
                   {m.cards.map((id) => (
                     <CardChip key={id} id={id} def={env.cards[id]} />
                   ))}
-                  {m.tokens.poison > 0 && <span className="tag warn">毒 ×{m.tokens.poison}</span>}
-                  {m.tokens.shrink > 0 && <span className="tag warn">縮小 ×{m.tokens.shrink}</span>}
+                  {m.tokens.poison > 0 && (
+                    <span className="tag warn">☠ 中毒 ×{m.tokens.poison}</span>
+                  )}
+                  {m.tokens.shrink > 0 && (
+                    <span className="tag warn">🤏 縮小 ×{m.tokens.shrink}</span>
+                  )}
                 </div>
               )}
             </li>
@@ -181,8 +185,8 @@ export function MyCardsPanel({ monster, env }: { monster: Monster | undefined; e
           </div>
         );
       })}
-      {monster.tokens.poison > 0 && <p className="tag warn">毒 ×{monster.tokens.poison}</p>}
-      {monster.tokens.shrink > 0 && <p className="tag warn">縮小 ×{monster.tokens.shrink}</p>}
+      {monster.tokens.poison > 0 && <p className="tag warn">☠ 中毒 ×{monster.tokens.poison}</p>}
+      {monster.tokens.shrink > 0 && <p className="tag warn">🤏 縮小 ×{monster.tokens.shrink}</p>}
     </div>
   );
 }

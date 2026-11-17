@@ -27,6 +27,7 @@ import { AttackFxSystem, attackStyleOf } from './attackFx.js';
 import { CrackSystem, DebrisSystem, DustSystem, ShieldSystem, ShockwaveSystem } from './effects.js';
 import { Holds } from './holds.js';
 import { UfoShow } from './ufo.js';
+import { StatusFxSystem, type StatusTarget } from './statusFx.js';
 import {
   BAY_SPOT,
   CITY_SPOT,
@@ -77,6 +78,8 @@ export interface SceneMonster {
   vp: number;
   energy: number;
   location: SceneLocation;
+  /** 身上的指示物（中毒／縮小）；省略＝沒有。 */
+  tokens?: { poison: number; shrink: number };
 }
 
 export interface SceneSnapshot {
@@ -171,6 +174,7 @@ export class SceneRenderer {
   private shields: ShieldSystem;
   private readonly faces: CardFaces;
   private cardFx!: CardFxSystem;
+  private statusFx!: StatusFxSystem;
   private ufo!: UfoShow;
   /** 商店開始連續開著的時間（模擬毫秒）；關著＝null。 */
   private shopSince: number | null = null;
@@ -411,6 +415,8 @@ export class SceneRenderer {
       opts.attackFx ?? true,
     );
     this.fx.add(this.dust.points, this.debris.mesh);
+    this.statusFx = new StatusFxSystem();
+    this.fx.add(this.statusFx.group);
     this.cardFx = new CardFxSystem(this.fx, {
       dust: this.dust,
       debris: this.debris,
@@ -482,6 +488,10 @@ export class SceneRenderer {
     this.cardFxOn = on;
     this.cardFx.setEnabled(on);
     if (!on) this.ufo.clear();
+    for (const m of this.snapshot?.monsters ?? []) {
+      const actor = this.actors.get(m.seat);
+      if (actor) this.applyStatus(m, actor, false);
+    }
   }
 
   /** 卡牌組載入後（或換卡牌組）更新卡面與特效主題。 */
@@ -596,6 +606,7 @@ export class SceneRenderer {
     this.attackFx.dispose();
     this.shields.dispose();
     this.cardFx.dispose();
+    this.statusFx.dispose();
     this.ufo.dispose();
     this.faces.dispose();
     this.blobTex.dispose();
@@ -693,7 +704,14 @@ export class SceneRenderer {
       actor.setSpot(monsterSpot(seat, this.snapshot.playerCount, m.location), instant);
     }
     if (!this.holds.held(seat, 'ko')) actor.setAlive(m.alive, instant);
+    this.applyStatus(m, actor, instant);
     if (!this.holds.held(seat, 'hit')) this.displayedHp.set(seat, m.hp);
+  }
+
+  /** 持續狀態：中毒閃爍、縮小（演出關閉時不閃爍也不縮小，只留名牌上的圖示）。 */
+  private applyStatus(m: SceneMonster, actor: MonsterActor, instant: boolean): void {
+    const on = this.cardFxOn && m.alive;
+    actor.setStatus(on ? (m.tokens?.poison ?? 0) : 0, on ? (m.tokens?.shrink ?? 0) : 0, instant);
   }
 
   private applyQuality(tier: QualityTier, initial = false): void {
@@ -978,7 +996,9 @@ export class SceneRenderer {
     const hp = this.displayedHp.get(seat) ?? m.hp;
     const active = this.snapshot.activeSeat === seat;
     const mine = this.snapshot.mySeat === seat;
-    const key = `${m.name}|${String(hp)}|${String(m.maxHp)}|${String(m.vp)}|${String(m.energy)}|${String(m.alive)}|${String(active)}|${String(mine)}`;
+    const poison = m.tokens?.poison ?? 0;
+    const shrink = m.tokens?.shrink ?? 0;
+    const key = `${m.name}|${String(hp)}|${String(m.maxHp)}|${String(m.vp)}|${String(m.energy)}|${String(m.alive)}|${String(active)}|${String(mine)}|${String(poison)}|${String(shrink)}`;
     if (el.dataset['key'] === key) return;
     el.dataset['key'] = key;
     el.className = `kot-tag${active ? ' active' : ''}${m.alive ? '' : ' dead'}${mine ? ' mine' : ''}`;
@@ -995,6 +1015,23 @@ export class SceneRenderer {
     stats.className = 'kot-tag-stats';
     stats.textContent = `❤${String(hp)} ★${String(m.vp)} ⚡${String(m.energy)}`;
     el.append(name, bar, stats);
+    // 持續狀態：名牌下方一排圖示（☠ 中毒、🤏 縮小），數字是指示物數量
+    if (m.alive && poison + shrink > 0) {
+      const row = document.createElement('span');
+      row.className = 'kot-tag-status';
+      for (const [kind, icon, label, n] of [
+        ['poison', '☠', '中毒', poison],
+        ['shrink', '🤏', '縮小', shrink],
+      ] as const) {
+        if (n <= 0) continue;
+        const chip = document.createElement('span');
+        chip.className = `kot-status ${kind}`;
+        chip.title = `${label} ×${String(n)}`;
+        chip.textContent = `${icon}×${String(n)}`;
+        row.appendChild(chip);
+      }
+      el.appendChild(row);
+    }
   }
 
   private project(x: number, y: number, z: number): { sx: number; sy: number; ok: boolean } {
@@ -1075,6 +1112,7 @@ export class SceneRenderer {
     this.updateCelebration(sdt, time);
     this.updateCamera(dt);
     this.cardFx.update(sdt, this.camera);
+    this.updateStatusFx(time);
     this.syncShop();
     this.ufo.update(sdt, this.camera, time);
     if (this.city) {
@@ -1111,6 +1149,21 @@ export class SceneRenderer {
       break;
     }
     if (this.shotSpec && this.simMs - this.shotSpec.start > this.shotSpec.dur) this.shotSpec = null;
+  }
+
+  /** 持續性狀態特效：身上有毒／縮小指示物的活著的怪獸，持續冒毒霧／收縮光點。 */
+  private updateStatusFx(time: number): void {
+    const targets: StatusTarget[] = [];
+    if (this.cardFxOn && this.snapshot) {
+      for (const m of this.snapshot.monsters) {
+        const poison = m.tokens?.poison ?? 0;
+        const shrink = m.tokens?.shrink ?? 0;
+        const a = this.actors.get(m.seat);
+        if (!a || !m.alive || poison + shrink === 0) continue;
+        targets.push({ seat: m.seat, x: a.x, z: a.z, height: a.height, poison, shrink });
+      }
+    }
+    this.statusFx.update(time, targets);
   }
 
   /** 正在慶祝的勝者（遊戲結束、結算演出播完、本人還在場上）。 */
@@ -1259,10 +1312,11 @@ export class SceneRenderer {
       this.camera.fov = this.pose.fov;
       this.camera.updateProjectionMatrix();
     }
-    this.dust.setViewScale(
+    const viewScale =
       (this.opts.canvas.clientHeight * this.renderer.getPixelRatio()) /
-        (2 * Math.tan((this.camera.fov * Math.PI) / 360)),
-    );
+      (2 * Math.tan((this.camera.fov * Math.PI) / 360));
+    this.dust.setViewScale(viewScale);
+    this.statusFx.setViewScale(viewScale);
   }
 
   private positionTags(): void {

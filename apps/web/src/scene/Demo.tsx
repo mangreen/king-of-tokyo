@@ -214,6 +214,19 @@ export default function Demo() {
         setSnap((s) => ({ ...s, shop: null, shopRefresh: !s.shopRefresh }));
       },
     ],
+    ...(['poison', 'shrink'] as const).map((kind): [string, () => void] => [
+      kind === 'poison' ? '☠ 座位 0 中毒 +1（3 次後清除）' : '🤏 座位 0 縮小 +1（3 次後清除）',
+      () => {
+        setSnap((s) => ({
+          ...s,
+          monsters: s.monsters.map((m) => {
+            if (m.seat !== 0) return m;
+            const t = m.tokens ?? { poison: 0, shrink: 0 };
+            return { ...m, tokens: { ...t, [kind]: t[kind] >= 3 ? 0 : t[kind] + 1 } };
+          }),
+        }));
+      },
+    ]),
     [
       '清商店（飛碟）',
       () => {
