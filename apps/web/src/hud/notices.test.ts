@@ -257,6 +257,75 @@ describe('買下立刻生效的牌：購買提示之外再跳效果提示', () =
   });
 });
 
+describe('只在事件日誌出現的卡牌事件（稽核補上的提示）', () => {
+  it('先知偷看牌庫頂：用牌提示＋🔮 讓使用者讀到那張牌（費用、卡面文字），並且停留久一點', () => {
+    const c = ctx({
+      cardText: (id) => `${id} 的卡面文字`,
+      cardCost: () => 3,
+    });
+    const ns = noticesFor(
+      [
+        { type: 'card_used', seat: 0, cardId: 'lab' },
+        { type: 'deck_peeked', seat: 0, cardId: 'grid' },
+      ],
+      c,
+    );
+    expect(ns.map((n) => n.text)).toEqual([
+      '你使用了【卡-lab】：你偷看了牌庫頂的一張牌',
+      '你偷看到牌庫頂：【卡-grid】⚡3 — grid 的卡面文字',
+    ]);
+    expect(ns[1]).toMatchObject({ icon: '🔮', hold: true });
+    expect(ns[0]?.hold).toBeUndefined();
+  });
+
+  it('別人偷看（看不到內容）：只有用牌提示，不會洩漏也不會多跳', () => {
+    const ns = noticesFor(
+      [
+        { type: 'card_used', seat: 1, cardId: 'lab' },
+        { type: 'deck_peeked', seat: 1, cardId: null },
+      ],
+      ctx(),
+    );
+    expect(ns.map((n) => n.text)).toEqual(['Bob使用了【卡-lab】：Bob偷看了牌庫頂的一張牌']);
+  });
+
+  it('改骰：卡牌提示說明改了哪一顆；讓位換卡說明換了哪兩張', () => {
+    expect(
+      texts([
+        { type: 'card_used', seat: 0, cardId: 'twist' },
+        { type: 'die_changed', seat: 0, index: 5, face: 3 },
+      ]),
+    ).toEqual(['你使用了【卡-twist】：你把第 6 顆骰子改成 3']);
+    expect(
+      texts([
+        { type: 'card_triggered', seat: 1, cardId: 'dna' },
+        { type: 'card_swapped', seat: 1, gave: 'dna', took: 'k', from: 2 },
+      ]),
+    ).toEqual(['Bob的【卡-dna】發動了：Bob用【卡-dna】換走Cat的【卡-k】']);
+  });
+
+  it('解除指示物、清掉商店、卡用完被棄掉都有提示；其他棄牌原因不打擾', () => {
+    expect(texts([{ type: 'counter_removed', seat: 0, counter: 'poison', total: 0 }])).toEqual([
+      '你用 ❤️ 解除了☠ 中毒指示物',
+    ]);
+    expect(texts([{ type: 'counter_removed', seat: 1, counter: 'shrink', total: 1 }])).toEqual([
+      'Bob用 ❤️ 解除了🤏 縮小指示物（還剩 1 個）',
+    ]);
+    expect(texts([{ type: 'market_swept', seat: 1, discarded: ['a'] }])).toEqual([
+      'Bob花 2 能量清掉了商店',
+    ]);
+    expect(texts([{ type: 'card_discarded', seat: 1, cardId: 'cells', reason: 'spent' }])).toEqual([
+      'Bob的【卡-cells】用完了，已棄掉',
+    ]);
+    expect(
+      texts([
+        { type: 'card_discarded', seat: 1, cardId: 'x', reason: 'eliminated' },
+        { type: 'card_discarded', seat: null, cardId: 'x', reason: 'instant' },
+      ]),
+    ).toEqual([]);
+  });
+});
+
 describe('shopNotice', () => {
   it('買得起才提示，且帶有前往商店的動作', () => {
     expect(shopNotice(0)).toBeNull();

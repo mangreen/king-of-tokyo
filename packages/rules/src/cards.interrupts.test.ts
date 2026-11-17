@@ -117,6 +117,10 @@ describe('R-CARD-23 擲骰期能力', () => {
     expect(mon(r.state, 0).cards).toEqual([]);
     expect(r.state.market?.discard).toEqual(['pt']);
     expect(r.events).toContainEqual({ type: 'die_changed', seat: 0, index: 0, face: A });
+    // 提示靠 card_used 圈出「這張牌造成了什麼」：它要排在 die_changed 前面
+    const types = r.events.map((e) => e.type);
+    expect(types.indexOf('card_used')).toBeGreaterThanOrEqual(0);
+    expect(types.indexOf('card_used')).toBeLessThan(types.indexOf('die_changed'));
   });
 
   it('花能量改骰；改成固定面；每回合一次', () => {
@@ -416,7 +420,8 @@ describe('R-CARD-50~56 買牌階段能力', () => {
     expect(redactState(peeked.state, 0).turn.peek).toBe('d1');
     expect(redactState(peeked.state, 1).market?.deck).toEqual(['', '']);
     expect(redactState(peeked.state, 1).rng).toBe(0);
-    const ev = peeked.events[0]!;
+    expect(peeked.events[0]).toMatchObject({ type: 'card_used', seat: 0, cardId: 'lab' });
+    const ev = peeked.events.find((e) => e.type === 'deck_peeked')!;
     expect(redactEvent(ev, 1)).toMatchObject({ type: 'deck_peeked', cardId: null });
     expect(redactEvent(ev, 0)).toMatchObject({ cardId: 'd1' });
     const bought = must(peeked.state, { type: 'buy', seat: 0, cardId: 'd1', from: 'deck' }, env);
@@ -617,6 +622,10 @@ describe('R-CARD-38 讓位時觸發', () => {
     const y = must(r.state, { type: 'yieldDecision', seat: 1, leave: true, takeCard: 'k' }, env);
     expect(mon(y.state, 1).cards).toEqual(['k']);
     expect(mon(y.state, 0).cards).toEqual(['dna']);
+    // 讓位換卡也要留下 card_triggered（提示與特效靠它），排在 card_swapped 前面
+    const evTypes = y.events.map((e) => e.type);
+    expect(y.events).toContainEqual({ type: 'card_triggered', seat: 1, cardId: 'dna' });
+    expect(evTypes.indexOf('card_triggered')).toBeLessThan(evTypes.indexOf('card_swapped'));
     expect(y.events).toContainEqual({
       type: 'card_swapped',
       seat: 1,

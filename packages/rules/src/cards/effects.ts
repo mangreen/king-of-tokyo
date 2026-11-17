@@ -293,6 +293,7 @@ export const EFFECTS: Record<string, Effect> = {
         const index = args.die as number;
         spendEnergy(g, o.seat, num(o.def, 'cost', 0));
         g.s.turn.dice[index] = face;
+        g.ev.push({ type: 'card_used', seat: o.seat, cardId: o.cardId });
         g.ev.push({ type: 'die_changed', seat: o.seat, index, face });
         markUsed(g, o);
         if (o.def.params['discard'] === true) {
@@ -726,6 +727,7 @@ export const EFFECTS: Record<string, Effect> = {
         reshuffleIfEmpty(g);
         const top = market.deck[0] ?? null;
         g.s.turn.peek = top;
+        g.ev.push({ type: 'card_used', seat: o.seat, cardId: o.cardId });
         g.ev.push({ type: 'deck_peeked', seat: o.seat, cardId: top });
       },
     },
