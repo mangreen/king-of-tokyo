@@ -19,6 +19,8 @@ export interface NoticeContext {
   cardName: (id: string) => string;
   /** 卡面效果文字；這張牌沒有可量化的影響時，用它說明牌的作用。 */
   cardText?: (id: string) => string;
+  /** 卡牌類型；買下一次性牌時，沒有可量化的影響也要用卡面文字說明效果。 */
+  cardKind?: (id: string) => 'keep' | 'discard' | undefined;
   victoryPoints: number;
   /** 事件之後（目前）的 VP；用來判斷「快贏了」。 */
   vpNow: (seat: number) => number;
@@ -230,6 +232,48 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
   /** 已經寫進某張牌提示裡的事件，不再另外跳提示。 */
   const covered = new Set<number>();
 
+  /**
+   * 牌的效果提示（不分敵我：誰、哪張牌、對所有人造成什麼）。讓玩家也能從別人的牌學到效果。
+   * `bought`：買下立刻生效的牌——沒有可量化的影響、也不是一次性牌時就不另外提示。
+   */
+  const cardEffectNotice = (
+    idx: number,
+    seat: number,
+    base: string,
+    cardId: string,
+    bought: boolean,
+  ): Omit<Notice, 'id'> | null => {
+    const indices = spanIndices(events, idx);
+    const span = indices.map((i) => events[i] as GameEvent);
+    for (const i of indices) {
+      const t = events[i]?.type;
+      if (t === 'extra_turn_granted' || t === 'counter_gained' || t === 'entered_tokyo') {
+        covered.add(i);
+      }
+    }
+    const impacts = impactsOf(span);
+    const mineImpact = c.mySeat === null ? undefined : impacts.get(c.mySeat);
+    const gain =
+      mineImpact !== undefined && (mineImpact.hp > 0 || mineImpact.vp > 0 || mineImpact.energy > 0);
+    // 自己用牌：有收穫就是好事（花能量是代價不算壞事）；別人的牌：我有任何損失都要警覺
+    const bad =
+      mineImpact !== undefined &&
+      (mine(seat)
+        ? mineImpact.eliminated
+        : mineImpact.hp < 0 || mineImpact.vp < 0 || mineImpact.energy < 0 || mineImpact.eliminated);
+    const good = !bad && gain;
+    let effect = describeEffects(span, c, seat);
+    if (effect === '' && (!bought || c.cardKind?.(cardId) === 'discard')) {
+      effect = c.cardText?.(cardId) ?? '';
+    }
+    if (bought && effect === '') return null;
+    return {
+      kind: bad ? 'danger' : good ? 'good' : 'info',
+      icon: '🃏',
+      text: effect === '' ? base : `${base}：${effect}`,
+    };
+  };
+
   for (const [idx, e] of events.entries()) {
     switch (e.type) {
       case 'turn_started':
@@ -334,7 +378,7 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
         }
         break;
       }
-      case 'card_bought':
+      case 'card_bought': {
         push({
           kind: 'info',
           icon: '🃏',
@@ -342,44 +386,19 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
             e.from === null ? '' : `（向${who(e.from)}）`
           }`,
         });
+        // 買下立刻生效的牌（一次性卡、最大 HP＋2…）：再跳一則「效果」提示，說明這張牌實際造成了什麼
+        const fx = cardEffectNotice(idx, e.seat, `【${c.cardName(e.cardId)}】生效`, e.cardId, true);
+        if (fx) push(fx);
         break;
+      }
       case 'card_used':
       case 'card_triggered': {
-        // 不分敵我：誰、哪張牌、造成什麼影響（對所有人）。讓玩家也能從別人的牌學到效果
-        const indices = spanIndices(events, idx);
-        const span = indices.map((i) => events[i] as GameEvent);
-        for (const i of indices) {
-          const t = events[i]?.type;
-          if (t === 'extra_turn_granted' || t === 'counter_gained' || t === 'entered_tokyo') {
-            covered.add(i);
-          }
-        }
-        const impacts = impactsOf(span);
-        const mineImpact = c.mySeat === null ? undefined : impacts.get(c.mySeat);
-        const gain =
-          mineImpact !== undefined &&
-          (mineImpact.hp > 0 || mineImpact.vp > 0 || mineImpact.energy > 0);
-        // 自己用牌：有收穫就是好事（花能量是代價不算壞事）；別人的牌：我有任何損失都要警覺
-        const bad =
-          mineImpact !== undefined &&
-          (mine(e.seat)
-            ? mineImpact.eliminated
-            : mineImpact.hp < 0 ||
-              mineImpact.vp < 0 ||
-              mineImpact.energy < 0 ||
-              mineImpact.eliminated);
-        const good = !bad && gain;
         const base =
           e.type === 'card_used'
             ? `${who(e.seat)}使用了【${c.cardName(e.cardId)}】`
             : `${who(e.seat)}的【${c.cardName(e.cardId)}】發動了`;
-        let effect = describeEffects(span, c, e.seat);
-        if (effect === '') effect = c.cardText?.(e.cardId) ?? '';
-        push({
-          kind: bad ? 'danger' : good ? 'good' : 'info',
-          icon: '🃏',
-          text: effect === '' ? base : `${base}：${effect}`,
-        });
+        const fx = cardEffectNotice(idx, e.seat, base, e.cardId, false);
+        if (fx) push(fx);
         break;
       }
       case 'counter_gained':
