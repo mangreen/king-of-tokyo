@@ -103,7 +103,7 @@ export function GameView({
       : null;
 
   const cardName = (id: string): string => env.cards[id]?.name ?? id;
-  const labelCtx = { cardName, nameOf };
+  const labelCtx = { cardName, nameOf, cardDef: (id: string) => env.cards[id] };
   const myTurn = mySeat !== null && game.actorSeat === mySeat;
   const actions = myActions(state, env, mySeat);
   // 所有購買按鈕都掛在商店分頁的牌上：商店牌、牌庫頂（先知）、別人持有的牌（寄生觸手）；

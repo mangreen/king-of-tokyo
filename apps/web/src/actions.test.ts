@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { applyAction, createGame, defaultConfig, type Action, type CardDef } from '@kot/rules';
-import { envOf, groupActions, labelAction, myActions, toIntent } from './actions.js';
+import {
+  applyAction,
+  createGame,
+  defaultConfig,
+  type Action,
+  type CardDef,
+  type GameState,
+} from '@kot/rules';
+import {
+  envOf,
+  groupActions,
+  labelAction,
+  myActions,
+  referencedCardIds,
+  toIntent,
+} from './actions.js';
 import { GameActionSchema } from '@kot/protocol';
 
 const CARDS: CardDef[] = Array.from({ length: 10 }, (_, i) => ({
@@ -118,5 +132,45 @@ describe('labelAction / groupActions', () => {
     expect(groups).toHaveLength(3);
     expect(groups[1]?.actions).toHaveLength(2);
     expect(groups[1]?.title).toBe('〈c1〉');
+  });
+});
+
+describe('referencedCardIds（動作牽涉到的別張卡）', () => {
+  it('複製對象、要賣掉的牌、讓位拿走的牌、防禦牌都列出來，依出現順序、不重複', () => {
+    const actions: Action[] = [
+      { type: 'buy', seat: 0, cardId: 'mimic', target: 'a' },
+      { type: 'buy', seat: 0, cardId: 'mimic', target: 'b' },
+      { type: 'buy', seat: 0, cardId: 'mimic', target: 'a' },
+      { type: 'useCard', seat: 0, cardId: 'mimic', args: { target: 'c' } },
+      { type: 'useCard', seat: 0, cardId: 'meta', args: { cards: ['d', 'a'] } },
+      { type: 'yieldDecision', seat: 0, leave: true, takeCard: 'e' },
+      { type: 'yieldDecision', seat: 0, leave: false },
+      { type: 'reactDecision', seat: 0, cardId: 'f' },
+      { type: 'reactDecision', seat: 0, cardId: null },
+      { type: 'buy', seat: 0, cardId: 'plain' },
+    ];
+    expect(referencedCardIds(actions)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+  });
+
+  it('剛翻開可立即購買的牌（機會主義者）也要列出，因為按鈕只寫「買下這張牌」', () => {
+    const pending: GameState['pending'] = {
+      kind: 'opportunity',
+      queue: [{ seat: 0, cardId: 'x' }],
+    };
+    const actions: Action[] = [
+      { type: 'opportunityDecision', seat: 0, buy: false },
+      { type: 'opportunityDecision', seat: 0, buy: true },
+    ];
+    expect(referencedCardIds(actions, pending)).toEqual(['x']);
+    expect(referencedCardIds(actions)).toEqual([]);
+  });
+
+  it('沒有牽涉到別張卡的動作不列出任何牌', () => {
+    expect(
+      referencedCardIds([
+        { type: 'endTurn', seat: 0 },
+        { type: 'sweep', seat: 0 },
+      ]),
+    ).toEqual([]);
   });
 });
