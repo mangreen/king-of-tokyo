@@ -106,11 +106,12 @@ export function GameView({
   const labelCtx = { cardName, nameOf };
   const myTurn = mySeat !== null && game.actorSeat === mySeat;
   const actions = myActions(state, env, mySeat);
-  // 商店牌的購買按鈕直接掛在牌上；其他動作（牌庫頂、向別人買、使用能力、提示回應…）列在動作區
-  const isMarketBuy = (a: Action): a is Extract<Action, { type: 'buy' }> =>
-    a.type === 'buy' && a.from === undefined;
-  const marketBuys = actions.filter(isMarketBuy);
-  const otherActions = actions.filter((a) => !isMarketBuy(a));
+  // 所有購買按鈕都掛在商店分頁的牌上：商店牌、牌庫頂（先知）、別人持有的牌（寄生觸手）；
+  // 其他動作（使用能力、提示回應…）列在動作區
+  const isBuy = (a: Action): a is Extract<Action, { type: 'buy' }> => a.type === 'buy';
+  const marketBuys = actions.filter(isBuy).filter((a) => a.from === undefined);
+  const otherBuys = actions.filter(isBuy).filter((a) => a.from !== undefined);
+  const otherActions = actions.filter((a) => !isBuy(a));
   // 保留的骰子只對「同一個狀態版本」有效：有新的擲骰結果（版本改變）就自動視為沒有保留
   const [keptState, setKeptState] = useState<{ version: number; indexes: Set<number> }>({
     version: state.version,
@@ -193,6 +194,7 @@ export function GameView({
       canStop={canStop}
       onToggle={toggle}
       marketBuys={marketBuys}
+      otherBuys={otherBuys}
       sweep={sweep}
       groups={hudGroups}
       onAct={onAct}
