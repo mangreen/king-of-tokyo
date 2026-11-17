@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Action, GameState, Monster, RulesEnv } from '@kot/rules';
 import type { GameActionInput, RoomSnapshot } from '@kot/protocol';
 import type { ActionGroup, LabelContext } from '../actions.js';
@@ -6,7 +6,7 @@ import { Countdown } from '../views/Countdown.js';
 import type { EventBatch } from '../state.js';
 import { latestVersion, takeNew } from '../scene/feed.js';
 import { noticesFor, shopNotice } from './notices.js';
-import { shouldHoldEndTurn } from './shopGate.js';
+import { shouldHoldEndTurn, visibleShopToasts } from './shopGate.js';
 import { ToastHost, type Toast } from './Toasts.js';
 import { Tip } from './Tip.js';
 import {
@@ -153,8 +153,12 @@ export function GameHud(p: HudProps) {
     setTab('shop');
     document.querySelector('.hud-info')?.scrollIntoView({ block: 'nearest' });
   };
-  // 離開買牌階段後，「商店可以買」就不再有意義
-  const shownToasts = toasts.filter((t) => t.action !== 'shop' || buyKey !== null);
+  // 「商店可以買」只在現在真的還買得起、而且還沒離開商店時顯示，數字即時更新
+  const buyable = p.marketBuys.length;
+  const shownToasts = useMemo(
+    () => visibleShopToasts(toasts, buyKey, leftShopFor, buyable, (n) => shopNotice(n)?.text ?? ''),
+    [toasts, buyKey, leftShopFor, buyable],
+  );
 
   const me: Monster | undefined = state.monsters.find((m) => m.seat === p.mySeat);
   const rules = ruleConfigOf(state);
