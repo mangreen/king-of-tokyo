@@ -55,6 +55,7 @@ export function toSnapshot(
       vp: m.vp,
       energy: m.energy,
       location: m.location,
+      tokens: { poison: m.tokens?.poison ?? 0, shrink: m.tokens?.shrink ?? 0 },
     })),
   };
 }

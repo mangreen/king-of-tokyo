@@ -2,6 +2,7 @@ import { Color } from 'three';
 import type { Power } from './director.js';
 import type { Spot } from './layout.js';
 import type { MonsterRig } from './monsters.js';
+import { poisonGlow, shrinkScale } from './statusFx.js';
 
 /**
  * 一隻怪獸的程序動畫狀態。位置與存活由遊戲狀態決定（setSpot / setAlive），
@@ -40,6 +41,11 @@ export class MonsterActor {
   private koTarget = false;
   private roarT = -1;
   private flash = 0;
+  /** 持續狀態：中毒時身體紫綠閃爍；縮小時身體變小（平滑過渡）。 */
+  private poisoned = false;
+  private shrinkTarget = 1;
+  private shrinkNow = 1;
+  private readonly baseScale: number;
   /** 站位落地時通知（踩踏特效）。 */
   onLand: ((actor: MonsterActor, spot: Spot) => void) | null = null;
   private readonly phase: number;
@@ -56,6 +62,7 @@ export class MonsterActor {
     this.yaw = this.baseYaw = spot.yaw;
     this.target = spot;
     this.phase = seat * 1.7;
+    this.baseScale = rig.root.scale.x;
     this.apply(0);
   }
 
@@ -150,6 +157,7 @@ export class MonsterActor {
     if (this.koTarget) this.koT += dt / KO_DURATION;
     this.koT = Math.max(0, Math.min(1, this.koT));
     this.flash = Math.max(0, this.flash - dt / 0.2);
+    this.shrinkNow += (this.shrinkTarget - this.shrinkNow) * Math.min(1, dt * 5);
     this.apply(time);
   }
 
@@ -223,12 +231,32 @@ export class MonsterActor {
 
     // 受擊閃白、倒下變暗
     const m = rig.material;
-    m.emissive.setRGB(this.flash * 0.9, this.flash * 0.9, this.flash * 0.9);
+    const f = this.flash * 0.9;
+    if (this.poisoned && this.koT < 0.5) {
+      // 中毒：紫綠閃爍（綠偏多、偶爾泛紫）
+      const g = poisonGlow(time + this.phase);
+      m.emissive.setRGB(f + 0.22 * g, f + 0.62 * g, f + 0.16 * g);
+    } else {
+      m.emissive.setRGB(f, f, f);
+    }
+    rig.root.scale.setScalar(this.baseScale * this.shrinkNow);
     const shade = 1 - 0.45 * ease(this.koT);
     if (shade !== this.tint) {
       this.tint = shade;
       m.color.copy(this.base).multiplyScalar(shade);
     }
+  }
+
+  /** 身上的指示物：決定中毒閃爍與縮小倍率。 */
+  setStatus(poison: number, shrink: number, instant = false): void {
+    this.poisoned = poison > 0;
+    this.shrinkTarget = shrinkScale(shrink);
+    if (instant) this.shrinkNow = this.shrinkTarget;
+  }
+
+  /** 目前（含縮小）的怪獸高度。 */
+  get height(): number {
+    return this.rig.height * this.shrinkNow;
   }
 
   dispose(): void {
