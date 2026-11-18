@@ -156,6 +156,7 @@ export function App() {
         onAddBot={client.addBot}
         onRemoveBot={client.removeBot}
         onLeave={leave}
+        shareable={clientOptions.mode !== 'offline'}
       />
     );
   } else {
