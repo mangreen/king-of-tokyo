@@ -608,6 +608,42 @@ describe('R-CARD-60~62 治療面的分配', () => {
   });
 });
 
+describe('R-HEAL-02 治癒光束與東京：卡牌能力不受「骰子補血無效」限制', () => {
+  const ray = card('hr', 'heal_others', { params: { rate: 2 } });
+  const heal = (others: { seat: number; amount: number }[], self = 0) =>
+    ({ type: 'heartsDecision', seat: 0, self, poison: 0, shrink: 0, others }) as const;
+
+  it('持有者在東京內：❤️ 仍會詢問，可以治療別人；治療自己無效（骰子面）', () => {
+    const { env, state } = world([ray], 3, {
+      0: { cards: ['hr'], hp: 6, location: 'city' },
+      1: { hp: 5, energy: 4 },
+    });
+    let r = resolveWith(state, [H, H, 1, 2, 3, E], env);
+    expect(r.state.pending).toMatchObject({ kind: 'hearts', seat: 0, hearts: 2 });
+    r = must(r.state, heal([{ seat: 1, amount: 2 }]), env);
+    expect(mon(r.state, 1)).toMatchObject({ hp: 7, energy: 0 });
+    expect(mon(r.state, 0).hp).toBe(6);
+    check(r.state);
+    // 把 ❤️ 用在自己身上：在東京內依然無效
+    const s = must(resolveWith(state, [H, H, 1, 2, 3, E], env).state, heal([], 2), env);
+    expect(mon(s.state, 0).hp).toBe(6);
+    expect(s.events).toContainEqual({ type: 'heal_ignored', seat: 0, faces: 2 });
+  });
+
+  it('被治療的怪獸在東京內：照樣可以治療（持有者在東京外）', () => {
+    const { env, state } = world([ray], 3, {
+      0: { cards: ['hr'] },
+      1: { hp: 4, energy: 6, location: 'city' },
+    });
+    const r0 = resolveWith(state, [H, H, H, 1, 2, E], env);
+    expect(r0.state.pending).toMatchObject({ kind: 'hearts' });
+    const r = must(r0.state, heal([{ seat: 1, amount: 3 }]), env);
+    expect(mon(r.state, 1)).toMatchObject({ hp: 7, energy: 0, location: 'city' });
+    expect(mon(r.state, 0).energy).toBe(7); // 收到 6，加骰面 1 能量
+    check(r.state);
+  });
+});
+
 describe('R-CARD-38 讓位時觸發', () => {
   it('讓位換卡：拿走接手者的一張 Keep 卡並把本卡換給他', () => {
     const defs = [card('dna', 'swap_on_yield'), card('k', 'reroll_threes')];
