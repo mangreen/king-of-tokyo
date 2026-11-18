@@ -484,6 +484,8 @@ export function eliminate(g: G, v: Monster, by: number | null): void {
   v.hp = 0;
   v.location = null;
   v.energy = 0;
+  // 淘汰者再也不會有「下一個回合開始」，他造成的「全場少擲一顆」就此結束（否則會永遠留著）
+  g.s.stomp = g.s.stomp.filter((x) => x !== v.seat);
   discardAllCards(g, v.seat, 'eliminated');
   g.ev.push({ type: 'eliminated', seat: v.seat, by });
   // R-CARD-42：擊殺者被淘汰時，搭檔一併淘汰
@@ -599,4 +601,58 @@ export function clockwiseFrom(s: GameState, from: number): number[] {
     }
   }
   return out;
+}
+
+/** 骰子數的一項增減：來源與影響。 */
+export interface DiceMod {
+  /** extra＝加骰卡（第三顆頭…）、shrink＝縮小指示物、stomp＝震地步伐、extraTurn＝時間裂縫的額外回合。 */
+  kind: 'extra' | 'shrink' | 'stomp' | 'extraTurn';
+  /** 帶正負號：+1、-2。 */
+  amount: number;
+  /** extra：提供加骰的卡。 */
+  cardIds?: string[];
+  /** stomp：造成少擲的持有者座位。 */
+  seats?: number[];
+}
+
+export interface DiceBreakdown {
+  base: number;
+  mods: DiceMod[];
+  /** 實際骰子數（至少 1 顆）。 */
+  total: number;
+}
+
+/**
+ * 「全場少擲一顆」對某座位的影響：他自己持有的那一份會在他的回合開始時結束，所以不算。R-CARD-63
+ * 引擎（startTurn 先清掉自己的那一份）與介面（提示哪些怪獸暈眩）共用這一個定義。
+ */
+export function stompHoldersAffecting(stomp: readonly number[], seat: number): number[] {
+  return stomp.filter((x) => x !== seat);
+}
+
+/** 某座位的骰子數怎麼來的（基本數、加骰、縮小、震地步伐、額外回合懲罰）。R-CARD-21 */
+export function diceBreakdownOf(g: G, seat: number, penalty: number): DiceBreakdown {
+  const base = g.s.config.diceCount;
+  const mods: DiceMod[] = [];
+  const extra = effectsWith(g, seat, 'extraDice');
+  const extraAmount = extra.reduce((n, { e, o }) => n + e.extraDice(o), 0);
+  if (extraAmount !== 0) {
+    mods.push({ kind: 'extra', amount: extraAmount, cardIds: extra.map(({ o }) => o.cardId) });
+  }
+  const shrink = getMonster(g.s, seat).tokens.shrink;
+  if (shrink > 0) {
+    mods.push({ kind: 'shrink', amount: -shrink });
+  }
+  const holders = stompHoldersAffecting(g.s.stomp, seat);
+  if (holders.length > 0) {
+    mods.push({ kind: 'stomp', amount: -holders.length, seats: holders });
+  }
+  if (penalty > 0) {
+    mods.push({ kind: 'extraTurn', amount: -penalty });
+  }
+  const total = Math.max(
+    1,
+    mods.reduce((n, m) => n + m.amount, base),
+  );
+  return { base, mods, total };
 }

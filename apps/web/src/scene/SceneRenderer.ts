@@ -80,6 +80,8 @@ export interface SceneMonster {
   location: SceneLocation;
   /** 身上的指示物（中毒／縮小）；省略＝沒有。 */
   tokens?: { poison: number; shrink: number };
+  /** 受到「全場少擲骰子」（震地步伐）影響的層數；省略或 0＝沒有。 */
+  dizzy?: number;
 }
 
 export interface SceneSnapshot {
@@ -712,6 +714,7 @@ export class SceneRenderer {
   private applyStatus(m: SceneMonster, actor: MonsterActor, instant: boolean): void {
     const on = this.cardFxOn && m.alive;
     actor.setStatus(on ? (m.tokens?.poison ?? 0) : 0, on ? (m.tokens?.shrink ?? 0) : 0, instant);
+    actor.setDizzy(on && (m.dizzy ?? 0) > 0);
   }
 
   private applyQuality(tier: QualityTier, initial = false): void {
@@ -998,7 +1001,8 @@ export class SceneRenderer {
     const mine = this.snapshot.mySeat === seat;
     const poison = m.tokens?.poison ?? 0;
     const shrink = m.tokens?.shrink ?? 0;
-    const key = `${m.name}|${String(hp)}|${String(m.maxHp)}|${String(m.vp)}|${String(m.energy)}|${String(m.alive)}|${String(active)}|${String(mine)}|${String(poison)}|${String(shrink)}`;
+    const dizzy = m.dizzy ?? 0;
+    const key = `${m.name}|${String(hp)}|${String(m.maxHp)}|${String(m.vp)}|${String(m.energy)}|${String(m.alive)}|${String(active)}|${String(mine)}|${String(poison)}|${String(shrink)}|${String(dizzy)}`;
     if (el.dataset['key'] === key) return;
     el.dataset['key'] = key;
     el.className = `kot-tag${active ? ' active' : ''}${m.alive ? '' : ' dead'}${mine ? ' mine' : ''}`;
@@ -1016,18 +1020,19 @@ export class SceneRenderer {
     stats.textContent = `❤${String(hp)} ★${String(m.vp)} ⚡${String(m.energy)}`;
     el.append(name, bar, stats);
     // 持續狀態：名牌下方一排圖示（☠ 中毒、🤏 縮小），數字是指示物數量
-    if (m.alive && poison + shrink > 0) {
+    if (m.alive && poison + shrink + dizzy > 0) {
       const row = document.createElement('span');
       row.className = 'kot-tag-status';
       for (const [kind, icon, label, n] of [
         ['poison', '☠', '中毒', poison],
         ['shrink', '🤏', '縮小', shrink],
+        ['dizzy', '🥴', '震地：少擲骰子', dizzy],
       ] as const) {
         if (n <= 0) continue;
         const chip = document.createElement('span');
         chip.className = `kot-status ${kind}`;
         chip.title = `${label} ×${String(n)}`;
-        chip.textContent = `${icon}×${String(n)}`;
+        chip.textContent = kind === 'dizzy' ? icon : `${icon}×${String(n)}`;
         row.appendChild(chip);
       }
       el.appendChild(row);

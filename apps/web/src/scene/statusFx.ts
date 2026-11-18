@@ -309,3 +309,26 @@ export class StatusFxSystem {
     this.texture.dispose();
   }
 }
+
+/** 震地暈眩的晃動（弧度／世界單位）：身體左右搖晃、前後點頭，再疊一層細小的顫抖。 */
+export interface DizzySway {
+  /** 左右傾斜（繞前後軸）。 */
+  roll: number;
+  /** 前後點頭。 */
+  pitch: number;
+  /** 水平位移（腳步不穩）。 */
+  shift: number;
+}
+
+export const DIZZY_ROLL = 0.16;
+
+/** amount＝0..1（淡入淡出）；time 單位秒；phase 讓每隻怪獸不同步。 */
+export function dizzySway(time: number, amount: number): DizzySway {
+  const slow = Math.sin(time * 3.2);
+  const tremble = Math.sin(time * 21) * Math.sin(time * 6.3);
+  return {
+    roll: amount * (DIZZY_ROLL * slow + 0.025 * tremble),
+    pitch: amount * (0.07 * Math.sin(time * 2.3 + 1.1) + 0.015 * tremble),
+    shift: amount * 0.07 * Math.sin(time * 3.2 + 0.6),
+  };
+}

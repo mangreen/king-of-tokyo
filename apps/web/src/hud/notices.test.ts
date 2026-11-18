@@ -511,3 +511,13 @@ describe('東京的 VP 提示', () => {
     expect(t.some((x) => x.startsWith('你進入東京市，+1'))).toBe(false);
   });
 });
+
+describe('震地步伐的觸發提示', () => {
+  it('說出持有者、效果持續到何時', () => {
+    const t = texts([
+      { type: 'card_triggered', seat: 1, cardId: 'quake' },
+      { type: 'dice_penalty', seats: [1] },
+    ]);
+    expect(t.join('|')).toContain('所有怪獸少擲 1 顆骰子，直到Bob的下一個回合開始');
+  });
+});

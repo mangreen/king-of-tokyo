@@ -2,7 +2,16 @@ import { CAP, mimicTargets } from './cards/effects.js';
 import { NO_CARDS } from './cards/types.js';
 import type { RulesEnv } from './cards/types.js';
 import { pendingSeat, SWEEP_COST } from './engine.js';
-import { costFor, effectOf, hasEffect, makeG, ownedOf, rollLimitOf } from './ops.js';
+import {
+  costFor,
+  diceBreakdownOf,
+  effectOf,
+  hasEffect,
+  makeG,
+  ownedOf,
+  rollLimitOf,
+} from './ops.js';
+import type { DiceBreakdown } from './ops.js';
 import type { G, Owned } from './ops.js';
 import { aliveMonsters, getMonster } from './state.js';
 import { FACES } from './types.js';
@@ -277,4 +286,17 @@ export function legalActions(state: GameState, env: RulesEnv = NO_CARDS): Action
 /** 目前行動座位本回合的擲骰次數上限（含煙霧彈等額外重擲、加擲卡），給介面顯示與判斷用。 */
 export function rollLimit(state: GameState, env: RulesEnv): number {
   return rollLimitOf(makeG(state, env, []));
+}
+
+/**
+ * 某座位（預設：目前行動座位）的骰子數怎麼來的，給介面向玩家解釋「為什麼這回合少擲／多擲骰子」。
+ * 額外回合的懲罰只屬於目前這個回合，所以只對目前行動座位計入。
+ */
+export function diceBreakdown(state: GameState, env: RulesEnv, seat?: number): DiceBreakdown {
+  const s = seat ?? state.turn.seat;
+  return diceBreakdownOf(
+    makeG(state, env, []),
+    s,
+    s === state.turn.seat ? state.turn.dicePenalty : 0,
+  );
 }

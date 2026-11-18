@@ -1,4 +1,4 @@
-import type { Face } from '@kot/rules';
+import type { DiceBreakdown, Face } from '@kot/rules';
 
 /**
  * 遊戲內的規則說明文字。內容出自 docs/rules-spec.md（括號裡的編號可對照），
@@ -187,4 +187,74 @@ export function tokyoHeartHint(opts: {
       keptHearts > 0 ? `已保留 ${String(keptHearts)} 顆 ❤️：在東京補不了血，建議放開重擲` : null,
     deadHearts: new Set(hearts),
   };
+}
+
+export interface DiceNote {
+  kind: 'summary' | 'extra' | 'shrink' | 'stomp' | 'extraTurn';
+  icon: string;
+  text: string;
+}
+
+export interface DiceNoteContext {
+  /** 本回合實際發出的骰子數（回合開始時決定，之後不會變）。 */
+  diceCount: number;
+  cardName: (id: string) => string;
+  nameOf: (seat: number) => string;
+  /** 震地類效果的來源牌名稱（持有者座位 → 牌名）；查不到就用通用說法。 */
+  stompCardName: (seat: number) => string | undefined;
+}
+
+/**
+ * 骰子區的「為什麼這回合骰子數不是基本數」說明：每一項持續效果一行。
+ * 完全沒有增減時回傳空陣列（不打擾玩家）。
+ */
+export function diceNotesFor(b: DiceBreakdown, ctx: DiceNoteContext): DiceNote[] {
+  if (b.mods.length === 0) return [];
+  // 回合中途買了加骰卡之類的情況：明細的總和與實際骰子數對不上時，不顯示會誤導的「加骰」項目
+  const consistent = b.total === ctx.diceCount;
+  const notes: DiceNote[] = [
+    {
+      kind: 'summary',
+      icon: '🎲',
+      text: `本回合擲 ${String(ctx.diceCount)} 顆骰子（基本 ${String(b.base)} 顆）`,
+    },
+  ];
+  for (const m of b.mods) {
+    const n = Math.abs(m.amount);
+    switch (m.kind) {
+      case 'extra':
+        if (consistent) {
+          notes.push({
+            kind: 'extra',
+            icon: '➕',
+            text: `${(m.cardIds ?? []).map(ctx.cardName).join('、')}：多擲 ${String(n)} 顆`,
+          });
+        }
+        break;
+      case 'shrink':
+        notes.push({
+          kind: 'shrink',
+          icon: '🤏',
+          text: `縮小 ×${String(n)}：少擲 ${String(n)} 顆`,
+        });
+        break;
+      case 'stomp': {
+        const seats = m.seats ?? [];
+        const who = seats.map(ctx.nameOf).join('、');
+        const source = [
+          ...new Set(seats.map((s) => ctx.stompCardName(s)).filter((x): x is string => !!x)),
+        ].join('、');
+        notes.push({
+          kind: 'stomp',
+          icon: '🥴',
+          text: `${source || '震地效果'}（${who}）：所有怪獸少擲 ${String(n)} 顆，直到${who}的下一個回合開始`,
+        });
+        break;
+      }
+      case 'extraTurn':
+        notes.push({ kind: 'extraTurn', icon: '⏳', text: `額外回合：少擲 ${String(n)} 顆` });
+        break;
+    }
+  }
+  return notes;
 }

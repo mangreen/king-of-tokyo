@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DIZZY_ROLL,
   POISON_MAX,
   SHRINK_MAX,
+  dizzySway,
   hash,
   poisonCount,
   poisonGlow,
@@ -103,5 +105,23 @@ describe('toSnapshot：指示物', () => {
     const snap = toSnapshot(room, state, 0, 'me');
     expect(snap.monsters[0]?.tokens).toEqual({ poison: 2, shrink: 1 });
     expect(snap.monsters[1]?.tokens).toEqual({ poison: 0, shrink: 0 });
+  });
+});
+
+describe('震地暈眩：晃動', () => {
+  it('amount=0 完全不晃；有強度時確實左右來回，幅度有上限', () => {
+    for (const t of [0, 0.4, 1.7, 9.2]) {
+      expect(Object.values(dizzySway(t, 0)).every((v) => v === 0)).toBe(true);
+    }
+    const rolls = Array.from({ length: 200 }, (_, i) => dizzySway(i * 0.05, 1).roll);
+    expect(Math.max(...rolls)).toBeGreaterThan(DIZZY_ROLL * 0.7);
+    expect(Math.min(...rolls)).toBeLessThan(-DIZZY_ROLL * 0.7);
+    expect(Math.max(...rolls.map(Math.abs))).toBeLessThan(DIZZY_ROLL + 0.03);
+  });
+  it('幅度隨 amount 等比縮放（淡入淡出）', () => {
+    const full = dizzySway(1.3, 1);
+    const half = dizzySway(1.3, 0.5);
+    expect(half.roll).toBeCloseTo(full.roll / 2, 10);
+    expect(half.pitch).toBeCloseTo(full.pitch / 2, 10);
   });
 });
