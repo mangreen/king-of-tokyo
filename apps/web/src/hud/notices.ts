@@ -178,6 +178,12 @@ function sideEffects(span: readonly GameEvent[], c: NoticeContext): string[] {
       case 'max_hp_changed':
         out.push(`${who(e.seat)}的最大 HP 變成 ${String(e.maxHp)}`);
         break;
+      case 'card_rolled':
+        // 卡牌自己擲骰（保護色）：列出每一顆的點數；一顆 ❤️ 都沒有時要說清楚，不然看起來像沒擲
+        out.push(
+          `擲出 ${e.faces.map(faceText).join(' ')}${e.faces.includes('heal') ? '' : '（沒有 ❤️）'}`,
+        );
+        break;
       case 'damage_prevented':
         out.push(`${who(e.seat)}擋下 ${String(e.amount)} 點傷害`);
         break;

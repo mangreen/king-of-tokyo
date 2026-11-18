@@ -296,6 +296,11 @@ export type GameEvent =
   | { type: 'card_used'; seat: number; cardId: string }
   /** 持有的保留卡自動發動（被動效果，例如反射、吸血、得分加成）；緊接在它造成的事件之前。 */
   | { type: 'card_triggered'; seat: number; cardId: string }
+  /**
+   * 卡牌自己擲骰的結果（保護色：每受 1 點傷害擲 1 顆）。faces 是這次擲出的每一顆；
+   * 沒有它，玩家看不到有沒有擲、擲出什麼，沒擲出 ❤️ 時甚至沒有任何事件。
+   */
+  | { type: 'card_rolled'; seat: number; cardId: string; faces: Face[] }
   /** 本回合多了擲骰機會（用卡換來的）；left＝這張卡之後還剩幾次充能（沒有充能的卡省略）。 */
   | { type: 'rolls_added'; seat: number; cardId: string; amount: number; left?: number }
   | { type: 'card_swapped'; seat: number; gave: string; took: string; from: number }

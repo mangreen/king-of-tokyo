@@ -459,15 +459,20 @@ export const EFFECTS: Record<string, Effect> = {
   },
   camouflage: {
     kind: 'keep',
-    mitigatePost(g, _o, amount) {
+    mitigatePost(g, o, amount) {
       let remaining = amount;
+      const rolled: Face[] = [];
       for (let i = 0; i < amount; i += 1) {
         const [face, rng] = rollDie(g.s.rng);
         g.s.rng = rng;
+        rolled.push(face);
         if (face === 'heal') {
           remaining -= 1;
         }
       }
+      // 擲過就要讓玩家看到（包含一顆 ❤️ 都沒擲出的時候）
+      fire(g, o.seat, o.cardId);
+      g.ev.push({ type: 'card_rolled', seat: o.seat, cardId: o.cardId, faces: rolled });
       return remaining;
     },
   },
