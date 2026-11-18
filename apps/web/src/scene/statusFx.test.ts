@@ -21,11 +21,11 @@ describe('狀態特效：數量與大小', () => {
     expect(poisonCount(99)).toBeLessThanOrEqual(POISON_MAX);
     expect(shrinkCount(99)).toBeLessThanOrEqual(SHRINK_MAX);
   });
-  it('縮小：沒有指示物維持原大小，越多越小，最小 0.68', () => {
+  it('縮小：沒有指示物維持原大小，有指示物就是 0.5 倍（與數量無關）', () => {
     expect(shrinkScale(0)).toBe(1);
-    expect(shrinkScale(1)).toBeLessThan(1);
-    expect(shrinkScale(2)).toBeLessThan(shrinkScale(1));
-    expect(shrinkScale(50)).toBe(0.68);
+    expect(shrinkScale(1)).toBe(0.5);
+    expect(shrinkScale(2)).toBe(0.5);
+    expect(shrinkScale(50)).toBe(0.5);
   });
   it('中毒閃爍強度永遠在 0..1，而且確實會變化（閃爍）', () => {
     const v = Array.from({ length: 200 }, (_, i) => poisonGlow(i * 0.05));
