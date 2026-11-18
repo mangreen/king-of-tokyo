@@ -384,14 +384,21 @@ export function ActionPanel(p: ActionProps) {
   const rules = ruleConfigOf(state);
   const actorMonster = state.monsters.find((m) => m.seat === p.actorSeat);
   const inTokyo = actorMonster ? actorMonster.location !== null : null;
-  const summary = diceSummary(dice as readonly Face[], inTokyo);
+  // 治癒光束：❤️ 可以治療別的怪獸（受傷、付得起 1 能量以上；東京內的怪獸也可以）。與引擎 rayTargets 同一條件
+  const hasRay = (actorMonster?.cards ?? []).some(
+    (id) => p.labelCtx.cardDef?.(id)?.effectId === 'heal_others',
+  );
+  const rayTargets = hasRay
+    ? state.monsters.filter(
+        (m) => m.alive && m.seat !== p.actorSeat && m.hp < m.maxHp && m.energy >= 1,
+      ).length
+    : 0;
+  const summary = diceSummary(dice as readonly Face[], inTokyo, rayTargets);
   const heartHint = tokyoHeartHint({
     dice: dice as readonly Face[],
     kept,
     inTokyo,
-    healsOthers: (actorMonster?.cards ?? []).some(
-      (id) => p.labelCtx.cardDef?.(id)?.effectId === 'heal_others',
-    ),
+    healsOthers: rayTargets > 0,
     who: p.myTurn || p.actorSeat === null ? '你' : p.nameOf(p.actorSeat),
   });
   return (

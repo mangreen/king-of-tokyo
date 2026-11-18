@@ -96,7 +96,12 @@ export function tokyoRules(c: RuleConfig): RuleSection[] {
 }
 
 /** 目前這組骰子「若現在結算」會得到什麼（只算骰面本身，卡牌效果不計）。 */
-export function diceSummary(dice: readonly Face[], inTokyo: boolean | null): string[] {
+export function diceSummary(
+  dice: readonly Face[],
+  inTokyo: boolean | null,
+  /** 治癒光束可以治療的對象數（持有者才會有；卡牌能力不受「東京內骰子補血無效」限制，R-HEAL-02）。 */
+  rayTargets = 0,
+): string[] {
   if (dice.length === 0) return [];
   const count = (f: Face): number => dice.filter((d) => d === f).length;
   const lines: string[] = [];
@@ -113,10 +118,15 @@ export function diceSummary(dice: readonly Face[], inTokyo: boolean | null): str
   if (energy > 0) lines.push(`${String(energy)} 個 ⚡ → +${String(energy)} 能量`);
   const heal = count('heal');
   if (heal > 0) {
+    const ray = rayTargets > 0;
     lines.push(
       inTokyo === true
-        ? `${String(heal)} 個 ❤️ → 在東京內，治療無效`
-        : `${String(heal)} 個 ❤️ → 回復 ${String(heal)} HP（上限內）`,
+        ? ray
+          ? `${String(heal)} 個 ❤️ → 在東京內不能治療自己；可用治癒光束治療別的怪獸（東京內的也可以）`
+          : `${String(heal)} 個 ❤️ → 在東京內，治療無效`
+        : ray
+          ? `${String(heal)} 個 ❤️ → 回復 ${String(heal)} HP（上限內），或用治癒光束分給別的怪獸（東京內的也可以）`
+          : `${String(heal)} 個 ❤️ → 回復 ${String(heal)} HP（上限內）`,
     );
   }
   const attack = count('attack');
@@ -148,7 +158,10 @@ export function tokyoHeartHint(opts: {
   dice: readonly Face[];
   kept: ReadonlySet<number>;
   inTokyo: boolean | null;
-  /** 行動者持有可以用 ❤️ 治療別人的卡（治癒光束）。 */
+  /**
+   * 行動者手上的 ❤️ 還能治療別人：持有治癒光束，而且場上真的有受傷、付得起能量的對象。
+   * 卡牌能力不受「東京內骰子補血無效」限制，東京內的怪獸也可以被治療。
+   */
   healsOthers: boolean;
   /** 提示裡的主詞（「你」或對方的暱稱）。 */
   who: string;
@@ -160,7 +173,7 @@ export function tokyoHeartHint(opts: {
   const keptHearts = hearts.filter((i) => opts.kept.has(i)).length;
   if (opts.healsOthers) {
     return {
-      banner: `🗼 ${who}在東京：❤️ 不能治療自己，只能用治癒光束治療別的怪獸`,
+      banner: `🗼 ${who}在東京：❤️ 不能治療自己，但可用治癒光束治療別的怪獸（東京內的也可以）`,
       keptWarn:
         keptHearts > 0
           ? `已保留 ${String(keptHearts)} 顆 ❤️：在東京不能治療自己，確定要鎖定嗎？`

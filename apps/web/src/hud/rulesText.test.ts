@@ -110,7 +110,28 @@ describe('tokyoHeartHint（在東京擲到 ❤️）', () => {
     });
     expect(h.banner).toContain('Bob在東京');
     expect(h.banner).toContain('治癒光束');
+    expect(h.banner).toContain('東京內的也可以');
     expect(h.keptWarn).toContain('不能治療自己');
     expect(h.deadHearts.size).toBe(0);
+  });
+});
+
+describe('diceSummary：治癒光束不受東京限制', () => {
+  const dice = ['heal', 'heal', 1, 2, 3, 'attack'] as const;
+  it('持有者在東京內：自己不能治療，但可以治療別的怪獸（含東京內的）', () => {
+    const out = diceSummary([...dice], true, 1);
+    expect(out).toContain(
+      '2 個 ❤️ → 在東京內不能治療自己；可用治癒光束治療別的怪獸（東京內的也可以）',
+    );
+    expect(out.join('')).not.toContain('治療無效');
+  });
+  it('持有者在東京外：自己回復，或分給別的怪獸', () => {
+    expect(diceSummary([...dice], false, 2)).toContain(
+      '2 個 ❤️ → 回復 2 HP（上限內），或用治癒光束分給別的怪獸（東京內的也可以）',
+    );
+  });
+  it('沒有可治療的對象（或沒有這張牌）：維持原本說法', () => {
+    expect(diceSummary([...dice], true, 0)).toContain('2 個 ❤️ → 在東京內，治療無效');
+    expect(diceSummary([...dice], false)).toContain('2 個 ❤️ → 回復 2 HP（上限內）');
   });
 });

@@ -14,6 +14,8 @@ const ray: CardDef = {
 };
 
 const render = (opts: {
+  /** 另一隻怪獸（座位 1）的狀態；沒給＝沒有別的怪獸。 */
+  other?: { hp: number; energy: number; location?: 'city' | null };
   inTokyo: boolean;
   dice: Face[];
   kept?: number[];
@@ -25,7 +27,12 @@ const render = (opts: {
     phase: opts.phase ?? 'roll',
     pending: null,
     turn: { seat: 0, rollsUsed: 1, dice: opts.dice, diceCount: opts.dice.length },
-    monsters: [{ seat: 0, location: opts.inTokyo ? 'city' : null, cards: opts.cards ?? [] }],
+    monsters: [
+      { seat: 0, alive: true, location: opts.inTokyo ? 'city' : null, cards: opts.cards ?? [] },
+      ...(opts.other
+        ? [{ seat: 1, alive: true, maxHp: 10, location: null, cards: [], ...opts.other }]
+        : []),
+    ],
   } as unknown as GameState;
   return renderToStaticMarkup(
     <ActionPanel
@@ -74,10 +81,40 @@ describe('ActionPanel：在東京擲到 ❤️', () => {
     expect(html).not.toContain('dead-heart');
   });
 
-  it('持有治癒光束：提醒改成只能治療別人，不標無效', () => {
-    const html = render({ inTokyo: true, dice: ['heal', 1, 2, 3, 3, 1], cards: ['ray'] });
+  it('持有治癒光束且有可治療的對象：提醒改成只能治療別人（東京內的也可以），不標無效', () => {
+    const html = render({
+      inTokyo: true,
+      dice: ['heal', 1, 2, 3, 3, 1],
+      cards: ['ray'],
+      other: { hp: 4, energy: 3 },
+    });
     expect(html).toContain('治癒光束');
+    expect(html).toContain('東京內的也可以');
     expect(html).not.toContain('dead-heart');
+    expect(html).not.toContain('治療無效');
+  });
+
+  it('治療對象本身在東京內也算（卡牌能力不受東京限制）', () => {
+    const html = render({
+      inTokyo: false,
+      dice: ['heal', 1, 2, 3, 3, 1],
+      cards: ['ray'],
+      other: { hp: 4, energy: 3, location: 'city' },
+    });
+    expect(html).toContain('用治癒光束分給別的怪獸');
+  });
+
+  it('持有治癒光束但沒有人能被治療（滿血或沒能量）：❤️ 在東京仍然無效', () => {
+    for (const other of [undefined, { hp: 10, energy: 3 }, { hp: 4, energy: 0 }]) {
+      const html = render({
+        inTokyo: true,
+        dice: ['heal', 1, 2, 3, 3, 1],
+        cards: ['ray'],
+        ...(other ? { other } : {}),
+      });
+      expect(html).toContain('dead-heart');
+      expect(html).toContain('治療無效');
+    }
   });
 
   it('還沒擲骰、或已進入買牌階段：不顯示提醒', () => {
