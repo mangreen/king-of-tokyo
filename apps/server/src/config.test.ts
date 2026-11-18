@@ -11,6 +11,7 @@ describe('loadConfig', () => {
       maxRooms: 2000,
       cardSetsDir: 'card-sets',
       maxConnections: 10_000,
+      serverModeEnabled: true,
       webDir: null,
       allowSameOrigin: false,
       idleKickMs: 600_000,

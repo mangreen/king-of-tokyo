@@ -11,7 +11,7 @@ import type { GameClientOptions } from '../useGameClient.js';
 import { localLinkFactory } from './localLink.js';
 import { createWorkerEndpoint, createWorkerHostSide } from './localWorker.js';
 import { setRoleEndpoint, setRoleStatus } from './roleStatus.js';
-import { parseMode, type Mode } from './mode.js';
+import { parseMode, serverModeEnabled, type Mode } from './mode.js';
 import { createRelaySocket } from './relaySocket.js';
 import { socketLinkFactory } from './socketLink.js';
 
@@ -33,7 +33,10 @@ export function createClientOptions(
   location: { search: string; origin: string },
   serverUrl: string | undefined,
 ): ClientOptions {
-  const mode = parseMode(location.search);
+  const mode = parseMode(
+    location.search,
+    serverModeEnabled(import.meta.env as { VITE_DISABLE_SERVER_MODE?: string }),
+  );
   const target: ClientOptions['target'] = { code: null, resume: null };
   const url = resolveServerUrl(serverUrl, location.origin);
 

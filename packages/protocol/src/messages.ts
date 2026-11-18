@@ -87,6 +87,8 @@ export const ERROR_CODES = [
   'session_replaced',
   'server_full',
   'idle_timeout',
+  /** 這台伺服器（例如試玩版）不開放伺服器權威模式。 */
+  'mode_disabled',
   /** 房主模式：中繼把房間關了（房主離開、逾時），無法接回。 */
   'room_closed',
 ] as const;

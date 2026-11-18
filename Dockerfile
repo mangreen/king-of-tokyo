@@ -75,8 +75,9 @@ EXPOSE 80
 # docker compose 與 CI 都不會碰它。
 FROM dev AS demo-build
 # VITE_SERVER_URL 設成空字串＝網頁連同一個網址；不帶 sourcemap；預先壓縮
+# VITE_DISABLE_SERVER_MODE=1：大廳不顯示「伺服器模式」（房間跑在伺服器上，會耗用免費額度）
 RUN pnpm --filter @kot/server build \
-    && VITE_SERVER_URL= VITE_NO_SOURCEMAP=1 pnpm --filter @kot/web build \
+    && VITE_SERVER_URL= VITE_NO_SOURCEMAP=1 VITE_DISABLE_SERVER_MODE=1 pnpm --filter @kot/web build \
     && node scripts/precompress.mjs apps/web/dist
 
 FROM node:22-alpine AS demo
@@ -91,7 +92,7 @@ COPY --from=demo-build /app/apps/server/dist ./apps/server/dist
 COPY --from=demo-build /app/apps/web/dist ./web
 # 只帶原創卡組；使用者自備的卡表絕不進映像（見 .dockerignore）
 COPY card-sets/original ./card-sets/original
-# 限制：同時最多 5 個房間、30 個連線，保護 Cloud Run 免費額度。
+# 限制：同時最多 5 個房間、30 個連線、不開放伺服器模式（ENABLE_SERVER_MODE=false），保護 Cloud Run 免費額度。
 # PORT 由 Cloud Run 注入（預設 8080）；ALLOWED_ORIGINS 保留預設值，但同來源一律放行。
 ENV NODE_ENV=production \
     CARD_SETS_DIR=/app/card-sets \
@@ -100,6 +101,7 @@ ENV NODE_ENV=production \
     MAX_ROOMS=5 \
     MAX_CONNECTIONS=30 \
     IDLE_KICK_MS=300000 \
+    ENABLE_SERVER_MODE=false \
     PORT=8080
 USER node
 WORKDIR /app/apps/server

@@ -53,6 +53,7 @@ async function start(graceMs = 30_000): Promise<string> {
     cardSetsDir: 'card-sets',
     maxConnections: 100,
     idleKickMs: 0,
+    serverModeEnabled: true,
     webDir: null,
     allowSameOrigin: false,
   };

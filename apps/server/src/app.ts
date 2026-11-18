@@ -109,6 +109,15 @@ export function buildApp(config: ServerConfig, options: AppOptions = {}): App {
   const { gateway, rooms, sessions, cardSetInfos } = host;
 
   io.on('connection', (socket) => {
+    // 試玩版不開放伺服器模式：房間要跑在伺服器上，會耗用免費額度。房主模式走中繼命名空間，不受影響
+    if (!config.serverModeEnabled) {
+      socket.emit(EVENTS.serverError, {
+        code: 'mode_disabled',
+        message: '這個網站不開放伺服器模式，請改用「線上對戰（房主模式）」或「離線單機」',
+      });
+      socket.disconnect(true);
+      return;
+    }
     // 同時連線數上限（試玩版保護免費額度）：已連線的人不受影響，新來的被告知名額已滿
     if (io.engine.clientsCount > config.maxConnections) {
       socket.emit(EVENTS.serverError, {
