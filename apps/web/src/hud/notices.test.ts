@@ -446,3 +446,13 @@ describe('卡牌使用提示', () => {
     expect(describeImpact({ hp: 0, vp: 0, energy: 0, eliminated: false })).toBe('');
   });
 });
+
+describe('震地步伐的觸發提示', () => {
+  it('說出持有者、效果持續到何時', () => {
+    const t = texts([
+      { type: 'card_triggered', seat: 1, cardId: 'quake' },
+      { type: 'dice_penalty', seats: [1] },
+    ]);
+    expect(t.join('|')).toContain('所有怪獸少擲 1 顆骰子，直到Bob的下一個回合開始');
+  });
+});

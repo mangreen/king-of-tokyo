@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Action, GameState, Monster, RulesEnv } from '@kot/rules';
+import {
+  diceBreakdown,
+  type Action,
+  type GameState,
+  type Monster,
+  type RulesEnv,
+} from '@kot/rules';
 import type { GameActionInput, RoomSnapshot } from '@kot/protocol';
 import type { ActionGroup, LabelContext } from '../actions.js';
 import { Countdown } from '../views/Countdown.js';
@@ -20,7 +26,7 @@ import {
   ruleConfigOf,
   ShopPanel,
 } from './Panels.js';
-import { endRules } from './rulesText.js';
+import { diceNotesFor, endRules } from './rulesText.js';
 
 const MAX_TOASTS = 4;
 
@@ -174,6 +180,30 @@ export function GameHud(p: HudProps) {
   const rules = ruleConfigOf(state);
   const goal = rules.victoryPoints;
   const actor = p.actorSeat === null ? null : p.nameOf(p.actorSeat);
+  // 自己持有、正在持續生效中的牌（震地步伐：全場少擲骰子，直到自己的下一個回合開始）
+  const lingering: Record<string, string> = {};
+  if (me && state.stomp.includes(me.seat)) {
+    for (const id of me.cards) {
+      if (p.env.cards[id]?.effectId === 'stomp') {
+        lingering[id] = '所有怪獸少擲 1 顆骰子，直到你的下一個回合開始';
+      }
+    }
+  }
+  // 骰子區的「為什麼這回合少擲／多擲」說明（震地步伐、縮小、額外回合、加骰卡）
+  const diceNotes =
+    state.phase === 'over'
+      ? []
+      : diceNotesFor(diceBreakdown(state, p.env), {
+          diceCount: state.turn.diceCount,
+          cardName: (id) => p.env.cards[id]?.name ?? id,
+          nameOf: p.nameOf,
+          stompCardName: (seat) => {
+            const id = state.monsters
+              .find((m) => m.seat === seat)
+              ?.cards.find((c) => p.env.cards[c]?.effectId === 'stomp');
+            return id === undefined ? undefined : p.env.cards[id]?.name;
+          },
+        });
 
   const tabLabel = TABS.find((t) => t.key === tab)?.label;
 
@@ -216,6 +246,7 @@ export function GameHud(p: HudProps) {
         <div className="hud-actions hud-pop">
           <ActionPanel
             state={state}
+            diceNotes={diceNotes}
             actorSeat={p.actorSeat}
             myTurn={p.myTurn}
             me={me}
@@ -292,7 +323,7 @@ export function GameHud(p: HudProps) {
           {tab === 'log' && <LogPanel log={p.log} rules={rules} />}
           {tab === 'chat' && p.chat}
           {tab === 'rules' && <RulesPanel state={state} nameOf={p.nameOf} />}
-          {tab === 'mine' && <MyCardsPanel monster={me} env={p.env} />}
+          {tab === 'mine' && <MyCardsPanel monster={me} env={p.env} lingering={lingering} />}
           {tab === 'settings' && p.settings}
           {tab === 'about' && <AboutPanel />}
         </div>

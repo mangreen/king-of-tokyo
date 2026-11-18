@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { diceRules, diceSummary, endRules, tokyoRules, type RuleConfig } from './rulesText.js';
+import {
+  diceNotesFor,
+  diceRules,
+  diceSummary,
+  endRules,
+  tokyoRules,
+  type RuleConfig,
+} from './rulesText.js';
 
 const cfg: RuleConfig = {
   victoryPoints: 20,
@@ -53,5 +60,64 @@ describe('規則文字取自本局設定', () => {
   it('東京灣只在 5–6 人時說明', () => {
     expect(text(tokyoRules(cfg))).not.toContain('東京灣停用');
     expect(text(tokyoRules({ ...cfg, playerCount: 6 }))).toContain('東京灣停用');
+  });
+});
+
+describe('diceNotesFor（為什麼這回合骰子數不是基本數）', () => {
+  const ctx = (diceCount: number) => ({
+    diceCount,
+    cardName: (id: string) => `卡-${id}`,
+    nameOf: (s: number) => ['我', 'Bob', 'Cat'][s] ?? '?',
+    stompCardName: (s: number) => (s === 1 ? '震地步伐' : undefined),
+  });
+  it('沒有任何增減：沒有說明', () => {
+    expect(diceNotesFor({ base: 6, mods: [], total: 6 }, ctx(6))).toEqual([]);
+  });
+  it('震地步伐：指出牌名、持有者，以及何時結束', () => {
+    const notes = diceNotesFor(
+      { base: 6, mods: [{ kind: 'stomp', amount: -1, seats: [1] }], total: 5 },
+      ctx(5),
+    );
+    expect(notes.map((n) => n.text)).toEqual([
+      '本回合擲 5 顆骰子（基本 6 顆）',
+      '震地步伐（Bob）：所有怪獸少擲 1 顆，直到Bob的下一個回合開始',
+    ]);
+    expect(notes[1]?.icon).toBe('🥴');
+  });
+  it('縮小、額外回合、加骰、多個震地持有者各一行', () => {
+    const notes = diceNotesFor(
+      {
+        base: 6,
+        mods: [
+          { kind: 'extra', amount: 1, cardIds: ['xd'] },
+          { kind: 'shrink', amount: -2 },
+          { kind: 'stomp', amount: -2, seats: [1, 2] },
+          { kind: 'extraTurn', amount: -1 },
+        ],
+        total: 2,
+      },
+      ctx(2),
+    );
+    expect(notes.map((n) => n.text)).toEqual([
+      '本回合擲 2 顆骰子（基本 6 顆）',
+      '卡-xd：多擲 1 顆',
+      '縮小 ×2：少擲 2 顆',
+      '震地步伐（Bob、Cat）：所有怪獸少擲 2 顆，直到Bob、Cat的下一個回合開始',
+      '額外回合：少擲 1 顆',
+    ]);
+  });
+  it('回合中途買了加骰卡（明細總和與實際骰數對不上）：不列出會誤導的加骰項目', () => {
+    const notes = diceNotesFor(
+      {
+        base: 6,
+        mods: [
+          { kind: 'extra', amount: 1, cardIds: ['xd'] },
+          { kind: 'stomp', amount: -1, seats: [1] },
+        ],
+        total: 6,
+      },
+      ctx(5),
+    );
+    expect(notes.map((n) => n.kind)).toEqual(['summary', 'stomp']);
   });
 });

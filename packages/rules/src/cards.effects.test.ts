@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction } from './engine.js';
+import { diceBreakdown } from './legal.js';
+import { stompHoldersAffecting } from './ops.js';
 import { checkInvariants } from './invariants.js';
 import type { CardDef } from './cards/types.js';
 import { card, makeEnv, makeState, mon, must, resolveWith, yieldQueue } from './test-utils.js';
@@ -532,6 +534,69 @@ describe('R-CARD-20 回合結束效果', () => {
     expect(s.turn.seat).toBe(0);
     expect(s.stomp).toEqual([]);
     expect(s.turn.diceCount).toBe(6);
+  });
+
+  it('震地步伐：持有者被淘汰後效果就結束（他不會再有「下一個回合開始」），不會永遠少擲', () => {
+    const st = card('ts', 'stomp', { params: { min: 4 } });
+    const { env, state } = world([st], 3, { 0: { cards: ['ts'] } });
+    let s = buyPhase(state);
+    s.turn.vpGained = 4;
+    s = must(s, { type: 'endTurn', seat: 0 }, env).state;
+    expect(s.stomp).toEqual([0]);
+    expect(s.turn.seat).toBe(1);
+    // seat 0 在東京只剩 1 HP，seat 1 這回合（少擲 1 顆）把他打死
+    const m0 = s.monsters[0];
+    if (!m0) throw new Error('no monster');
+    m0.hp = 1;
+    m0.location = 'city';
+    s = resolveWith(s, ['attack', 1, 1, 2, 2], env).state;
+    expect(mon(s, 0).alive).toBe(false);
+    expect(s.stomp).toEqual([]);
+    s = must(buyPhase(s), { type: 'endTurn', seat: 1 }, env).state;
+    expect(s.turn.seat).toBe(2);
+    expect(s.turn.diceCount).toBe(6); // 效果已隨持有者淘汰而結束
+    check(s);
+  });
+
+  it('骰數明細：基本數、加骰、縮小、震地步伐、額外回合懲罰各自列出，總和等於實際骰數', () => {
+    const xd = card('xd', 'extra_dice');
+    const { env, state } = world([xd], 3, {
+      1: { cards: ['xd'], tokens: { poison: 0, shrink: 2 } },
+    });
+    state.stomp = [0, 2];
+    state.turn = { ...state.turn, seat: 1, dicePenalty: 1 };
+    const b = diceBreakdown(state, env);
+    expect(b.base).toBe(6);
+    expect(b.mods).toEqual([
+      { kind: 'extra', amount: 1, cardIds: ['xd'] },
+      { kind: 'shrink', amount: -2 },
+      { kind: 'stomp', amount: -2, seats: [0, 2] },
+      { kind: 'extraTurn', amount: -1 },
+    ]);
+    expect(b.total).toBe(2);
+    // 持有者自己不受自己的震地步伐影響
+    expect(stompHoldersAffecting([0, 2], 0)).toEqual([2]);
+    expect(diceBreakdown(state, env, 0).mods.find((m) => m.kind === 'stomp')).toMatchObject({
+      seats: [2],
+    });
+    // 沒有任何增減時，mods 是空的
+    const plain = world([], 3, {});
+    expect(diceBreakdown(plain.state, plain.env)).toEqual({ base: 6, mods: [], total: 6 });
+  });
+
+  it('骰數明細的總和永遠等於回合開始實際發的骰子數', () => {
+    const st = card('ts', 'stomp', { params: { min: 4 } });
+    const xd = card('xd', 'extra_dice');
+    const { env, state } = world([st, xd], 3, {
+      0: { cards: ['ts'] },
+      1: { cards: ['xd'], tokens: { poison: 0, shrink: 1 } },
+    });
+    let s = buyPhase(state);
+    s.turn.vpGained = 4;
+    s = must(s, { type: 'endTurn', seat: 0 }, env).state;
+    expect(s.turn.seat).toBe(1);
+    expect(diceBreakdown(s, env).total).toBe(s.turn.diceCount);
+    expect(s.turn.diceCount).toBe(6 + 1 - 1 - 1);
   });
 
   it('R-CARD-39 毒傷：回合結束時受到指示物數量的傷害，不是攻擊；致死沒有擊殺者', () => {
