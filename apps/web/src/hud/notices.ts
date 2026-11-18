@@ -348,15 +348,29 @@ export function noticesFor(events: readonly GameEvent[], c: NoticeContext): Noti
           push({ kind: 'danger', icon: '❤️‍🔥', text: `你的 HP 只剩 ${String(e.hp)}！` });
         }
         break;
-      case 'entered_tokyo':
+      case 'entered_tokyo': {
         if (covered.has(idx)) break;
+        // 進入東京馬上 +1 ⭐（緊接在後的 vp_gained）：寫在同一則提示裡，讓所有人都知道
+        const next = events[idx + 1];
+        const bonus =
+          next?.type === 'vp_gained' && next.seat === e.seat && next.reason === 'enter_tokyo'
+            ? next.amount
+            : 0;
         push({
-          kind: 'info',
+          kind: bonus > 0 && mine(e.seat) ? 'good' : 'info',
           icon: '🗼',
-          text: `${who(e.seat)}進入${LOC[e.location]}`,
+          text: `${who(e.seat)}進入${LOC[e.location]}${bonus > 0 ? `，+${String(bonus)} ⭐` : ''}`,
         });
         break;
+      }
       case 'vp_gained': {
+        if (e.reason === 'tokyo_start') {
+          push({
+            kind: mine(e.seat) ? 'good' : 'info',
+            icon: '🗼',
+            text: `${who(e.seat)}佔領著東京，回合開始 +${String(e.amount)} ⭐`,
+          });
+        }
         if (e.reason === 'dice') {
           push({
             kind: mine(e.seat) ? 'good' : 'info',

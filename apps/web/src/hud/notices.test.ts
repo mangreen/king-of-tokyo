@@ -446,3 +446,48 @@ describe('卡牌使用提示', () => {
     expect(describeImpact({ hp: 0, vp: 0, energy: 0, eliminated: false })).toBe('');
   });
 });
+
+describe('東京的 VP 提示', () => {
+  it('進入東京緊接著 +1 ⭐：同一則 🗼 提示寫出加分，所有人看得到', () => {
+    const enter: GameEvent[] = [
+      { type: 'entered_tokyo', seat: 1, location: 'city' },
+      { type: 'vp_gained', seat: 1, amount: 1, reason: 'enter_tokyo' },
+    ];
+    const other = noticesFor(enter, ctx());
+    expect(other).toHaveLength(1);
+    expect(other[0]).toMatchObject({ icon: '🗼', text: 'Bob進入東京市，+1 ⭐' });
+    const mineEnter = noticesFor(
+      [
+        { type: 'entered_tokyo', seat: 0, location: 'bay' },
+        { type: 'vp_gained', seat: 0, amount: 1, reason: 'enter_tokyo' },
+      ],
+      ctx(),
+    );
+    expect(mineEnter[0]).toMatchObject({ kind: 'good', text: '你進入東京灣，+1 ⭐' });
+  });
+
+  it('回合開始還在東京 +2 ⭐：🗼 提示（自己是 good，別人是 info）', () => {
+    const start = (seat: number): GameEvent[] => [
+      { type: 'turn_started', seat, round: 2 },
+      { type: 'vp_gained', seat, amount: 2, reason: 'tokyo_start' },
+    ];
+    expect(noticesFor(start(1), ctx())).toMatchObject([
+      { kind: 'info', icon: '🗼', text: 'Bob佔領著東京，回合開始 +2 ⭐' },
+    ]);
+    expect(noticesFor(start(0), ctx()).map((n) => [n.kind, n.icon, n.text])).toEqual([
+      ['good', '🎲', '輪到你了！'],
+      ['good', '🗼', '你佔領著東京，回合開始 +2 ⭐'],
+    ]);
+  });
+
+  it('買牌空降東京：仍然只有牌的提示，不重複「進入東京」，也不另外跳 +1 ⭐', () => {
+    const t = texts([
+      { type: 'card_bought', seat: 0, cardId: 'x', cost: 5, from: null },
+      { type: 'card_used', seat: 0, cardId: 'x' },
+      { type: 'entered_tokyo', seat: 0, location: 'city' },
+      { type: 'vp_gained', seat: 0, amount: 1, reason: 'enter_tokyo' },
+    ]);
+    expect(t.filter((x) => x.includes('進入東京'))).toHaveLength(1);
+    expect(t.some((x) => x.startsWith('你進入東京市，+1'))).toBe(false);
+  });
+});

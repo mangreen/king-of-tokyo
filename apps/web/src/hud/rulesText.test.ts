@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { diceRules, diceSummary, endRules, tokyoRules, type RuleConfig } from './rulesText.js';
+import {
+  diceRules,
+  diceSummary,
+  endRules,
+  tokyoHeartHint,
+  tokyoRules,
+  type RuleConfig,
+} from './rulesText.js';
 
 const cfg: RuleConfig = {
   victoryPoints: 20,
@@ -53,5 +60,57 @@ describe('規則文字取自本局設定', () => {
   it('東京灣只在 5–6 人時說明', () => {
     expect(text(tokyoRules(cfg))).not.toContain('東京灣停用');
     expect(text(tokyoRules({ ...cfg, playerCount: 6 }))).toContain('東京灣停用');
+  });
+});
+
+describe('tokyoHeartHint（在東京擲到 ❤️）', () => {
+  const base = {
+    dice: ['heal', 1, 'heal', 'attack', 2, 3] as const,
+    kept: new Set<number>(),
+    healsOthers: false,
+    who: '你',
+  };
+  it('不在東京（或位置未知）：沒有任何提示', () => {
+    for (const inTokyo of [false, null]) {
+      const h = tokyoHeartHint({ ...base, dice: [...base.dice], inTokyo });
+      expect(h).toMatchObject({ banner: null, keptWarn: null });
+      expect(h.deadHearts.size).toBe(0);
+    }
+  });
+  it('在東京：提醒 ❤️ 不能補血，所有 ❤️ 骰子標成無效', () => {
+    const h = tokyoHeartHint({ ...base, dice: [...base.dice], inTokyo: true });
+    expect(h.banner).toBe('🗼 你在東京：❤️ 不能補血，不必鎖定 ❤️ 骰面');
+    expect(h.keptWarn).toBeNull();
+    expect([...h.deadHearts]).toEqual([0, 2]);
+  });
+  it('鎖定了 ❤️ 骰面：出現警告並指出顆數；只鎖定其他骰面則沒有警告', () => {
+    const warn = tokyoHeartHint({
+      ...base,
+      dice: [...base.dice],
+      inTokyo: true,
+      kept: new Set([0, 2, 4]),
+    });
+    expect(warn.keptWarn).toBe('已保留 2 顆 ❤️：在東京補不了血，建議放開重擲');
+    const fine = tokyoHeartHint({
+      ...base,
+      dice: [...base.dice],
+      inTokyo: true,
+      kept: new Set([4]),
+    });
+    expect(fine.keptWarn).toBeNull();
+  });
+  it('持有治癒光束：❤️ 仍可治療別人，所以只提醒、不標成無效', () => {
+    const h = tokyoHeartHint({
+      ...base,
+      dice: [...base.dice],
+      inTokyo: true,
+      healsOthers: true,
+      kept: new Set([0]),
+      who: 'Bob',
+    });
+    expect(h.banner).toContain('Bob在東京');
+    expect(h.banner).toContain('治癒光束');
+    expect(h.keptWarn).toContain('不能治療自己');
+    expect(h.deadHearts.size).toBe(0);
   });
 });

@@ -12,7 +12,14 @@ import {
 import { Die3D } from '../scene/Die3D.js';
 import { seatColor } from '../scene/layout.js';
 import { CardBody, CardChip } from './CardChip.js';
-import { diceRules, diceSummary, endRules, tokyoRules, type RuleConfig } from './rulesText.js';
+import {
+  diceRules,
+  diceSummary,
+  endRules,
+  tokyoHeartHint,
+  tokyoRules,
+  type RuleConfig,
+} from './rulesText.js';
 
 type Env = RulesEnv;
 type Act = (a: GameActionInput) => void;
@@ -378,6 +385,15 @@ export function ActionPanel(p: ActionProps) {
   const actorMonster = state.monsters.find((m) => m.seat === p.actorSeat);
   const inTokyo = actorMonster ? actorMonster.location !== null : null;
   const summary = diceSummary(dice as readonly Face[], inTokyo);
+  const heartHint = tokyoHeartHint({
+    dice: dice as readonly Face[],
+    kept,
+    inTokyo,
+    healsOthers: (actorMonster?.cards ?? []).some(
+      (id) => p.labelCtx.cardDef?.(id)?.effectId === 'heal_others',
+    ),
+    who: p.myTurn || p.actorSeat === null ? '你' : p.nameOf(p.actorSeat),
+  });
   return (
     <div className="action-panel">
       <p className="prompt">
@@ -390,7 +406,8 @@ export function ActionPanel(p: ActionProps) {
           dice.map((face, i) => (
             <button
               key={i}
-              className={kept.has(i) ? 'die kept' : 'die'}
+              className={`die${kept.has(i) ? ' kept' : ''}${heartHint.deadHearts.has(i) ? ' dead-heart' : ''}`}
+              title={heartHint.deadHearts.has(i) ? '在東京不能補血' : undefined}
               disabled={!p.canToggle}
               onClick={() => {
                 p.onToggle(i);
@@ -402,6 +419,11 @@ export function ActionPanel(p: ActionProps) {
           ))
         )}
       </div>
+      {state.phase === 'roll' && heartHint.banner !== null && dice.length > 0 && (
+        <p className={`tokyo-heart${heartHint.keptWarn === null ? '' : ' warn'}`} role="status">
+          {heartHint.keptWarn ?? heartHint.banner}
+        </p>
+      )}
       {state.phase === 'roll' && (
         <p className="muted small">
           已擲 {rollsUsed} / {p.rollMax} 次{p.canToggle && '；點骰子可「保留」，其餘會重擲'}
