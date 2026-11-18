@@ -23,6 +23,14 @@ describe('登入頁的玩法選擇', () => {
     expect(html).toMatch(/checked=""\s+value="p2p"/);
   });
 
+  it('試玩版（沒有伺服器模式）：玩法選擇只列房主模式與離線單機', () => {
+    const html = render({ modes: ['p2p', 'offline'] });
+    expect(html).toContain('線上對戰（房主模式）');
+    expect(html).toContain('離線單機');
+    expect(html).not.toContain('伺服器模式');
+    expect(html).not.toContain('value="server"');
+  });
+
   it('離線模式：說明第一次要連網、之後可離線開啟', () => {
     const html = render({ mode: 'offline', hostMode: false });
     expect(html).toContain('data-testid="offline-cache-hint"');

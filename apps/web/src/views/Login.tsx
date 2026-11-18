@@ -8,6 +8,7 @@ export function Login({
   inviteCode,
   hostMode = false,
   mode,
+  modes = ['p2p', 'offline', 'server'],
   onModeChange,
 }: {
   onLogin: (nickname: string, roomCode?: string) => void;
@@ -17,6 +18,8 @@ export function Login({
   hostMode?: boolean;
   /** 目前的連線模式，以及切換（會重新載入頁面）。 */
   mode?: Mode;
+  /** 大廳可以選的玩法（試玩版沒有伺服器模式）；預設三種都列。 */
+  modes?: readonly Mode[];
   onModeChange?: (mode: Mode) => void;
 }) {
   const [cached, setCached] = useState(false);
@@ -51,7 +54,7 @@ export function Login({
       {mode !== undefined && onModeChange !== undefined && !inviteCode && (
         <fieldset className="mode-picker" data-testid="mode-picker">
           <legend>玩法</legend>
-          {(['p2p', 'offline', 'server'] as const).map((m) => (
+          {modes.map((m) => (
             <label key={m} className={mode === m ? 'on' : undefined}>
               <input
                 type="radio"

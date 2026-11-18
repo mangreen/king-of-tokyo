@@ -13,6 +13,7 @@
 - **限制**（寫死在 Dockerfile 的 `ENV`，可用 `--set-env-vars` 覆寫）：
   - `MAX_ROOMS=5`：同時最多 5 個房間，滿了建房會回「伺服器房間數已達上限」。
   - `MAX_CONNECTIONS=30`：同時最多 30 個連線（含在大廳的人），超過的新連線會看到「試玩名額已滿」。
+  - `ENABLE_SERVER_MODE=false`：**不開放伺服器模式**。這個模式的房間跑在伺服器上（耗用 CPU 與流量），試玩版只剩房主模式（房間跑在房主瀏覽器，伺服器只登記與轉送）與離線單機。做了兩層：網頁在建置時（`VITE_DISABLE_SERVER_MODE=1`）就不顯示「伺服器模式」，網址手動加 `?mode=server` 也會退回房主模式；伺服器端再拒絕這類連線（回 `mode_disabled`），避免有人繞過畫面。房主模式的中繼不受影響。要在自己的環境開放，部署時加 `--set-env-vars ENABLE_SERVER_MODE=true`（網頁那一層是建置時決定，要重建 image 並拿掉 `VITE_DISABLE_SERVER_MODE`）。
   - `IDLE_KICK_MS=300000`：連線 5 分鐘沒有任何操作（滑鼠、鍵盤、觸控、遊戲動作）就被中斷，顯示「重新連線」按鈕，身分與座位保留。**這是為了不讓「開著網頁就離開」的分頁一直佔著執行個體**：Cloud Run 只要有 WebSocket 連著，該執行個體就持續計費，而客戶端斷線會自動重連，單靠 60 分鐘的請求逾時擋不住。
 - **只在明確要求時才建**：`make demo-image`。`make build`、`make test`、docker compose、CI 都不會建這個 image。
 

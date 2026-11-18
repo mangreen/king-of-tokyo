@@ -21,6 +21,7 @@ const config: ServerConfig = {
   maxRooms: 50,
   cardSetsDir: 'card-sets',
   maxConnections: 100,
+  serverModeEnabled: true,
   webDir: null,
   allowSameOrigin: false,
   idleKickMs: 0,

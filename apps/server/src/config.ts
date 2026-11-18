@@ -27,6 +27,14 @@ const EnvSchema = z.object({
    * 玩家的身分與座位保留，回來按「重新連線」就接回。
    */
   IDLE_KICK_MS: z.coerce.number().int().min(0).max(86_400_000).default(600_000),
+  /**
+   * 是否開放「伺服器模式」（房間跑在伺服器上）。試玩版設為 false：伺服器只剩登記與轉送（房主模式），
+   * 不替任何人跑房間，避免有人選到而耗用免費額度。
+   */
+  ENABLE_SERVER_MODE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   /** 設定後，由伺服器直接提供建置好的網頁（單一容器的試玩版）。 */
   WEB_DIR: z
     .string()
@@ -52,6 +60,8 @@ export interface ServerConfig {
   maxConnections: number;
   /** 連線閒置多久沒有任何訊息就中斷（毫秒）；0＝不踢。 */
   idleKickMs: number;
+  /** 是否開放伺服器模式；false 時伺服器模式的連線一律被拒絕（房主模式的中繼不受影響）。 */
+  serverModeEnabled: boolean;
   /** 建置好的網頁目錄；null＝不提供網頁（開發、前後端分開部署）。 */
   webDir: string | null;
   /** 允許 Origin 與請求 Host 相同的連線（單一容器、同網址的部署）。 */
@@ -77,6 +87,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     cardSetsDir: parsed.CARD_SETS_DIR,
     maxConnections: parsed.MAX_CONNECTIONS,
     idleKickMs: parsed.IDLE_KICK_MS,
+    serverModeEnabled: parsed.ENABLE_SERVER_MODE,
     webDir: parsed.WEB_DIR,
     allowSameOrigin: parsed.ALLOW_SAME_ORIGIN,
   };

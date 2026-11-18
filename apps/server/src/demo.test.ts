@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EVENTS, PROTOCOL_VERSION, ServerErrorSchema } from '@kot/protocol';
+import { EVENTS, PROTOCOL_VERSION, RELAY_NAMESPACE, ServerErrorSchema } from '@kot/protocol';
 import { buildApp, type App } from './app.js';
 import type { ServerConfig } from './config.js';
 import { testCardSets } from '@kot/room/testing-fs';
@@ -36,6 +36,7 @@ function config(over: Partial<ServerConfig> = {}): ServerConfig {
     webDir: webRoot(),
     allowSameOrigin: true,
     idleKickMs: 0,
+    serverModeEnabled: true,
     ...over,
   };
 }
@@ -182,6 +183,40 @@ describe('連線數上限', () => {
     const hello = new Promise<unknown>((resolve) => d.once(EVENTS.serverHello, resolve));
     d.emit(EVENTS.clientHello, { protocolVersion: PROTOCOL_VERSION, nickname: 'late' });
     expect(await hello).toMatchObject({ nickname: 'late' });
+  });
+});
+
+describe('試玩版不開放伺服器模式（ENABLE_SERVER_MODE=false）', () => {
+  it('伺服器模式的連線收到 mode_disabled 並被中斷，不佔連線名額', async () => {
+    const { app, url, host } = await start(config({ serverModeEnabled: false }));
+    const s = client(url, { Origin: `http://${host}` });
+    const error = await new Promise<unknown>((resolve) => s.once(EVENTS.serverError, resolve));
+    expect(ServerErrorSchema.parse(error)).toMatchObject({ code: 'mode_disabled' });
+    await vi.waitFor(() => {
+      expect(s.connected).toBe(false);
+    });
+    await vi.waitFor(() => {
+      expect(app.io.engine.clientsCount).toBe(0);
+    });
+  });
+
+  it('房主模式的中繼不受影響（仍可連上）；預設（開放）時伺服器模式照常握手', async () => {
+    const off = await start(config({ serverModeEnabled: false }));
+    const relay = connect(`${off.url}${RELAY_NAMESPACE}`, {
+      transports: ['websocket'],
+      forceNew: true,
+      reconnection: false,
+      extraHeaders: { Origin: `http://${off.host}` },
+    });
+    sockets.push(relay);
+    await whenConnected(relay);
+    expect(relay.connected).toBe(true);
+
+    const on = await start(config());
+    const s = client(on.url, { Origin: `http://${on.host}` });
+    const hello = new Promise<unknown>((resolve) => s.once(EVENTS.serverHello, resolve));
+    s.emit(EVENTS.clientHello, { protocolVersion: PROTOCOL_VERSION, nickname: 'ok' });
+    expect(await hello).toMatchObject({ nickname: 'ok' });
   });
 });
 

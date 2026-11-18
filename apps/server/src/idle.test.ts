@@ -25,6 +25,7 @@ function config(idleKickMs: number): ServerConfig {
     maxRooms: 50,
     cardSetsDir: 'card-sets',
     maxConnections: 100,
+    serverModeEnabled: true,
     idleKickMs,
     webDir: null,
     allowSameOrigin: false,
