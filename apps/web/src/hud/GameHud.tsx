@@ -8,6 +8,7 @@ import { latestVersion, takeNew } from '../scene/feed.js';
 import { noticesFor, shopNotice } from './notices.js';
 import { shouldHoldEndTurn, visibleShopToasts } from './shopGate.js';
 import { ToastHost, type Toast } from './Toasts.js';
+import { AboutPanel } from './AboutPanel.js';
 import { PeekCard } from './PeekCard.js';
 import { Tip } from './Tip.js';
 import {
@@ -23,7 +24,7 @@ import { endRules } from './rulesText.js';
 
 const MAX_TOASTS = 4;
 
-export type HudTab = 'players' | 'shop' | 'log' | 'chat' | 'rules' | 'mine' | 'settings';
+export type HudTab = 'players' | 'shop' | 'log' | 'chat' | 'rules' | 'mine' | 'settings' | 'about';
 
 const TABS: { key: HudTab; label: string }[] = [
   { key: 'players', label: '👥 玩家' },
@@ -33,6 +34,7 @@ const TABS: { key: HudTab; label: string }[] = [
   { key: 'rules', label: '📖 規則' },
   { key: 'mine', label: '🃏 我的卡牌' },
   { key: 'settings', label: '⚙ 設定' },
+  { key: 'about', label: 'ℹ 關於' },
 ];
 
 export interface HudProps {
@@ -292,6 +294,7 @@ export function GameHud(p: HudProps) {
           {tab === 'rules' && <RulesPanel state={state} nameOf={p.nameOf} />}
           {tab === 'mine' && <MyCardsPanel monster={me} env={p.env} />}
           {tab === 'settings' && p.settings}
+          {tab === 'about' && <AboutPanel />}
         </div>
       </div>
       {p.tools}

@@ -8,6 +8,9 @@
   --muted: #6b665a;
   --ok: #2e8b57;
   --warn: #b8860b;
+  /* 黑色的 GitHub 圖示：深色主題要反白 */
+  --mark-filter: none;
+  --mark-filter-hover: invert(1);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -16,6 +19,8 @@
     --card: #231f16;
     --line: #f2eee0;
     --muted: #a39d8a;
+    --mark-filter: invert(1);
+    --mark-filter-hover: none;
   }
 }
 * {
@@ -576,6 +581,9 @@ main.wide {
   flex-wrap: wrap;
   gap: 0.35rem;
 }
+.hud-tabs button {
+  flex: 1 1 auto;
+}
 .hud-tabs button,
 .goal-chip,
 .rule-toggle {
@@ -875,7 +883,7 @@ main.wide {
   font-size: 0.85rem;
 }
 .hud-tabs button {
-  padding: 0.3rem 0.55rem;
+  padding: 0.3rem 0.35rem;
 }
 .hud .dice {
   gap: 0.35rem;
@@ -1504,4 +1512,42 @@ main.wide {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* 關於 */
+.about h3 {
+  margin: 0 0 0.4rem;
+}
+.about p {
+  margin: 0.4rem 0;
+  line-height: 1.55;
+}
+.about-copyright {
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+.about-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.about-repo img {
+  filter: var(--mark-filter);
+}
+.about-repo:hover,
+.about-repo:focus-visible {
+  background: var(--fg);
+  color: var(--bg);
+}
+.about-repo:hover img,
+.about-repo:focus-visible img {
+  filter: var(--mark-filter-hover);
 }
