@@ -10,6 +10,11 @@ interface Props {
   onAddBot: () => void;
   onRemoveBot: (id: string) => void;
   onLeave: () => void;
+  /**
+   * 別人能不能用邀請連結／房號加進這個房間。離線單機的房間只存在這個分頁（本機 Worker），
+   * 連結點開會被當成房主模式去找不存在的房間，所以離線時不顯示分享。預設可分享。
+   */
+  shareable?: boolean;
 }
 
 export function RoomView({
@@ -20,6 +25,7 @@ export function RoomView({
   onAddBot,
   onRemoveBot,
   onLeave,
+  shareable = true,
 }: Props) {
   const isHost = room.hostId === selfId;
   const me = room.players.find((p) => p.id === selfId);
@@ -36,7 +42,7 @@ export function RoomView({
       <p>
         卡牌組：<strong>{room.cardSet.name}</strong>（{room.cardSet.cardCount} 張）
       </p>
-      <ShareLink code={room.code} />
+      {shareable && <ShareLink code={room.code} />}
       <ul className="players">
         {room.players.map((p) => (
           <li key={p.id}>
