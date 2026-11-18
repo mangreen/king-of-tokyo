@@ -5,7 +5,7 @@ import type { CardDef } from './cards/types.js';
 import { card, makeEnv, makeState, mon, must, resolveWith, yieldQueue } from './test-utils.js';
 import { cloneState } from './state.js';
 import type { GameState } from './types.js';
-import type { Face, Monster } from './types.js';
+import type { Face, GameEvent, Monster } from './types.js';
 
 const A: Face = 'attack';
 const E: Face = 'energy';
@@ -420,6 +420,44 @@ describe('R-CARD-33 減傷', () => {
       prevented += saved;
     }
     expect(prevented).toBeGreaterThan(0);
+  });
+
+  it('迷彩：每次受傷都會留下「擲骰」事件——擲幾顆（等於傷害）、擲出什麼；沒擲出 ❤️ 也看得到', () => {
+    const { env, state } = duel([card('cm', 'camouflage')], {
+      1: { cards: ['cm'], location: 'city' },
+    });
+    let withoutHeal = 0;
+    let withHeal = 0;
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const r = resolveWith({ ...state, rng: seed }, [A, A, A, 1, 2, 3], env); // 3 點傷害
+      const rolled = r.events.filter((e) => e.type === 'card_rolled');
+      expect(rolled).toHaveLength(1);
+      const ev = rolled[0] as Extract<GameEvent, { type: 'card_rolled' }>;
+      expect(ev).toMatchObject({ seat: 1, cardId: 'cm' });
+      expect(ev.faces).toHaveLength(3);
+      const hearts = ev.faces.filter((f) => f === 'heal').length;
+      const saved = r.events
+        .filter((e) => e.type === 'damage_prevented')
+        .reduce((n, e) => n + (e.type === 'damage_prevented' ? e.amount : 0), 0);
+      expect(saved).toBe(hearts); // 事件裡的 ❤️ 數＝實際擋下的傷害
+      expect(hpOf(r.state, 1)).toBe(10 - (3 - hearts));
+      // 掛名：card_triggered 緊接在擲骰事件前面
+      const types = r.events.map((e) => e.type);
+      expect(types[types.indexOf('card_rolled') - 1]).toBe('card_triggered');
+      if (hearts === 0) withoutHeal += 1;
+      else withHeal += 1;
+    }
+    // 兩種情況都實際出現過：沒有 ❤️ 時以前完全沒有任何事件
+    expect(withoutHeal).toBeGreaterThan(0);
+    expect(withHeal).toBeGreaterThan(0);
+  });
+
+  it('迷彩：ARMOR 先吃掉 1 點傷害時沒有傷害可擲，就不會有擲骰事件', () => {
+    const { env, state } = duel([card('cm', 'camouflage'), card('ar', 'armor')], {
+      1: { cards: ['cm', 'ar'], location: 'city' },
+    });
+    const r = resolveWith(state, [A, 1, 2, 3, E, E], env);
+    expect(r.events.some((e) => e.type === 'card_rolled')).toBe(false);
   });
 
   it('受傷 ≥ 門檻得能量；HP 歸零觸發吃屍者', () => {

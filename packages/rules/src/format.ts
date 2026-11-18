@@ -70,6 +70,8 @@ export function describeEvent(
       return `  ${nameOf(e.seat)} 多得到 ${e.amount} 次擲骰機會（${cardName(e.cardId)}）`;
     case 'card_triggered':
       return `  ${nameOf(e.seat)} 的 ${cardName(e.cardId)} 發動`;
+    case 'card_rolled':
+      return `  ${nameOf(e.seat)} 的 ${cardName(e.cardId)} 擲骰：${faces(e.faces)}`;
     case 'card_swapped':
       return `  ${nameOf(e.seat)} 與 ${nameOf(e.from)} 換卡：給出 ${cardName(e.gave)}，拿走 ${cardName(e.took)}`;
     case 'die_changed':

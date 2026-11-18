@@ -326,6 +326,26 @@ describe('只在事件日誌出現的卡牌事件（稽核補上的提示）', (
   });
 });
 
+describe('保護色（卡牌擲骰）', () => {
+  it('列出擲出的每一顆與擋下的傷害；沒擲出 ❤️ 也要說，不然看起來像沒擲', () => {
+    expect(
+      texts([
+        { type: 'card_triggered', seat: 0, cardId: 'camo' },
+        { type: 'card_rolled', seat: 0, cardId: 'camo', faces: [1, 'attack', 'heal'] },
+        { type: 'damage_prevented', seat: 0, amount: 1, cardId: 'camo' },
+        { type: 'damage_taken', seat: 0, amount: 2, hp: 8, source: 1 },
+      ]),
+    ).toEqual(['你的【卡-camo】發動了：擲出 1 💥 ❤️；你擋下 1 點傷害；你 HP -2']);
+    expect(
+      texts([
+        { type: 'card_triggered', seat: 0, cardId: 'camo' },
+        { type: 'card_rolled', seat: 0, cardId: 'camo', faces: [2, 'energy'] },
+        { type: 'damage_taken', seat: 0, amount: 2, hp: 8, source: 1 },
+      ]),
+    ).toEqual(['你的【卡-camo】發動了：擲出 2 ⚡（沒有 ❤️）；你 HP -2']);
+  });
+});
+
 describe('shopNotice', () => {
   it('買得起才提示，且帶有前往商店的動作', () => {
     expect(shopNotice(0)).toBeNull();
