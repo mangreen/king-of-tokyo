@@ -2,7 +2,7 @@ import { Color } from 'three';
 import type { Power } from './director.js';
 import type { Spot } from './layout.js';
 import type { MonsterRig } from './monsters.js';
-import { poisonGlow, shrinkScale } from './statusFx.js';
+import { dizzySway, poisonGlow, shrinkScale } from './statusFx.js';
 
 /**
  * 一隻怪獸的程序動畫狀態。位置與存活由遊戲狀態決定（setSpot / setAlive），
@@ -45,6 +45,9 @@ export class MonsterActor {
   private poisoned = false;
   private shrinkTarget = 1;
   private shrinkNow = 1;
+  /** 震地暈眩：0..1 平滑淡入淡出，用來縮放晃動幅度。 */
+  private dizzyTarget = 0;
+  private dizzyNow = 0;
   private readonly baseScale: number;
   /** 站位落地時通知（踩踏特效）。 */
   onLand: ((actor: MonsterActor, spot: Spot) => void) | null = null;
@@ -158,6 +161,8 @@ export class MonsterActor {
     this.koT = Math.max(0, Math.min(1, this.koT));
     this.flash = Math.max(0, this.flash - dt / 0.2);
     this.shrinkNow += (this.shrinkTarget - this.shrinkNow) * Math.min(1, dt * 5);
+    this.dizzyNow += (this.dizzyTarget - this.dizzyNow) * Math.min(1, dt * 4);
+    if (Math.abs(this.dizzyTarget - this.dizzyNow) < 0.002) this.dizzyNow = this.dizzyTarget;
     this.apply(time);
   }
 
@@ -175,6 +180,11 @@ export class MonsterActor {
     }
     rig.root.position.set(this.x, y, this.z);
     rig.root.rotation.y = this.yaw;
+    // 震地暈眩：整隻怪獸左右搖晃、前後點頭（倒下時不晃）
+    const wobble = dizzySway(time + this.phase, this.dizzyNow * (1 - ease(this.koT)));
+    rig.root.rotation.z = wobble.roll;
+    rig.root.rotation.x = wobble.pitch;
+    rig.root.position.x += wobble.shift;
 
     // 撲擊：身體前傾、向前衝；手臂揮擊
     let forward = 0;
@@ -252,6 +262,11 @@ export class MonsterActor {
     this.poisoned = poison > 0;
     this.shrinkTarget = shrinkScale(shrink);
     if (instant) this.shrinkNow = this.shrinkTarget;
+  }
+
+  /** 震地暈眩（全場少擲骰子）：開啟時身體持續晃動。 */
+  setDizzy(on: boolean): void {
+    this.dizzyTarget = on ? 1 : 0;
   }
 
   /** 目前（含縮小）的怪獸高度。 */

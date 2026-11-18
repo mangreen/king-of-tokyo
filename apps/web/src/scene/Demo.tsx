@@ -228,6 +228,18 @@ export default function Demo() {
       },
     ]),
     [
+      '🥴 震地暈眩 開／關（全部怪獸）',
+      () => {
+        setSnap((s) => {
+          const on = s.monsters.some((m) => (m.dizzy ?? 0) > 0);
+          return {
+            ...s,
+            monsters: s.monsters.map((m) => ({ ...m, dizzy: on ? 0 : 1 })),
+          };
+        });
+      },
+    ],
+    [
       '清商店（飛碟）',
       () => {
         const old = snapRef.current.shop ?? MARKET;
