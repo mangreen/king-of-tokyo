@@ -448,6 +448,15 @@ export function ActionPanel(p: ActionProps) {
           ))
         )}
       </div>
+      {(p.diceNotes?.length ?? 0) > 0 && (state.phase === 'roll' || dice.length > 0) && (
+        <ul className="dice-notes" aria-label="這回合骰子數的說明">
+          {p.diceNotes?.map((n) => (
+            <li key={n.kind} className={`dice-note ${n.kind}`}>
+              <span aria-hidden="true">{n.icon}</span> {n.text}
+            </li>
+          ))}
+        </ul>
+      )}
       {state.phase === 'roll' && heartHint.banner !== null && dice.length > 0 && (
         <p className={`tokyo-heart${heartHint.keptWarn === null ? '' : ' warn'}`} role="status">
           {heartHint.keptWarn ?? heartHint.banner}

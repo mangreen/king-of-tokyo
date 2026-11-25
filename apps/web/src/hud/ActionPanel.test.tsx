@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CardDef, Face, GameState } from '@kot/rules';
 import { ActionPanel } from './Panels.js';
+import type { DiceNote } from './rulesText.js';
 
 const ray: CardDef = {
   id: 'ray',
@@ -16,6 +17,7 @@ const ray: CardDef = {
 const render = (opts: {
   /** 另一隻怪獸（座位 1）的狀態；沒給＝沒有別的怪獸。 */
   other?: { hp: number; energy: number; location?: 'city' | null };
+  notes?: DiceNote[];
   inTokyo: boolean;
   dice: Face[];
   kept?: number[];
@@ -37,6 +39,7 @@ const render = (opts: {
   return renderToStaticMarkup(
     <ActionPanel
       state={state}
+      diceNotes={opts.notes ?? []}
       actorSeat={0}
       myTurn
       me={undefined}
@@ -121,6 +124,31 @@ describe('ActionPanel：在東京擲到 ❤️', () => {
     expect(render({ inTokyo: true, dice: [] })).not.toContain('tokyo-heart');
     expect(render({ inTokyo: true, dice: ['heal', 1, 2, 3, 3, 1], phase: 'buy' })).not.toContain(
       'tokyo-heart',
+    );
+  });
+});
+
+describe('ActionPanel：骰子數說明（震地步伐等持續效果）', () => {
+  const stomp: DiceNote[] = [
+    { kind: 'summary', icon: '🎲', text: '本回合擲 5 顆骰子（基本 6 顆）' },
+    {
+      kind: 'stomp',
+      icon: '🥴',
+      text: '震地步伐（Bob）：所有怪獸少擲 1 顆，直到Bob的下一個回合開始',
+    },
+  ];
+  it('有說明：骰子區逐項列出原因', () => {
+    const html = render({ inTokyo: false, dice: [1, 2, 3, 3, 'attack'], notes: stomp });
+    expect(html).toContain('class="dice-notes"');
+    expect(html).toContain('本回合擲 5 顆骰子（基本 6 顆）');
+    expect(html).toContain('震地步伐（Bob）：所有怪獸少擲 1 顆');
+  });
+  it('還沒擲骰的擲骰階段也要先說明（玩家才知道為什麼只有 5 顆）', () => {
+    expect(render({ inTokyo: false, dice: [], notes: stomp })).toContain('dice-notes');
+  });
+  it('沒有說明（沒有任何增減）：不顯示', () => {
+    expect(render({ inTokyo: false, dice: [1, 2, 3, 3, 'attack', 'energy'] })).not.toContain(
+      'dice-notes',
     );
   });
 });
