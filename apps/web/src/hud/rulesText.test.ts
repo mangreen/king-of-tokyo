@@ -75,14 +75,12 @@ describe('tokyoHeartHint（在東京擲到 ❤️）', () => {
     for (const inTokyo of [false, null]) {
       const h = tokyoHeartHint({ ...base, dice: [...base.dice], inTokyo });
       expect(h).toMatchObject({ banner: null, keptWarn: null });
-      expect(h.deadHearts.size).toBe(0);
     }
   });
-  it('在東京：提醒 ❤️ 不能補血，所有 ❤️ 骰子標成無效', () => {
+  it('在東京：提醒 ❤️ 不能補血（只有文字，不改骰面外觀）', () => {
     const h = tokyoHeartHint({ ...base, dice: [...base.dice], inTokyo: true });
     expect(h.banner).toBe('🗼 你在東京：❤️ 不能補血，不必鎖定 ❤️ 骰面');
     expect(h.keptWarn).toBeNull();
-    expect([...h.deadHearts]).toEqual([0, 2]);
   });
   it('鎖定了 ❤️ 骰面：出現警告並指出顆數；只鎖定其他骰面則沒有警告', () => {
     const warn = tokyoHeartHint({
@@ -100,7 +98,7 @@ describe('tokyoHeartHint（在東京擲到 ❤️）', () => {
     });
     expect(fine.keptWarn).toBeNull();
   });
-  it('持有治癒光束：❤️ 仍可治療別人，所以只提醒、不標成無效', () => {
+  it('持有治癒光束：❤️ 仍可治療別人，提醒文字改成「可治療別人」', () => {
     const h = tokyoHeartHint({
       ...base,
       dice: [...base.dice],
@@ -113,7 +111,6 @@ describe('tokyoHeartHint（在東京擲到 ❤️）', () => {
     expect(h.banner).toContain('治癒光束');
     expect(h.banner).toContain('東京內的也可以');
     expect(h.keptWarn).toContain('不能治療自己');
-    expect(h.deadHearts.size).toBe(0);
   });
 });
 

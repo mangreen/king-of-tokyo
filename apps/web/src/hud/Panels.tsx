@@ -435,8 +435,7 @@ export function ActionPanel(p: ActionProps) {
           dice.map((face, i) => (
             <button
               key={i}
-              className={`die${kept.has(i) ? ' kept' : ''}${heartHint.deadHearts.has(i) ? ' dead-heart' : ''}`}
-              title={heartHint.deadHearts.has(i) ? '在東京不能補血' : undefined}
+              className={kept.has(i) ? 'die kept' : 'die'}
               disabled={!p.canToggle}
               onClick={() => {
                 p.onToggle(i);

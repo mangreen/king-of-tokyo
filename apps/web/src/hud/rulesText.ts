@@ -146,13 +146,11 @@ export interface TokyoHeartHint {
   banner: string | null;
   /** 玩家鎖定（保留）了 ❤️ 骰面時的警告；沒有就是 null。 */
   keptWarn: string | null;
-  /** 哪些骰子位置要標成「❤️ 無效」。 */
-  deadHearts: ReadonlySet<number>;
 }
 
 /**
  * 在東京裡擲骰：❤️ 不能補血（R-HEAL-02），別把骰子鎖在 ❤️ 上。
- * 例外：持有治癒光束時，❤️ 還能用來治療別的怪獸（但不能治療自己），所以只提醒、不標成無效。
+ * 例外：持有治癒光束時，❤️ 還能用來治療別的怪獸（但不能治療自己），提醒文字會改成「可治療別人」。
  */
 export function tokyoHeartHint(opts: {
   dice: readonly Face[];
@@ -166,7 +164,7 @@ export function tokyoHeartHint(opts: {
   /** 提示裡的主詞（「你」或對方的暱稱）。 */
   who: string;
 }): TokyoHeartHint {
-  const none: TokyoHeartHint = { banner: null, keptWarn: null, deadHearts: new Set() };
+  const none: TokyoHeartHint = { banner: null, keptWarn: null };
   if (opts.inTokyo !== true) return none;
   const hearts = opts.dice.flatMap((f, i) => (f === 'heal' ? [i] : []));
   const who = opts.who;
@@ -178,14 +176,12 @@ export function tokyoHeartHint(opts: {
         keptHearts > 0
           ? `已保留 ${String(keptHearts)} 顆 ❤️：在東京不能治療自己，確定要鎖定嗎？`
           : null,
-      deadHearts: new Set(),
     };
   }
   return {
     banner: `🗼 ${who}在東京：❤️ 不能補血，不必鎖定 ❤️ 骰面`,
     keptWarn:
       keptHearts > 0 ? `已保留 ${String(keptHearts)} 顆 ❤️：在東京補不了血，建議放開重擲` : null,
-    deadHearts: new Set(hearts),
   };
 }
 

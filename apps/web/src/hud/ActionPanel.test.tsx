@@ -65,11 +65,13 @@ const render = (opts: {
 };
 
 describe('ActionPanel：在東京擲到 ❤️', () => {
-  it('在東京：顯示提醒、❤️ 骰子標成無效', () => {
+  it('在東京：只顯示文字提醒，❤️ 骰子維持原樣（不變暗、不打 🚫，避免被當成無法點擊）', () => {
     const html = render({ inTokyo: true, dice: ['heal', 1, 2, 3, 'attack', 'energy'] });
     expect(html).toContain('在東京：❤️ 不能補血');
-    expect(html.match(/dead-heart/g)).toHaveLength(1);
     expect(html).not.toContain('tokyo-heart warn');
+    expect(html).not.toContain('dead-heart');
+    expect(html).not.toContain('🚫');
+    expect(html).not.toContain('disabled');
   });
 
   it('在東京鎖定 ❤️：紅色警告取代一般提醒', () => {
@@ -78,13 +80,13 @@ describe('ActionPanel：在東京擲到 ❤️', () => {
     expect(html).toContain('已保留 1 顆 ❤️');
   });
 
-  it('不在東京：沒有提醒也沒有無效標記', () => {
+  it('不在東京：沒有提醒', () => {
     const html = render({ inTokyo: false, dice: ['heal', 1, 2, 3, 'attack', 'energy'] });
     expect(html).not.toContain('tokyo-heart');
     expect(html).not.toContain('dead-heart');
   });
 
-  it('持有治癒光束且有可治療的對象：提醒改成只能治療別人（東京內的也可以），不標無效', () => {
+  it('持有治癒光束且有可治療的對象：提醒改成只能治療別人（東京內的也可以）', () => {
     const html = render({
       inTokyo: true,
       dice: ['heal', 1, 2, 3, 3, 1],
@@ -115,8 +117,8 @@ describe('ActionPanel：在東京擲到 ❤️', () => {
         cards: ['ray'],
         ...(other ? { other } : {}),
       });
-      expect(html).toContain('dead-heart');
-      expect(html).toContain('治療無效');
+      expect(html).toContain('不能補血');
+      expect(html).not.toContain('dead-heart');
     }
   });
 
