@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { BAY_SPOT, CITY_SPOT, ringSpot, type Spot } from './layout.js';
+import { BAY_SPOT, CITY_SPOT, MAX_SEATS, ringSpot, type Spot } from './layout.js';
 import {
   MONSTER_HEIGHT,
   OVERVIEW_POSE,
+  TAG_HALF_WIDTH,
+  TAG_HEADROOM,
   blendPose,
+  overviewPoseFor,
+  overviewSpots,
   poseFor,
+  projectNdc,
   smoothstep,
   victoryPose,
 } from './shots.js';
@@ -84,5 +89,74 @@ describe('勝利鏡頭', () => {
 
   it('同一個時間點、同一位勝者，每個人算出的鏡位完全相同（鎖定）', () => {
     expect(victoryPose(winner, 12345)).toEqual(victoryPose({ ...winner }, 12345));
+  });
+});
+
+describe('總覽鏡頭：所有怪獸與頭上名牌都入鏡', () => {
+  const aspects = [0.45, 0.56, 0.75, 1, 1.33, 1.78, 2.4];
+
+  it.each([2, 3, 4, 5, 6])('%i 人局：各種畫面比例下，腳、頭頂名牌、飛行高度都在畫面內', (n) => {
+    for (const aspect of aspects) {
+      const pose = overviewPoseFor(aspect, n);
+      for (const [i, s] of overviewSpots(n).entries()) {
+        const spot = `spot ${String(i)} aspect ${String(aspect)}`;
+        const feet = projectNdc(pose, aspect, { x: s.x, y: -1.2, z: s.z });
+        // 頭頂 + 名牌／狀態列／皇冠的空間 + 飛行抬高
+        const top = projectNdc(pose, aspect, {
+          x: s.x,
+          y: MONSTER_HEIGHT + 3 + TAG_HEADROOM,
+          z: s.z,
+        });
+        // 名牌左右兩端（名牌有寬度，不能只看中心點）
+        const tagL = projectNdc(pose, aspect, {
+          x: s.x - TAG_HALF_WIDTH,
+          y: MONSTER_HEIGHT + 3 + 1.5,
+          z: s.z,
+        });
+        const tagR = projectNdc(pose, aspect, {
+          x: s.x + TAG_HALF_WIDTH,
+          y: MONSTER_HEIGHT + 3 + 1.5,
+          z: s.z,
+        });
+        for (const p of [feet, top, tagL, tagR]) {
+          expect(p, spot).not.toBeNull();
+          expect(Math.abs(p?.x ?? 9), spot).toBeLessThanOrEqual(1);
+          expect(Math.abs(p?.y ?? 9), spot).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+
+  it('橫向螢幕不會拉得太遠（怪獸夠大）：16:9 的距離與舊版總覽相近', () => {
+    const p = overviewPoseFor(16 / 9, MAX_SEATS);
+    const dist = Math.hypot(
+      p.position.x - p.lookAt.x,
+      p.position.y - p.lookAt.y,
+      p.position.z - p.lookAt.z,
+    );
+    expect(dist).toBeLessThan(60);
+    // 怪獸身高佔畫面高度的比例至少 6%
+    const a = projectNdc(p, 16 / 9, { x: 19, y: 0, z: 10 });
+    const b = projectNdc(p, 16 / 9, { x: 19, y: MONSTER_HEIGHT, z: 10 });
+    expect(((b?.y ?? 0) - (a?.y ?? 0)) / 2).toBeGreaterThan(0.06);
+  });
+
+  it('直向螢幕自動拉遠；越窄拉得越遠', () => {
+    const far = (a: number): number => overviewPoseFor(a, 6).position.y;
+    expect(far(0.5)).toBeGreaterThan(far(0.75));
+    expect(far(0.75)).toBeGreaterThan(far(1.78));
+  });
+
+  it('人數少時鏡頭更近（只涵蓋實際有人的位置）；同樣參數結果穩定', () => {
+    expect(overviewPoseFor(1.78, 2).position.y).toBeLessThanOrEqual(
+      overviewPoseFor(1.78, 6).position.y + 0.01,
+    );
+    expect(overviewPoseFor(1.78, 4)).toEqual(overviewPoseFor(1.78, 4));
+  });
+
+  it('預設姿態＝16:9、6 人局的適配結果；仍然是高角度俯瞰', () => {
+    expect(OVERVIEW_POSE).toEqual(overviewPoseFor(16 / 9, MAX_SEATS));
+    expect(OVERVIEW_POSE.position.y).toBeGreaterThan(MONSTER_HEIGHT * 3);
+    expect(OVERVIEW_POSE.position.z).toBeGreaterThan(OVERVIEW_POSE.lookAt.z);
   });
 });

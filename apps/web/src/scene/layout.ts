@@ -19,8 +19,6 @@ export interface Point {
   readonly z: number;
 }
 
-/** 外圍怪獸所在圓圈的半徑。 */
-export const RING_RADIUS = 13.5;
 /** 單隻怪獸占地半徑（建築與地標都要避開）。 */
 export const MONSTER_FOOTPRINT = 3.2;
 /** 東京市中央廣場半徑。 */
@@ -90,30 +88,51 @@ export const BAY_SPOT: Spot = {
   yaw: facingOrigin(ODAIBA.x - 1.2, ODAIBA.z + 0.6),
 };
 
-/** 外圍座位排在西側（市區側）半圈，避開海灣。角度：x = cos、z = sin，90° = 南。 */
-const RING_START = (75 * Math.PI) / 180;
-const RING_SPAN = (210 * Math.PI) / 180;
 /**
- * 東京鐵塔會擋住這段圓弧後方的怪獸（鏡頭從東南往西北看）：座位要跳過它。
- * 範圍由 occlusion.ts 的檢查得出（215°–250° 之間會被擋）。
+ * 沒有佔領東京的怪獸站在**東京灣的海面上**（會飛的懸空、不會飛的腳部入水，見 seaStance.ts）。
+ * 座位沿著一條折線排開：台場南側的海面 → 往東 → 沿台場東側往北。
+ * 折線與岸邊、台場、彩虹大橋都保持距離（有測試把關）。
  */
-export const BLOCKED_ARC = {
-  start: (212 * Math.PI) / 180,
-  end: (252 * Math.PI) / 180,
-} as const;
+export const SEA_ROUTE: readonly Point[] = [
+  { x: 15, z: 21 },
+  { x: 30, z: 22 },
+  { x: 38.5, z: 10 },
+  { x: 39, z: -8 },
+];
 
-/** 座位固定對應圓圈上的位置（不隨存活人數變動，怪獸才不會跳來跳去）。 */
-export function ringSpot(seat: number, playerCount: number): Spot {
-  const n = Math.max(1, Math.min(MAX_SEATS, playerCount));
-  // 可用圓弧 = 整段半圈扣掉被鐵塔擋住的一段；座位均分可用圓弧，再把落在缺口之後的角度補回去
-  const gap = BLOCKED_ARC.end - BLOCKED_ARC.start;
-  const usable = RING_SPAN - gap;
-  let angle = RING_START + (usable / n) * (seat + 0.5);
-  if (angle >= BLOCKED_ARC.start) angle += gap;
-  const x = Math.cos(angle) * RING_RADIUS;
-  const z = Math.sin(angle) * RING_RADIUS;
-  return { x, z, yaw: facingOrigin(x, z) };
+function routePoint(t: number): Point {
+  const lens: number[] = [];
+  let total = 0;
+  for (let i = 1; i < SEA_ROUTE.length; i++) {
+    const a = SEA_ROUTE[i - 1] as Point;
+    const b = SEA_ROUTE[i] as Point;
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    lens.push(len);
+    total += len;
+  }
+  let d = Math.max(0, Math.min(1, t)) * total;
+  for (let i = 0; i < lens.length; i++) {
+    const len = lens[i] as number;
+    if (d <= len || i === lens.length - 1) {
+      const a = SEA_ROUTE[i] as Point;
+      const b = SEA_ROUTE[i + 1] as Point;
+      const k = len === 0 ? 0 : Math.min(1, d / len);
+      return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k };
+    }
+    d -= len;
+  }
+  return SEA_ROUTE[0] as Point;
 }
+
+/** 座位固定對應海面上的位置（依玩家人數均分折線；不隨存活人數變動，怪獸才不會跳來跳去）。 */
+export function seaSpot(seat: number, playerCount: number): Spot {
+  const n = Math.max(1, Math.min(MAX_SEATS, playerCount));
+  const p = routePoint((seat + 0.5) / n);
+  return { x: p.x, z: p.z, yaw: facingOrigin(p.x, p.z) };
+}
+
+/** 舊名稱：沒有佔領東京的座位站位（現在在海上）。 */
+export const ringSpot = seaSpot;
 
 export type SceneLocation = 'city' | 'bay' | null;
 
@@ -121,7 +140,7 @@ export type SceneLocation = 'city' | 'bay' | null;
 export function monsterSpot(seat: number, playerCount: number, location: SceneLocation): Spot {
   if (location === 'city') return CITY_SPOT;
   if (location === 'bay') return BAY_SPOT;
-  return ringSpot(seat, playerCount);
+  return seaSpot(seat, playerCount);
 }
 
 /** 座位顏色（卡通高飽和，輪廓用深色）。 */

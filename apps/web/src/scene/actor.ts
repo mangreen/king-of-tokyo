@@ -1,6 +1,7 @@
 import { Color } from 'three';
 import type { Power } from './director.js';
 import type { Spot } from './layout.js';
+import { seaLift, seaness, stanceOf, type Stance } from './seaStance.js';
 import type { MonsterRig } from './monsters.js';
 import { dizzySway, poisonGlow, shrinkScale } from './statusFx.js';
 
@@ -49,6 +50,11 @@ export class MonsterActor {
   private dizzyTarget = 0;
   private dizzyNow = 0;
   private readonly baseScale: number;
+  /** 海上站姿：飛行／游泳／涉水（依造型）。 */
+  readonly stance: Stance;
+  /** 目前在海上的程度 0..1（平滑），決定懸空／入水的高度。 */
+  private waterNow: number;
+  private liftNow = 0;
   /** 站位落地時通知（踩踏特效）。 */
   onLand: ((actor: MonsterActor, spot: Spot) => void) | null = null;
   private readonly phase: number;
@@ -66,11 +72,23 @@ export class MonsterActor {
     this.target = spot;
     this.phase = seat * 1.7;
     this.baseScale = rig.root.scale.x;
+    this.stance = stanceOf(rig.archetype);
+    this.waterNow = seaness(spot.x, spot.z);
     this.apply(0);
   }
 
   get alive(): boolean {
     return !this.koTarget;
+  }
+
+  /** 目前身體離開／沉入水面的高度偏移（飛行為正、入水為負）；名牌等 UI 用來對齊。 */
+  get lift(): number {
+    return this.liftNow;
+  }
+
+  /** 目前站在海上（含正在跳過去的途中）。 */
+  get atSea(): boolean {
+    return this.waterNow > 0.05;
   }
 
   get isHopping(): boolean {
@@ -161,6 +179,7 @@ export class MonsterActor {
     this.koT = Math.max(0, Math.min(1, this.koT));
     this.flash = Math.max(0, this.flash - dt / 0.2);
     this.shrinkNow += (this.shrinkTarget - this.shrinkNow) * Math.min(1, dt * 5);
+    this.waterNow += (seaness(this.x, this.z) - this.waterNow) * Math.min(1, dt * 6);
     this.dizzyNow += (this.dizzyTarget - this.dizzyNow) * Math.min(1, dt * 4);
     if (Math.abs(this.dizzyTarget - this.dizzyNow) < 0.002) this.dizzyNow = this.dizzyTarget;
     this.apply(time);
@@ -178,7 +197,9 @@ export class MonsterActor {
       y = Math.sin(Math.PI * Math.min(1, this.hop.t)) * HOP_HEIGHT;
       lean = 0.22 * Math.sin(Math.PI * Math.min(1, this.hop.t));
     }
-    rig.root.position.set(this.x, y, this.z);
+    // 海上：飛行懸空、游泳／涉水沒入水面（跳回陸地時平滑恢復）
+    this.liftNow = seaLift(this.stance, this.waterNow, alive, t);
+    rig.root.position.set(this.x, y + this.liftNow, this.z);
     rig.root.rotation.y = this.yaw;
     // 震地暈眩：整隻怪獸左右搖晃、前後點頭（倒下時不晃）
     const wobble = dizzySway(time + this.phase, this.dizzyNow * (1 - ease(this.koT)));

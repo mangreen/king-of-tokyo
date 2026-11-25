@@ -16,6 +16,7 @@ import {
   monsterSpot,
   riverX,
   ringSpot,
+  seaSpot,
   seatColor,
   shoreX,
 } from './layout.js';
@@ -63,19 +64,59 @@ describe('scene layout（東京灣地理）', () => {
     expect(inWater(SKYTREE.x, SKYTREE.z, 1)).toBe(false);
   });
 
-  it.each([2, 3, 4, 5, 6])('%i 人局：外圍座位在陸地、互不重疊、不壓到地標與東京站位', (n) => {
-    const spots = Array.from({ length: n }, (_, seat) => ringSpot(seat, n));
-    for (const [i, a] of spots.entries()) {
-      expect(inWater(a.x, a.z, 3)).toBe(false);
-      expect(Math.hypot(a.x, a.z)).toBeGreaterThan(PLAZA_RADIUS + MONSTER_FOOTPRINT);
-      expect(Math.hypot(a.x - TOKYO_TOWER.x, a.z - TOKYO_TOWER.z)).toBeGreaterThan(
-        MONSTER_FOOTPRINT + 1,
-      );
-      expect(Math.hypot(a.x - BAY_SPOT.x, a.z - BAY_SPOT.z)).toBeGreaterThan(MONSTER_FOOTPRINT * 2);
-      for (const b of spots.slice(i + 1)) {
-        expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(MONSTER_FOOTPRINT * 2);
+  it.each([2, 3, 4, 5, 6])(
+    '%i 人局：外圍座位都在東京灣的海面上、互不重疊、不壓到地標與兩個占領位置',
+    (n) => {
+      const spots = Array.from({ length: n }, (_, seat) => seaSpot(seat, n));
+      const bridge = { dx: BRIDGE_END.x - BRIDGE_START.x, dz: BRIDGE_END.z - BRIDGE_START.z };
+      const bridgeLen2 = bridge.dx ** 2 + bridge.dz ** 2;
+      for (const [i, a] of spots.entries()) {
+        // 離岸邊至少 3（腳邊的水波與身體都在水面上）
+        expect(inWater(a.x, a.z, 3)).toBe(true);
+        // 不在台場島上、不壓到摩天輪
+        expect(Math.hypot(a.x - ODAIBA.x, a.z - ODAIBA.z)).toBeGreaterThan(
+          ODAIBA_RADIUS + MONSTER_FOOTPRINT,
+        );
+        expect(Math.hypot(a.x - FERRIS_WHEEL.x, a.z - FERRIS_WHEEL.z)).toBeGreaterThan(
+          MONSTER_FOOTPRINT + 3,
+        );
+        // 與彩虹大橋（線段）保持距離
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((a.x - BRIDGE_START.x) * bridge.dx + (a.z - BRIDGE_START.z) * bridge.dz) / bridgeLen2,
+          ),
+        );
+        expect(
+          Math.hypot(
+            a.x - (BRIDGE_START.x + bridge.dx * t),
+            a.z - (BRIDGE_START.z + bridge.dz * t),
+          ),
+        ).toBeGreaterThan(MONSTER_FOOTPRINT + 2);
+        expect(Math.hypot(a.x - BAY_SPOT.x, a.z - BAY_SPOT.z)).toBeGreaterThan(
+          MONSTER_FOOTPRINT * 2,
+        );
+        expect(Math.hypot(a.x - CITY_SPOT.x, a.z - CITY_SPOT.z)).toBeGreaterThan(
+          MONSTER_FOOTPRINT * 2,
+        );
+        for (const b of spots.slice(i + 1)) {
+          expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(MONSTER_FOOTPRINT * 2);
+        }
+      }
+    },
+  );
+
+  it('沒有佔領東京的座位不在陸地上（包含 6 人局的每一個座位）', () => {
+    for (let n = 1; n <= MAX_SEATS; n++) {
+      for (let seat = 0; seat < n; seat++) {
+        const s = monsterSpot(seat, n, null);
+        expect(inWater(s.x, s.z), `seat ${String(seat)}/${String(n)}`).toBe(true);
       }
     }
+    // 佔領東京市的在陸地；佔領東京灣的在台場島上（島在海灣中，仍算陸地姿態，見 seaness）
+    expect(inWater(CITY_SPOT.x, CITY_SPOT.z)).toBe(false);
+    expect(Math.hypot(BAY_SPOT.x - ODAIBA.x, BAY_SPOT.z - ODAIBA.z)).toBeLessThan(ODAIBA_RADIUS);
   });
 
   it('座位位置固定：不隨存活人數或位置變動', () => {
@@ -84,7 +125,7 @@ describe('scene layout（東京灣地理）', () => {
     expect(monsterSpot(3, 6, 'bay')).toEqual(BAY_SPOT);
   });
 
-  it('外圍怪獸面向東京中心', () => {
+  it('海上的怪獸面向東京中心', () => {
     const s = ringSpot(1, 4);
     const len = Math.hypot(s.x, s.z);
     expect(Math.sin(s.yaw)).toBeCloseTo(-s.x / len);
