@@ -196,7 +196,14 @@ function sideEffects(span: readonly GameEvent[], c: NoticeContext): string[] {
         out.push(`${who(e.seat)}偷看了牌庫頂的一張牌`);
         break;
       case 'dice_penalty':
-        out.push('下個回合所有怪獸少擲 1 顆骰子');
+        {
+          const holder = e.seats.at(-1);
+          out.push(
+            holder === undefined
+              ? '所有怪獸少擲 1 顆骰子'
+              : `所有怪獸少擲 1 顆骰子，直到${who(holder)}的下一個回合開始`,
+          );
+        }
         break;
       case 'entered_tokyo':
         out.push(`${who(e.seat)}進入${LOC[e.location]}`);

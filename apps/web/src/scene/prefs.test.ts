@@ -96,3 +96,36 @@ describe('toSnapshot', () => {
     ).toBeNull();
   });
 });
+
+describe('toSnapshot：震地暈眩', () => {
+  const monsters = [0, 1, 2].map((seat) => ({
+    seat,
+    hp: 10,
+    maxHp: 10,
+    vp: 0,
+    energy: 0,
+    alive: seat !== 2,
+    location: null,
+  }));
+  const snap = (stomp: number[] | undefined) =>
+    toSnapshot(
+      { players: [] },
+      {
+        config: { playerCount: 3 } as never,
+        monsters: monsters as never,
+        ...(stomp ? { stomp } : {}),
+      },
+      0,
+      'x',
+    );
+  it('持有者以外的存活怪獸暈眩；持有者自己、淘汰者不暈眩', () => {
+    expect(snap([0]).monsters.map((m) => m.dizzy)).toEqual([0, 1, 0]);
+  });
+  it('沒有效果（或沒給 stomp）：全部是 0', () => {
+    expect(snap([]).monsters.map((m) => m.dizzy)).toEqual([0, 0, 0]);
+    expect(snap(undefined).monsters.map((m) => m.dizzy)).toEqual([0, 0, 0]);
+  });
+  it('兩個持有者：各自被對方影響一層、旁人兩層', () => {
+    expect(snap([0, 1]).monsters.map((m) => m.dizzy)).toEqual([1, 1, 0]);
+  });
+});

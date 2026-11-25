@@ -1,5 +1,6 @@
 import { monsterKindOf, monsterName } from '../scene/roster.js';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { stompHoldersAffecting } from '@kot/rules';
 import type { Action, Face, GameState, Monster, RulesEnv } from '@kot/rules';
 import type { GameActionInput, RoomSnapshot } from '@kot/protocol';
 import {
@@ -18,6 +19,7 @@ import {
   endRules,
   tokyoHeartHint,
   tokyoRules,
+  type DiceNote,
   type RuleConfig,
 } from './rulesText.js';
 
@@ -100,6 +102,14 @@ export function PlayersPanel({ state, room, actorSeat, mySeat, nameOf, env }: Pl
                 {!m.alive && <span className="tag">淘汰</span>}
                 {m.alive && m.location && (
                   <span className="tag">{m.location === 'city' ? '東京市' : '東京灣'}</span>
+                )}
+                {m.alive && stompHoldersAffecting(state.stomp, m.seat).length > 0 && (
+                  <span
+                    className="tag warn"
+                    title="震地步伐：下次輪到他時少擲骰子，直到持有者的下一個回合開始"
+                  >
+                    🥴 暈眩 −{stompHoldersAffecting(state.stomp, m.seat).length}
+                  </span>
                 )}
               </div>
               <div className="p-stats" aria-label="生命、勝利點、能量">
@@ -263,7 +273,16 @@ export function ShopPanel({ state, env, buys, otherBuys = [], sweep, labelCtx, o
 
 // ── 我的卡牌 ───────────────────────────────────────
 
-export function MyCardsPanel({ monster, env }: { monster: Monster | undefined; env: Env }) {
+export function MyCardsPanel({
+  monster,
+  env,
+  lingering = {},
+}: {
+  monster: Monster | undefined;
+  env: Env;
+  /** 這張牌正在持續生效中：牌 id → 說明（例如震地步伐：全場少擲骰子，直到你的下一個回合開始）。 */
+  lingering?: Readonly<Record<string, string>>;
+}) {
   if (!monster) return <p className="muted">你不在這局裡。</p>;
   if (monster.cards.length === 0 && monster.tokens.poison + monster.tokens.shrink === 0) {
     return <p className="muted">還沒有持有的卡牌。到商店買牌吧。</p>;
@@ -275,6 +294,7 @@ export function MyCardsPanel({ monster, env }: { monster: Monster | undefined; e
         return (
           <div key={id} className="shop-card">
             {def ? <CardBody def={def} /> : <strong>{id}</strong>}
+            {lingering[id] && <p className="card-active">▶ 生效中：{lingering[id]}</p>}
           </div>
         );
       })}
@@ -355,6 +375,8 @@ export function RulesPanel({ state, nameOf }: { state: GameState; nameOf: (s: nu
 
 interface ActionProps {
   state: GameState;
+  /** 骰子數為什麼不是基本數（震地步伐、縮小、額外回合…）；沒有就不顯示。 */
+  diceNotes?: readonly DiceNote[];
   actorSeat: number | null;
   myTurn: boolean;
   me: Monster | undefined;
@@ -426,6 +448,15 @@ export function ActionPanel(p: ActionProps) {
           ))
         )}
       </div>
+      {(p.diceNotes?.length ?? 0) > 0 && (state.phase === 'roll' || dice.length > 0) && (
+        <ul className="dice-notes" aria-label="這回合骰子數的說明">
+          {p.diceNotes?.map((n) => (
+            <li key={n.kind} className={`dice-note ${n.kind}`}>
+              <span aria-hidden="true">{n.icon}</span> {n.text}
+            </li>
+          ))}
+        </ul>
+      )}
       {state.phase === 'roll' && heartHint.banner !== null && dice.length > 0 && (
         <p className={`tokyo-heart${heartHint.keptWarn === null ? '' : ' warn'}`} role="status">
           {heartHint.keptWarn ?? heartHint.banner}

@@ -25,6 +25,7 @@ import {
   gainVp,
   hasEffect,
   heal,
+  diceBreakdownOf,
   leaveTokyo,
   makeG,
   mitigatePre,
@@ -244,14 +245,7 @@ const rollLimit = rollLimitOf;
 
 /** 回合開始時的骰子數。R-CARD-21 */
 function diceCountFor(g: G, seat: number, penalty: number): number {
-  let n = g.s.config.diceCount;
-  for (const { e, o } of effectsWith(g, seat, 'extraDice')) {
-    n += e.extraDice(o);
-  }
-  n -= getMonster(g.s, seat).tokens.shrink;
-  n -= g.s.stomp.length;
-  n -= penalty;
-  return Math.max(1, n);
+  return diceBreakdownOf(g, seat, penalty).total;
 }
 
 /** 擲骰次數用完後，是否還有擲骰期能力值得等待玩家使用。R-CARD-22 */

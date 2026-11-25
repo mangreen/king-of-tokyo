@@ -1,4 +1,4 @@
-import { legalActions, type GameState, type RulesEnv } from '@kot/rules';
+import { legalActions, stompHoldersAffecting, type GameState, type RulesEnv } from '@kot/rules';
 import type { RoomSnapshot } from '@kot/protocol';
 import type { SceneSnapshot } from './SceneRenderer.js';
 import { monsterKindOf } from './roster.js';
@@ -28,7 +28,7 @@ export function isShopOpen(state: GameState, env: RulesEnv): boolean {
 export function toSnapshot(
   room: Pick<RoomSnapshot, 'players'>,
   state: Pick<GameState, 'config' | 'monsters'> &
-    Partial<Pick<GameState, 'market' | 'phase' | 'outcome'>>,
+    Partial<Pick<GameState, 'market' | 'phase' | 'outcome' | 'stomp'>>,
   actorSeat: number | null,
   selfId: string,
   /** 商店狀態（飛碟入場的條件）；沒給＝關著。 */
@@ -56,6 +56,7 @@ export function toSnapshot(
       energy: m.energy,
       location: m.location,
       tokens: { poison: m.tokens?.poison ?? 0, shrink: m.tokens?.shrink ?? 0 },
+      dizzy: m.alive ? stompHoldersAffecting(state.stomp ?? [], m.seat).length : 0,
     })),
   };
 }
