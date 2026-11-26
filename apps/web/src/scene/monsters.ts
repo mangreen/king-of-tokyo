@@ -238,6 +238,8 @@ function dragon(s: Spec, p: Palette, accent: string): void {
     armL: [0.7, 3.2, -0.1],
     armR: [-0.7, 3.2, -0.1],
     tail: [0, 1.7, -0.9],
+    wingL: [0.7, 3.2, -0.1],
+    wingR: [-0.7, 3.2, -0.1],
   };
   body
     .ball(1, p.main, [0, 2.4, 0], [0.95, 1.2, 1.15])
@@ -263,14 +265,24 @@ function dragon(s: Spec, p: Palette, accent: string): void {
     head.ball(0.1, p.eye, [sx, 4.4, 1.5]).ball(0.05, '#111111', [sx, 4.4, 1.58]);
     head.spike([sx * 0.8, 4.55, 1.0], [sx * 1.4, 5.1, 0.35], 0.1, accent);
   }
+  // 前爪（短手臂）；翅膀是獨立部位，繞肩膀拍動（見 wingFx.ts）
   for (const [arm, sx] of [
     [armL, 1],
     [armR, -1],
   ] as const) {
-    // 翅膀：扁平的三角翼，繞肩膀樞軸拍動
-    arm.limb([sx * 0.7, 3.2, -0.1], [sx * 2.8, 4.1, -0.5], 0.14, 0.1, p.dark);
-    arm.box([2.2, 0.06, 1.6], accent, [sx * 1.9, 3.75, -0.4], [0, 0, sx * 0.3]);
-    arm.box([1.2, 0.06, 1.0], p.light, [sx * 1.3, 3.55, 0.3], [0, 0, sx * 0.25]);
+    arm
+      .limb([sx * 0.7, 3.2, -0.1], [sx * 1.0, 2.5, 0.8], 0.32, 0.22, p.main)
+      .ball(0.26, p.light, [sx * 1.05, 2.35, 0.95]);
+    arm.spike([sx * 1.05, 2.3, 1.0], [sx * 1.05, 2.0, 1.3], 0.1, '#ffffff');
+  }
+  for (const [wing, sx] of [
+    [s.wingL, 1],
+    [s.wingR, -1],
+  ] as const) {
+    // 翅膀：扁平的三角翼（翼骨＋兩片翼膜）
+    wing.limb([sx * 0.7, 3.2, -0.1], [sx * 2.8, 4.1, -0.5], 0.14, 0.1, p.dark);
+    wing.box([2.2, 0.06, 1.6], accent, [sx * 1.9, 3.75, -0.4], [0, 0, sx * 0.3]);
+    wing.box([1.2, 0.06, 1.0], p.light, [sx * 1.3, 3.55, 0.3], [0, 0, sx * 0.25]);
   }
   tail
     .limb([0, 1.7, -0.9], [0, 1.2, -2.6], 0.55, 0.3, p.main)
@@ -300,6 +312,9 @@ export interface MonsterRig {
   armL: Group;
   armR: Group;
   tail: Group;
+  /** 翅膀（沒有翅膀的造型是 null）；z 軸旋轉＝上下拍動，左右鏡像。 */
+  wingL: Group | null;
+  wingR: Group | null;
   material: MeshLambertMaterial;
   archetype: number;
   /** 標籤等 UI 掛載的高度。 */
@@ -349,6 +364,10 @@ export function buildMonster(kind: number, seat: number, segments: number): Mons
   const armL = makePart(spec.armL, spec.pivots.armL, body);
   const armR = makePart(spec.armR, spec.pivots.armR, body);
   const tail = makePart(spec.tail, spec.pivots.tail, body);
+  // 只有會飛的造型有翅膀部位
+  const hasWings = spec.wingL.parts.length > 0 && spec.wingR.parts.length > 0;
+  const wingL = hasWings ? makePart(spec.wingL, spec.pivots.wingL ?? spec.pivots.armL, body) : null;
+  const wingR = hasWings ? makePart(spec.wingR, spec.pivots.wingR ?? spec.pivots.armR, body) : null;
 
   return {
     root,
@@ -357,6 +376,8 @@ export function buildMonster(kind: number, seat: number, segments: number): Mons
     armL,
     armR,
     tail,
+    wingL,
+    wingR,
     material,
     archetype,
     height: MONSTER_HEIGHT,

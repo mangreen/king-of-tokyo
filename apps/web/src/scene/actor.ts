@@ -4,6 +4,7 @@ import type { Spot } from './layout.js';
 import { seaLift, seaness, stanceOf, type Stance } from './seaStance.js';
 import type { MonsterRig } from './monsters.js';
 import { dizzySway, poisonGlow, shrinkScale } from './statusFx.js';
+import { wingAngle, wingStyleOf, type WingStyle } from './wingFx.js';
 
 /**
  * 一隻怪獸的程序動畫狀態。位置與存活由遊戲狀態決定（setSpot / setAlive），
@@ -52,6 +53,8 @@ export class MonsterActor {
   private readonly baseScale: number;
   /** 海上站姿：飛行／游泳／涉水（依造型）。 */
   readonly stance: Stance;
+  /** 翅膀拍動風格（沒有翅膀的造型是 null）。 */
+  private readonly wingStyle: WingStyle | null;
   /** 目前在海上的程度 0..1（平滑），決定懸空／入水的高度。 */
   private waterNow: number;
   private liftNow = 0;
@@ -73,6 +76,7 @@ export class MonsterActor {
     this.phase = seat * 1.7;
     this.baseScale = rig.root.scale.x;
     this.stance = stanceOf(rig.archetype);
+    this.wingStyle = rig.wingL ? wingStyleOf(rig.archetype) : null;
     this.waterNow = seaness(spot.x, spot.z);
     this.apply(0);
   }
@@ -257,6 +261,13 @@ export class MonsterActor {
     rig.armR.rotation.x = (-sway - swing * 0.85 - 1.1 * roar) * alive;
     rig.armL.rotation.z = (0.05 + 0.35 * roar) * alive;
     rig.armR.rotation.z = (-0.05 - 0.35 * roar) * alive;
+    // 拍翅：在海上（懸空）或跳躍時拍動，站在陸地上收翅
+    if (rig.wingL && rig.wingR && this.wingStyle) {
+      const hopK = this.hop ? Math.sin(Math.PI * Math.min(1, this.hop.t)) : 0;
+      const a = wingAngle(this.wingStyle, t, Math.max(this.waterNow, hopK), alive);
+      rig.wingL.rotation.z = a;
+      rig.wingR.rotation.z = -a;
+    }
     rig.tail.rotation.y = Math.sin(t * 1.3) * 0.2 * alive;
     rig.tail.rotation.x = (0.05 * Math.sin(t * 2.1) + (this.hop ? -0.3 : 0)) * alive;
 

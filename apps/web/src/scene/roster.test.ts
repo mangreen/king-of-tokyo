@@ -44,8 +44,8 @@ describe('每種怪獸造型', () => {
           tris += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3;
         }
       });
-      // 身體另有一個陰影用的 mesh 共用幾何，所以最多 6 個 mesh
-      expect(meshes).toBeLessThanOrEqual(6);
+      // 身體另有一個陰影用的 mesh 共用幾何，所以最多 6 個 mesh；有翅膀的再加左右兩片
+      expect(meshes).toBeLessThanOrEqual(rig.wingL ? 8 : 6);
       expect(tris).toBeGreaterThan(300);
       expect(tris).toBeLessThan(12000);
       rig.root.updateMatrixWorld(true);
