@@ -1,4 +1,10 @@
-import { legalActions, stompHoldersAffecting, type GameState, type RulesEnv } from '@kot/rules';
+import {
+  BAY_MIN_ALIVE,
+  legalActions,
+  stompHoldersAffecting,
+  type GameState,
+  type RulesEnv,
+} from '@kot/rules';
 import type { RoomSnapshot } from '@kot/protocol';
 import type { SceneSnapshot } from './SceneRenderer.js';
 import { monsterKindOf } from './roster.js';
@@ -44,6 +50,7 @@ export function toSnapshot(
     mySeat: room.players.find((p) => p.id === selfId)?.seat ?? null,
     shop: status === 'buy' ? (state.market?.faceUp ?? []) : null,
     shopRefresh: status === 'sweep',
+    bayOpen: state.monsters.filter((m) => m.alive).length >= BAY_MIN_ALIVE,
     winners: state.phase === 'over' ? (state.outcome?.winners ?? []) : [],
     monsters: state.monsters.map((m) => ({
       seat: m.seat,

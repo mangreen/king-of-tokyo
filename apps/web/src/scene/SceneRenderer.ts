@@ -104,6 +104,11 @@ export interface SceneSnapshot {
    * 與 shop 互斥（shop 有牌時為 false／省略）。
    */
   shopRefresh?: boolean;
+  /**
+   * 東京灣開放中（存活怪獸 ≥ 5）；省略＝開放。關閉時台場的摩天輪倒塌、蓋住東京灣，
+   * 沒有人能佔領。
+   */
+  bayOpen?: boolean;
 }
 
 export interface RendererOptions {
@@ -525,6 +530,8 @@ export class SceneRenderer {
     const rebuild = !this.snapshot || this.snapshot.playerCount !== snap.playerCount || kindChanged;
     this.snapshot = snap;
     if (rebuild) this.rebuildWorld(snap.playerCount);
+    // 東京灣沒開放：摩天輪倒塌（新場景直接就定位，遊戲中才播倒塌動畫）
+    this.city?.landmarks.setBayOpen(snap.bayOpen !== false, first || rebuild);
     for (const m of snap.monsters) {
       // 新建立的演員（首次或重建場景後）直接就定位，不重播倒下／移動
       const fresh = !this.actors.has(m.seat);

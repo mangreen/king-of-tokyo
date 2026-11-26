@@ -10,6 +10,7 @@ import {
   TOKYO_TOWER_HEIGHT,
 } from './layout.js';
 import { Builder } from './monsterBuilder.js';
+import { FALL_TOTAL, HUB_Y, fallK, riseK, shakeAmount, wheelPose } from './wheelFall.js';
 
 /**
  * 東京的地標（程序化原創幾何，每個合併成一個 mesh，頂點色上色）：
@@ -24,8 +25,18 @@ const STEEL = '#8a8f98';
 
 export interface Landmarks {
   group: Group;
-  /** 摩天輪緩慢轉動。 */
+  /** 摩天輪緩慢轉動（倒塌／立起的動畫也在這裡推進）。 */
   update: (timeSeconds: number) => void;
+  /**
+   * 東京灣是否開放。關閉（存活怪獸不到 5 隻）時摩天輪倒塌、蓋住東京灣；
+   * instant＝直接就定位（開局／重建場景），否則播放倒塌或立起動畫。
+   */
+  setBayOpen: (open: boolean, instant?: boolean) => void;
+  /** 目前的倒塌進度（0＝站立、1＝倒下），測試與鏡頭用。 */
+  readonly collapse: number;
+  /** 摩天輪與支架（測試用）。 */
+  readonly wheel: Mesh;
+  readonly support: Mesh;
   dispose: () => void;
   triangles: number;
 }
@@ -201,15 +212,21 @@ export function wheelGeometry(): BufferGeometry {
   return geo;
 }
 
-/** 摩天輪支架與台場的建築（電視台風格：兩根柱子托著一顆大球）。世界座標。 */
+/** 摩天輪的 A 字形支架：以支架底部中心為原點（倒塌時繞底部倒下）。 */
+export const SUPPORT_BASE_Y = 0.45;
+export function wheelSupportGeometry(): BufferGeometry {
+  const b = new Builder(12);
+  const top: [number, number, number] = [0, HUB_Y - SUPPORT_BASE_Y, 0];
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) b.limb([sx * 1.9, 0, sz * 0.4], top, 0.14, 0.1, '#bfc5cc');
+  const geo = b.merge([0, 0, 0]);
+  if (!geo) throw new Error('wheel support geometry empty');
+  return geo;
+}
+
+/** 台場的建築（電視台風格：兩根柱子托著一顆大球）。世界座標。摩天輪支架另外成一個部位（會倒塌）。 */
 export function odaibaGeometry(): BufferGeometry {
   const b = new Builder(12);
-  const W = FERRIS_WHEEL;
-  const hubY = 3.9;
-  for (const s of [-1, 1])
-    b.limb([W.x + s * 1.9, 0.45, W.z - 0.4], [W.x, hubY, W.z], 0.14, 0.1, '#bfc5cc');
-  for (const s of [-1, 1])
-    b.limb([W.x + s * 1.9, 0.45, W.z + 0.4], [W.x, hubY, W.z], 0.14, 0.1, '#bfc5cc');
   // 電視台風格建築（兩座塔樓＋空中的球）放在島的西北緣，留出島中央給怪獸站位
   const T = { x: ODAIBA.x - 3.4, z: ODAIBA.z - 2.8 };
   b.box([1.0, 4.4, 1.2], '#b9c4d0', [T.x - 0.9, 2.65, T.z]);
@@ -243,12 +260,78 @@ export function buildLandmarks(): Landmarks {
   add(skytreeGeometry(), SKYTREE.x, 0, SKYTREE.z);
   add(bridgeGeometry(), 0, 0, 0);
   add(odaibaGeometry(), 0, 0, 0);
-  const wheel = add(wheelGeometry(), FERRIS_WHEEL.x, 3.9, FERRIS_WHEEL.z);
+  const support = add(wheelSupportGeometry(), FERRIS_WHEEL.x, SUPPORT_BASE_Y, FERRIS_WHEEL.z);
+  const wheel = add(wheelGeometry(), FERRIS_WHEEL.x, HUB_Y, FERRIS_WHEEL.z);
+  // 先套 y（歪斜）再 x（倒下）再 z（自轉／晃動）
+  wheel.rotation.order = 'YXZ';
+  support.rotation.order = 'YXZ';
+
+  let open = true;
+  let k = 0; // 倒塌進度
+  let phase: 'idle' | 'falling' | 'rising' = 'idle';
+  let phaseT = 0;
+  let riseFrom = 0;
+  let spin = 0;
+  let last: number | null = null;
+
+  const pose = (shake: number): void => {
+    const p = wheelPose(k);
+    wheel.position.set(p.x, p.y, p.z);
+    wheel.rotation.x = p.rotX;
+    wheel.rotation.y = p.rotY;
+    wheel.rotation.z = spin + shake;
+    support.rotation.x = p.supportRotX;
+    support.rotation.y = p.supportRotY;
+  };
+  pose(0);
 
   return {
     group,
+    wheel,
+    support,
+    get collapse() {
+      return k;
+    },
+    setBayOpen: (value, instant = false) => {
+      if (value === open && !instant) return;
+      open = value;
+      if (instant) {
+        phase = 'idle';
+        k = open ? 0 : 1;
+        pose(0);
+        return;
+      }
+      phaseT = 0;
+      if (open) {
+        phase = 'rising';
+        riseFrom = k;
+      } else {
+        phase = 'falling';
+      }
+    },
     update: (t) => {
-      wheel.rotation.z = -t * 0.12;
+      const dt = last === null ? 0 : Math.max(0, Math.min(0.1, t - last));
+      last = t;
+      let shake = 0;
+      if (phase === 'falling') {
+        phaseT += dt;
+        k = fallK(phaseT);
+        shake = shakeAmount(phaseT);
+        if (phaseT >= FALL_TOTAL) {
+          phase = 'idle';
+          k = 1;
+        }
+      } else if (phase === 'rising') {
+        phaseT += dt;
+        k = riseK(riseFrom, phaseT);
+        if (k <= 0) {
+          phase = 'idle';
+          k = 0;
+        }
+      }
+      // 站著時緩慢轉動；倒下的過程中逐漸停住
+      spin += -dt * 0.12 * (1 - Math.min(1, k * 3));
+      pose(shake);
     },
     dispose: () => {
       for (const g of geometries) g.dispose();

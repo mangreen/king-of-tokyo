@@ -32,6 +32,20 @@ describe('toSnapshot 商店', () => {
   });
 });
 
+describe('toSnapshot 東京灣', () => {
+  const mk = (alive: number): never =>
+    ({
+      config: { playerCount: 6 },
+      monsters: Array.from({ length: 6 }, (_, seat) => ({ seat, alive: seat < alive })),
+    }) as never;
+  it('存活怪獸 ≥ 5 才開放；少於 5 關閉（摩天輪倒塌）', () => {
+    expect(toSnapshot(room, mk(6), 0, 'me').bayOpen).toBe(true);
+    expect(toSnapshot(room, mk(5), 0, 'me').bayOpen).toBe(true);
+    expect(toSnapshot(room, mk(4), 0, 'me').bayOpen).toBe(false);
+    expect(toSnapshot(room, mk(2), 0, 'me').bayOpen).toBe(false);
+  });
+});
+
 describe('shopStatus／isShopOpen（飛碟入場條件）', () => {
   const cards: CardDef[] = Array.from({ length: 12 }, (_, i) => ({
     id: `c${String(i)}`,

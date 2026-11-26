@@ -31,6 +31,7 @@ const MARKET = CARDS.slice(0, 3).map((c) => c.id);
 function initial(players: number, kinds: number[]): SceneSnapshot {
   return {
     playerCount: players,
+    bayOpen: players >= 5,
     activeSeat: 0,
     mySeat: 0,
     shop: MARKET,
@@ -237,6 +238,12 @@ export default function Demo() {
             monsters: s.monsters.map((m) => ({ ...m, dizzy: on ? 0 : 1 })),
           };
         });
+      },
+    ],
+    [
+      '🎡 東京灣 開放／關閉（摩天輪立起／倒塌）',
+      () => {
+        setSnap((s) => ({ ...s, bayOpen: s.bayOpen === false }));
       },
     ],
     [
