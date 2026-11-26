@@ -63,6 +63,8 @@ export function mantis(s: Spec, p: Palette, accent: string): void {
     armL: [0.75, 3.5, 0.3],
     armR: [-0.75, 3.5, 0.3],
     tail: [0, 2.0, -0.7],
+    wingL: [0.25, 2.8, -0.45],
+    wingR: [-0.25, 2.8, -0.45],
   };
   // 細長的胸腹，四隻細腿
   body
@@ -99,12 +101,18 @@ export function mantis(s: Spec, p: Palette, accent: string): void {
         p.light,
       );
   }
-  // 長腹與翅膀
+  // 長腹
   tail
     .limb([0, 2.0, -0.7], [0, 1.9, -2.8], 0.55, 0.3, p.main)
     .ball(0.28, accent, [0, 1.85, -3.0], [1, 0.8, 1.2]);
-  for (const sx of [0.5, -0.5])
-    tail.box([0.9, 0.05, 2.3], p.light, [sx, 2.6, -1.8], [0, sx * 0.25, 0]);
+  // 翅膀：長條的薄翅（外側的前翅＋內側的後翅），從背上的翅根往外展開；高速震動（見 wingFx.ts）
+  for (const [wing, sx] of [
+    [s.wingL, 1],
+    [s.wingR, -1],
+  ] as const) {
+    wing.box([1.5, 0.05, 2.5], p.light, [sx * 1.0, 2.8, -1.7], [0, sx * -0.12, 0]);
+    wing.box([0.9, 0.06, 2.0], accent, [sx * 0.75, 2.82, -1.5], [0, sx * -0.08, 0]);
+  }
 }
 
 export function yeti(s: Spec, p: Palette, accent: string): void {

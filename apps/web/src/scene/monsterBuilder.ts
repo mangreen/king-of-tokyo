@@ -120,7 +120,10 @@ export interface Spec {
   armL: Builder;
   armR: Builder;
   tail: Builder;
-  pivots: { head: V3; armL: V3; armR: V3; tail: V3 };
+  /** 翅膀（只有會飛的怪獸有；左右各一個部位，繞肩膀／翅根拍動）。 */
+  wingL: Builder;
+  wingR: Builder;
+  pivots: { head: V3; armL: V3; armR: V3; tail: V3; wingL?: V3; wingR?: V3 };
 }
 
 export const newSpec = (seg: number): Spec => ({
@@ -129,5 +132,7 @@ export const newSpec = (seg: number): Spec => ({
   armL: new Builder(seg),
   armR: new Builder(seg),
   tail: new Builder(seg),
+  wingL: new Builder(seg),
+  wingR: new Builder(seg),
   pivots: { head: [0, 3.5, 0.5], armL: [1, 3, 0], armR: [-1, 3, 0], tail: [0, 1.6, -0.7] },
 });
