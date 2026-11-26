@@ -2,6 +2,7 @@ import {
   AmbientLight,
   DirectionalLight,
   Fog,
+  DoubleSide,
   Group,
   HemisphereLight,
   Mesh,
@@ -48,6 +49,7 @@ import {
 import {
   MONSTER_SCALE,
   OVERVIEW_POSE,
+  overviewPoseFor,
   VICTORY_SWITCH_MS,
   blendPose,
   poseFor,
@@ -187,6 +189,8 @@ export class SceneRenderer {
   private cardOf: ((id: string) => CardDef | undefined) | undefined;
   private readonly blobTex: Texture = makeSoftDotTexture();
   private readonly blobs = new Map<number, Mesh>();
+  /** 海上怪獸腳邊的水波（飛行怪獸不需要）。 */
+  private readonly ripples = new Map<number, Mesh>();
   private readonly marker: Mesh;
   private readonly tags = new Map<number, HTMLElement>();
   private snapshot: SceneSnapshot | null = null;
@@ -614,11 +618,12 @@ export class SceneRenderer {
     this.blobTex.dispose();
     this.marker.geometry.dispose();
     (this.marker.material as Material).dispose();
-    for (const b of this.blobs.values()) {
+    for (const b of [...this.blobs.values(), ...this.ripples.values()]) {
       b.geometry.dispose();
       (b.material as Material).dispose();
     }
     this.blobs.clear();
+    this.ripples.clear();
     for (const el of this.tags.values()) el.remove();
     this.tags.clear();
     this.renderer.dispose();
@@ -634,12 +639,13 @@ export class SceneRenderer {
       a.dispose();
     }
     this.actors.clear();
-    for (const b of this.blobs.values()) {
+    for (const b of [...this.blobs.values(), ...this.ripples.values()]) {
       this.world.remove(b);
       b.geometry.dispose();
       (b.material as Material).dispose();
     }
     this.blobs.clear();
+    this.ripples.clear();
     for (const el of this.tags.values()) el.remove();
     this.tags.clear();
     this.buildCity(playerCount);
@@ -688,6 +694,22 @@ export class SceneRenderer {
     this.world.add(blob);
     this.blobs.set(m.seat, blob);
 
+    const ripple = new Mesh(
+      new RingGeometry(1.9, 2.6, 40),
+      new MeshBasicMaterial({
+        color: '#ffffff',
+        transparent: true,
+        opacity: 0.45,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    ripple.rotation.x = -Math.PI / 2;
+    ripple.position.y = 0.1;
+    ripple.visible = false;
+    this.world.add(ripple);
+    this.ripples.set(m.seat, ripple);
+
     const tag = document.createElement('div');
     tag.className = 'kot-tag';
     tag.dataset['seat'] = String(m.seat);
@@ -728,7 +750,6 @@ export class SceneRenderer {
       this.resize();
       if (this.snapshot) this.buildCity(this.snapshot.playerCount);
       for (const a of this.actors.values()) a.rig.setShadows(q.shadowMapSize > 0);
-      for (const b of this.blobs.values()) b.visible = q.shadowMapSize === 0;
       this.opts.onTierChange?.(tier);
     }
   }
@@ -1105,7 +1126,24 @@ export class SceneRenderer {
     for (const [seat, a] of this.actors) {
       a.update(sdt, time);
       const blob = this.blobs.get(seat);
-      if (blob) blob.position.set(a.x, 0.08, a.z);
+      if (blob) {
+        blob.position.set(a.x, 0.08, a.z);
+        // 飛在海上的怪獸：水面上留一圈淡淡的影子（不論畫質，才看得出離水多高）
+        const flyingOverSea = a.atSea && a.stance === 'fly' && a.alive;
+        blob.visible = flyingOverSea || QUALITY[this.tier].shadowMapSize === 0;
+        (blob.material as MeshBasicMaterial).opacity = flyingOverSea ? 0.28 : 0.4;
+      }
+      const ripple = this.ripples.get(seat);
+      if (ripple) {
+        const wading = a.atSea && a.stance !== 'fly';
+        ripple.visible = wading;
+        if (wading) {
+          const w = Math.sin(time * 2.2 + seat * 1.3);
+          ripple.position.set(a.x, 0.1, a.z);
+          ripple.scale.setScalar(1 + 0.1 * w);
+          (ripple.material as MeshBasicMaterial).opacity = (a.alive ? 0.4 : 0.25) + 0.12 * w;
+        }
+      }
     }
     this.dust.update(sdt);
     this.debris.update(sdt);
@@ -1256,16 +1294,9 @@ export class SceneRenderer {
     this.marker.scale.setScalar(1 + 0.07 * Math.sin(time * 4));
   }
 
+  /** 總覽鏡頭：依畫面長寬比與人數，把所有怪獸、頭上名牌與飛行高度都收進畫面。 */
   private overviewPose(): CameraPose {
-    const aspect = this.camera.aspect;
-    // 窄螢幕（直向）把鏡頭拉遠，整個場景仍在畫面內
-    const k = Math.max(1, Math.min(1.9, 1.55 / Math.max(0.4, aspect)));
-    const { position: p, lookAt: l, fov } = OVERVIEW_POSE;
-    return {
-      position: { x: l.x + (p.x - l.x) * k, y: l.y + (p.y - l.y) * k, z: l.z + (p.z - l.z) * k },
-      lookAt: l,
-      fov,
-    };
+    return overviewPoseFor(this.camera.aspect, this.snapshot?.playerCount ?? 6);
   }
 
   private updateCamera(dt: number): void {
@@ -1297,7 +1328,7 @@ export class SceneRenderer {
       const seat = this.snapshot?.activeSeat ?? null;
       const a = seat === null ? undefined : this.actors.get(seat);
       if (a?.alive === true) {
-        desired = applyView(desired, followView({ x: a.x, z: a.z }, OVERVIEW_POSE.lookAt));
+        desired = applyView(desired, followView({ x: a.x, z: a.z }, desired.lookAt));
         rate = 2.6;
       }
     }
@@ -1328,7 +1359,7 @@ export class SceneRenderer {
     for (const [seat, el] of this.tags) {
       const a = this.actors.get(seat);
       if (!a) continue;
-      const p = this.project(a.x, a.rig.height + (this.crowns.has(seat) ? 2.6 : 1.1), a.z);
+      const p = this.project(a.x, a.lift + a.rig.height + (this.crowns.has(seat) ? 2.6 : 1.1), a.z);
       el.style.opacity = p.ok ? '' : '0';
       el.style.transform = `translate(${p.sx.toFixed(1)}px, ${p.sy.toFixed(1)}px) translate(-50%, -100%)`;
     }
