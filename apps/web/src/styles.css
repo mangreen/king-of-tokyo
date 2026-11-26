@@ -195,25 +195,6 @@ input {
 .die.kept .side {
   box-shadow: inset 0 0 0 4px var(--ok);
 }
-/* 在東京擲到 ❤️：補不了血，骰面變暗並打上禁止記號 */
-.die.dead-heart {
-  position: relative;
-}
-.die.dead-heart .side.up {
-  filter: grayscale(0.85) brightness(0.7);
-}
-.die.dead-heart::after {
-  content: '🚫';
-  position: absolute;
-  right: -2px;
-  top: -4px;
-  font-size: 1.1rem;
-  line-height: 1;
-  pointer-events: none;
-}
-.die.kept.dead-heart .side {
-  box-shadow: inset 0 0 0 4px var(--accent);
-}
 .tokyo-heart {
   margin: 0.2rem 0;
   padding: 0.25rem 0.5rem;
