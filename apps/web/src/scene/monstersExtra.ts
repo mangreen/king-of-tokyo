@@ -168,6 +168,8 @@ export function golem(s: Spec, p: Palette, accent: string): void {
   const warm = '#8a7a62'; // 偏褐的岩石
   const pale = '#b9b4aa'; // 偏白的岩石
   const seam = '#3d3a36'; // 岩塊之間的深色接縫／核心
+  // 風化凹凸：球與方塊的表面起伏、顏色深淺不一（凹處暗、凸處亮）
+  for (const b of [body, head, armL, armR, tail]) b.rough = 0.16;
   s.pivots = {
     head: [0, 3.9, 1.1],
     armL: [1.75, 4.0, 0.5],
